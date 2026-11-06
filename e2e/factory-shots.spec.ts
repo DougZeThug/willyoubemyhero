@@ -82,6 +82,13 @@ const SCENES: Scene[] = [
     },
   },
   {
+    name: "vault-pinned",
+    act: async (page) => {
+      await page.getByRole("button", { name: "Pin Alice Ace to the top" }).click();
+      await page.getByRole("heading", { name: "Favourites" }).waitFor();
+    },
+  },
+  {
     name: "vault-rearranging",
     act: async (page) => {
       await openSortSheet(page);

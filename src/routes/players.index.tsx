@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layers, Check, Medal } from "lucide-react";
+import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -58,7 +59,12 @@ import {
   TROPHY_RARITY,
   type CollectionTrophy,
 } from "@/lib/collection-trophies";
-import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
+import {
+  rosterFavouriteId,
+  secretFavouriteId,
+  setVaultFavourites,
+  useVaultFavourites,
+} from "@/lib/vault-favourites";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
@@ -488,6 +494,45 @@ function PlayersPage() {
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
   const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
+
+  // The Undo outlives the render that made it, so it must read the pins as they
+  // are when it is tapped, not as they were when the toast went up.
+  const favouriteIdsRef = useRef(favouriteIds);
+  favouriteIdsRef.current = favouriteIds;
+
+  /**
+   * Pin or unpin from a tile's star, telling you where a pinned card went.
+   *
+   * Pinning lifts the card off its shelf to Favourites at the top of the page, so
+   * without a word the card you were looking at just vanishes. Unpinning sends it
+   * home to a shelf you can see, so it stays silent.
+   *
+   * Copy is generic on purpose: no name, count or set, which would leak how many
+   * secrets exist. A fixed toast id means pinning several in a row replaces the
+   * toast instead of stacking a column of them; Undo then refers to the latest pin.
+   */
+  const togglePin = useCallback(
+    (favourite: string) => {
+      if (isFavourite(favourite)) {
+        toggleFavourite(favourite);
+        return;
+      }
+      toggleFavourite(favourite);
+      toast("Pinned to Favourites", {
+        id: "vault-pinned",
+        action: {
+          label: "Undo",
+          onClick: () => {
+            // Only ever unpins: if it was already unpinned by hand, toggling would
+            // pin it again.
+            const now = favouriteIdsRef.current;
+            if (now.includes(favourite)) setVaultFavourites(now.filter((x) => x !== favourite));
+          },
+        },
+      });
+    },
+    [isFavourite, toggleFavourite],
+  );
 
   /**
    * The pinned shelf, in the order things were pinned.
@@ -966,7 +1011,7 @@ function PlayersPage() {
           <FavouriteButton
             name={s.name}
             on={isFavourite(favourite)}
-            onToggle={() => toggleFavourite(favourite)}
+            onToggle={() => togglePin(favourite)}
             className="absolute right-0 top-0"
           />
         </div>
@@ -1126,7 +1171,7 @@ function PlayersPage() {
           <FavouriteButton
             name={name}
             on={isFavourite(favourite)}
-            onToggle={() => toggleFavourite(favourite)}
+            onToggle={() => togglePin(favourite)}
             className="absolute right-0 top-0"
           />
         )}

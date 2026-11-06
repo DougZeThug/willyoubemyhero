@@ -7,13 +7,16 @@
 // itself — they live in the condition at the render site — so this is where they
 // have to be held.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import PlayersPage from "./players.index";
 import { rosterFavouriteId, setVaultFavourites } from "@/lib/vault-favourites";
 import { setVaultLayout, type VaultFilter } from "@/lib/vault-layout";
 import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/fixtures";
+
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({ toast }));
 
 const useEventBundle = vi.fn();
 const useCollectionTrophies = vi.fn();
@@ -537,5 +540,68 @@ describe("vault mobile polish", () => {
     await userEvent.click(chip());
     await userEvent.click(await screen.findByRole("button", { name: "Rearrange shelves" }));
     expect(chip().querySelector("span")?.className).toContain("sr-only");
+  });
+});
+
+// Pinning lifts a card to the top of the page, so the tap that did it says where
+// it went. Unpinning sends the card back to a shelf in view and stays silent.
+describe("the toast on pinning a card", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    setVaultFavourites([]);
+    toast.mockClear();
+  });
+  afterEach(() => setVaultFavourites([]));
+
+  type PinToast = [string, { id: string; action: { label: string; onClick: () => void } }];
+  const lastToast = () => toast.mock.calls.at(-1) as PinToast;
+
+  it("says where the card went and offers Undo", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+
+    expect(toast).toHaveBeenCalledTimes(1);
+    const [text, opts] = lastToast();
+    expect(text).toBe("Pinned to Favourites");
+    expect(opts.action.label).toBe("Undo");
+  });
+
+  it("unpins that card when Undo is tapped", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    expect(screen.getByRole("button", { name: "Unpin The Gazebo from the top" })).toBeVisible();
+
+    act(() => lastToast()[1].action.onClick());
+
+    expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
+  });
+
+  it("stays silent on unpin", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    toast.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Unpin The Gazebo from the top" }));
+
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("never re-pins on Undo after the card was unpinned by hand", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    const { action } = lastToast()[1];
+    await userEvent.click(screen.getByRole("button", { name: "Unpin The Gazebo from the top" }));
+
+    act(() => action.onClick());
+
+    expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
+  });
+
+  it("reuses one toast id so rapid pins replace rather than stack", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Pin Gary The Grill/ }));
+
+    expect(toast).toHaveBeenCalledTimes(2);
+    expect(toast.mock.calls[0][1].id).toBe(toast.mock.calls[1][1].id);
   });
 });
