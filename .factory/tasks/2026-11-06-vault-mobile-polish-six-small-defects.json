@@ -2,7 +2,7 @@
   "id": "2026-11-06-vault-mobile-polish-six-small-defects",
   "title": "Vault mobile polish: six small defects",
   "kind": "polish",
-  "status": "building",
+  "status": "verifying",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T19:39:34.087Z",
   "acceptance": [
@@ -12,12 +12,18 @@
     "Sort sheet description reads 'How your binder reads. Kept on this phone.' (vault-sort-sheet.test.tsx)",
     "A failed secrets read shows a one-line 'Couldn't read…' panel with a Try again button wired to secrets.refetch(); nothing shown on success; no set counts revealed (test)",
     "Vault hero sync 'Try again' link has a 44px tap target (min-h-11 inline-flex) (vault-hero.test.tsx)",
-    "No change to rarity vocab, storage keys, aria roles/labels used by e2e, text sizes, or any src/components/ui file"
+    "No change to rarity vocab, storage keys, aria roles/labels used by e2e, text sizes, or any src/components/ui file",
+    "REVISED #3: in rearrange mode the Sort & filter chip collapses to icon-only (aria-label and button role kept) instead of being hidden, because the chip is the only way to reach 'Done rearranging' (tests in players.index.test.tsx and vault-sort-sheet.test.tsx)"
   ],
   "repairs": [],
   "gateRuns": [],
   "interventions": 0,
-  "nextAction": "factory-ui implements the six fixes",
-  "notes": [],
-  "updatedAt": "2026-11-06T19:39:34.126Z"
+  "nextAction": "qa gates + independent review",
+  "notes": [
+    {
+      "at": "2026-11-06T19:43:23.234Z",
+      "text": "Builder deviated from criterion 3 as first written (hide chip) because hiding it would trap the user in rearrange mode; Director verified and accepted the compact-icon alternative."
+    }
+  ],
+  "updatedAt": "2026-11-06T19:43:23.234Z"
 }
