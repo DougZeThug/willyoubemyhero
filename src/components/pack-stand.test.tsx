@@ -686,3 +686,12 @@ describe("the sell hint", () => {
     expect(worth()).toHaveLength(0);
   });
 });
+
+describe("the stand slot's height budget", () => {
+  it("reserves room for the Next and Reveal all controls", () => {
+    const { container } = renderStand();
+    const slot = container.querySelector('[class*="calc((100svh-"]')!;
+    expect(slot.className).toContain("calc((100svh-21rem)*5/7)");
+    expect(slot.className).not.toContain("19rem");
+  });
+});

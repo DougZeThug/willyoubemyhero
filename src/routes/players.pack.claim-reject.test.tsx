@@ -178,3 +178,27 @@ describe("a member token the server turns away", () => {
     expect(screen.queryByTestId("pack-retry")).toBeNull();
   });
 });
+
+describe("the pack screen's recovery and hint chrome", () => {
+  it("leaves the retry control undimmed, and dims only the dead-end slab", async () => {
+    openPack.mockReset().mockRejectedValue(new Error("offline"));
+    const { unmount } = render(<PackPage />);
+    const retry = await screen.findByTestId("pack-retry");
+    expect(retry.className).not.toContain("opacity-60");
+    expect(retry.getAttribute("type")).toBe("button");
+    unmount();
+
+    openPack.mockReset().mockResolvedValue({ ok: false });
+    render(<PackPage />);
+    const slab = (await screen.findByText("Nothing to deal today")).parentElement!;
+    expect(slab.className).toContain("opacity-60");
+  });
+
+  it("hides 'press Enter' on coarse pointers but keeps it in the text", async () => {
+    loadPackState.mockReset().mockResolvedValue(null);
+    render(<PackPage />);
+    const hint = await screen.findByText("· or press Enter", { exact: false });
+    expect(hint.className).toContain("pointer-coarse:hidden");
+    expect(hint.parentElement!.textContent).toBe("Drag across the tear · or press Enter");
+  });
+});

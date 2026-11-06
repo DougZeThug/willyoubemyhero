@@ -1422,7 +1422,10 @@ function PackPage() {
               animate={{ opacity: stage === "opening" ? 0 : 1 }}
               transition={{ duration: 0.2 }}
             >
-              Drag across the tear · or press Enter
+              Drag across the tear
+              {/* Hidden, not removed: "press Enter" means nothing on a touch
+                  screen, but keyboard users on a fine pointer still need it. */}
+              <span className="pointer-coarse:hidden"> · or press Enter</span>
             </motion.div>
           </div>
         ) : dealing ? (
@@ -1432,12 +1435,14 @@ function PackPage() {
           <div className="mx-auto flex max-w-[320px] flex-col items-center gap-3 py-6 text-center">
             {openState === "failed" ? (
               <button
+                type="button"
                 onClick={() => {
                   setOpenState("pending");
                   setOpenRequest((r) => ({ kind: r?.kind ?? "tear", nonce: (r?.nonce ?? 0) + 1 }));
                 }}
                 data-testid="pack-retry"
-                className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
+                // Not dimmed: it is the only way out of this state, read outdoors.
+                className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
               >
                 <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
                   No signal
