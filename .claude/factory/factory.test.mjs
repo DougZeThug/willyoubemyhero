@@ -308,10 +308,16 @@ test("pixelDiff: identical, partly different, and different sizes", () => {
   // must never read as "identical", or a real faint edit hides under the control's label.
   const faint = pixelDiff(
     png(2, 2, grey),
-    png(2, 2, () => [91, 90, 90, 255]),
+    png(2, 2, () => [100, 90, 90, 255]),
   );
   assert.equal(faint.ratio, 0);
   assert.equal(faint.faintRatio, 1);
+  // Dithering-level noise (a few levels) is not a change at all.
+  const noise = pixelDiff(
+    png(2, 2, grey),
+    png(2, 2, () => [92, 91, 90, 255]),
+  );
+  assert.deepEqual([noise.ratio, noise.faintRatio], [0, 0]);
   assert.equal(pixelDiff(png(2, 2, grey), png(3, 2, grey)).sizeDiffers, true);
 });
 

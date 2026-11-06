@@ -127,6 +127,11 @@ export function decodePng(buf) {
   return { width: header.width, height: header.height, channels, data: out };
 }
 
+// Summed RGB delta at or below this is rendering noise, not a change: gradients and
+// glows dither by a level or two between identical renders (measured: max 3 on an
+// untouched sealed pack). A real tint, shadow or opacity tweak moves colours by far more.
+const NOISE_FLOOR = 6;
+
 /**
  * How different two screenshots are. `ratio` is the share of pixels that moved a
  * lot; `faintRatio` the share that moved only a little (a tint, a shadow, an
@@ -145,7 +150,7 @@ export function pixelDiff(bufferA, bufferB) {
     for (let c = 0; c < Math.min(a.channels, 3); c++)
       delta += Math.abs(a.data[px * a.channels + c] - b.data[px * b.channels + c]);
     if (delta > 40) strong++;
-    else if (delta > 0) faint++;
+    else if (delta > NOISE_FLOOR) faint++;
   }
   const total = a.width * a.height;
   return { sizeDiffers: false, ratio: strong / total, faintRatio: faint / total };
@@ -269,7 +274,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // The raw set is large and stays local (gitignored). What gets committed for a
   // reviewer is the part that is evidence: every changed phone-width viewport shot,
   // plus one unchanged shot as a control showing nothing else moved.
-  const phoneShot = (name) => /-(320|390)\.png$/.test(name) && !name.endsWith("-full.png");
+  const phoneShot = (name) => /-(320|390|320x568)\.png$/.test(name) && !name.endsWith("-full.png");
   const reviewNames = list("after").filter((name) => phoneShot(name) && changed.has(name));
   const control = list("after").find((name) => phoneShot(name) && !changed.has(name));
   if (control) reviewNames.push(control);

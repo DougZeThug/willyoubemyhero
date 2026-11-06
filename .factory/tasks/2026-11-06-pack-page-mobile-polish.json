@@ -2,7 +2,7 @@
   "id": "2026-11-06-pack-page-mobile-polish",
   "title": "Pack page mobile polish",
   "kind": "polish",
-  "status": "building",
+  "status": "verifying",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T21:05:40.850Z",
   "acceptance": [
@@ -12,9 +12,26 @@
     "Before/after screenshots committed under shots/review and described from the images"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T21:20:39.529Z",
+      "head": "8e35742e6c30dd4b57064e2ea40d8abafbf4cfff",
+      "fp": "6857e0f22cdc086b80066a092abaf40cdbe8cc44",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "step 1: pack capture scenes",
+  "nextAction": "gates + review + screenshots",
   "notes": [],
-  "updatedAt": "2026-11-06T21:05:40.920Z"
+  "updatedAt": "2026-11-06T21:22:55.115Z"
 }
