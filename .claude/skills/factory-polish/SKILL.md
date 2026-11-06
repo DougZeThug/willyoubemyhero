@@ -20,4 +20,5 @@ Follow `.claude/factory/director.md`, kind `polish`, with these differences:
    - If the screen you polished has no scene in `e2e/factory-shots.spec.ts`, add one (reuse `fixtures.ts` stubs); that is part of the polish, and it needs its own gates and review.
    - Put the review images in the report: for each changed pair, say what differs. If `compare.md` carries the typeface caveat, say so.
    - Capture fails or is flaky: fix the capture or say plainly it could not be made. Never substitute code-reading for the images, and never describe an image you did not look at.
+   - The capture hides the "Live feed down" banner (an artifact of its dead backend). A polish that touches that banner, or anything wrapping it, cannot be evidenced this way: say so instead of showing a frame with it removed.
    - What is still "unverified visually" is whatever no scene covers (real device feel, safe-area insets on a notch, real network).

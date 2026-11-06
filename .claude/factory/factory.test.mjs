@@ -258,7 +258,7 @@ test("guard blocks protected paths and dangerous commands only", () => {
 });
 
 // A tiny RGBA PNG with one filter-0 scanline per row, so the diff can be tested without a browser.
-function png(width, height, pixel) {
+function png(width, height, pixel, filter = 0) {
   const crc = (buf) => {
     let value = ~0;
     for (const byte of buf) {
@@ -281,8 +281,15 @@ function png(width, height, pixel) {
   header[9] = 6;
   const rows = [];
   for (let y = 0; y < height; y++) {
-    rows.push(Buffer.from([0]));
-    for (let x = 0; x < width; x++) rows.push(Buffer.from(pixel(x, y)));
+    rows.push(Buffer.from([filter]));
+    for (let x = 0; x < width; x++) {
+      const now = pixel(x, y);
+      // Sub (1) stores the difference from the pixel to the left, Up (2) from the one above.
+      let reference = [0, 0, 0, 0];
+      if (filter === 1 && x) reference = pixel(x - 1, y);
+      if (filter === 2 && y) reference = pixel(x, y - 1);
+      rows.push(Buffer.from(now.map((value, i) => (value - reference[i]) & 255)));
+    }
   }
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
@@ -297,13 +304,21 @@ test("pixelDiff: identical, partly different, and different sizes", () => {
   assert.equal(pixelDiff(png(4, 4, grey), png(4, 4, grey)).ratio, 0);
   const oneBright = (x, y) => (x === 0 && y === 0 ? [255, 255, 255, 255] : grey());
   assert.equal(pixelDiff(png(4, 4, grey), png(4, 4, oneBright)).ratio, 1 / 16);
-  // A rounding-level shift is not a change.
-  assert.equal(
-    pixelDiff(
-      png(2, 2, grey),
-      png(2, 2, () => [91, 90, 90, 255]),
-    ).ratio,
-    0,
+  // A faint shift (a tint or shadow tweak) is a change too, just not a strong one: it
+  // must never read as "identical", or a real faint edit hides under the control's label.
+  const faint = pixelDiff(
+    png(2, 2, grey),
+    png(2, 2, () => [91, 90, 90, 255]),
   );
+  assert.equal(faint.ratio, 0);
+  assert.equal(faint.faintRatio, 1);
   assert.equal(pixelDiff(png(2, 2, grey), png(3, 2, grey)).sizeDiffers, true);
+});
+
+test("decodePng reads Sub- and Up-filtered scanlines the way Chromium writes them", () => {
+  const gradient = (x, y) => [x * 40, y * 30, 7, 255];
+  for (const filter of [1, 2]) {
+    const diff = pixelDiff(png(5, 5, gradient, 0), png(5, 5, gradient, filter));
+    assert.deepEqual([diff.ratio, diff.faintRatio], [0, 0], `filter ${filter}`);
+  }
 });

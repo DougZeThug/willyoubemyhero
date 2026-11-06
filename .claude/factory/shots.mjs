@@ -127,18 +127,36 @@ export function decodePng(buf) {
   return { width: header.width, height: header.height, channels, data: out };
 }
 
-/** Share of pixels whose colour moved by more than a rounding error, or null if sizes differ. */
+/**
+ * How different two screenshots are. `ratio` is the share of pixels that moved a
+ * lot; `faintRatio` the share that moved only a little (a tint, a shadow, an
+ * opacity tweak). Anything above zero in either is a change: "identical" must mean
+ * identical, or a faint real change hides under the control's label.
+ */
 export function pixelDiff(bufferA, bufferB) {
   const a = decodePng(bufferA);
   const b = decodePng(bufferB);
-  if (a.width !== b.width || a.height !== b.height || a.channels !== b.channels) return { sizeDiffers: true, ratio: 1 }; // prettier-ignore
+  if (a.width !== b.width || a.height !== b.height || a.channels !== b.channels)
+    return { sizeDiffers: true, ratio: 1, faintRatio: 0 };
   let strong = 0;
+  let faint = 0;
   for (let px = 0; px < a.width * a.height; px++) {
     let delta = 0;
-    for (let c = 0; c < Math.min(a.channels, 3); c++) delta += Math.abs(a.data[px * a.channels + c] - b.data[px * b.channels + c]); // prettier-ignore
+    for (let c = 0; c < Math.min(a.channels, 3); c++)
+      delta += Math.abs(a.data[px * a.channels + c] - b.data[px * b.channels + c]);
     if (delta > 40) strong++;
+    else if (delta > 0) faint++;
   }
-  return { sizeDiffers: false, ratio: strong / (a.width * a.height) };
+  const total = a.width * a.height;
+  return { sizeDiffers: false, ratio: strong / total, faintRatio: faint / total };
+}
+
+/** Table cell for a pair's verdict. */
+function verdict(diff) {
+  if (!diff) return "identical";
+  if (diff.sizeDiffers) return "**changed** (page height differs)";
+  if (diff.ratio > 0) return `**changed ${(diff.ratio * 100).toFixed(2)}%**`;
+  return `**faint colour shift** (${(diff.faintRatio * 100).toFixed(2)}% of pixels, small tint/shadow/opacity change)`;
 }
 
 export function compareMarkdown(taskId, before, after, fontWarnings, changed = new Map()) {
@@ -150,7 +168,7 @@ export function compareMarkdown(taskId, before, after, fontWarnings, changed = n
     set.includes(name) ? `![${side} ${name}](${side}/${name})` : "_not captured_";
   const rows = names.map(
     (name) =>
-      `| \`${name}\` | ${changed.has(name) ? `**changed ${(changed.get(name) * 100).toFixed(2)}%**` : "identical"} | ${cell(before, "before", name)} | ${cell(after, "after", name)} |`,
+      `| \`${name}\` | ${verdict(changed.get(name))} | ${cell(before, "before", name)} | ${cell(after, "after", name)} |`,
   );
   return [
     `# Before / after — ${taskId}`,
@@ -183,34 +201,47 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     die(`base ref ${base} not found (git fetch origin ${config.baseBranch ?? "main"})`);
   }
   const shotsDir = path.join(root, ".factory/evidence", taskId, "shots");
-  // A --scenes run refreshes just those scenes and keeps the rest.
-  if (!flag("scenes")) fs.rmSync(shotsDir, { recursive: true, force: true });
+  // A --scenes run refreshes just those scenes; --no-capture only re-compares what is
+  // already on disk. Both keep the existing files.
+  const recompareOnly = args.includes("--no-capture");
+  if (!flag("scenes") && !recompareOnly) fs.rmSync(shotsDir, { recursive: true, force: true });
   fs.mkdirSync(shotsDir, { recursive: true });
 
-  const worktree = path.join(root, `.factory/tmp-shots-${process.pid}`);
-  let failure = null;
-  try {
-    git(`worktree add --detach "${worktree}" ${base}`);
-    // Same dependencies for both trees; a second install would be slow and could drift.
-    fs.symlinkSync(path.join(root, "node_modules"), path.join(worktree, "node_modules"), "dir");
-    // The spec does not exist at the base commit; bring it (and nothing else) along.
-    fs.copyFileSync(path.join(root, shots.spec), path.join(worktree, shots.spec));
-    await capture("before", worktree, shotsDir);
-  } catch (error) {
-    failure = error;
-  } finally {
-    fs.rmSync(path.join(worktree, "node_modules"), { force: true });
+  if (!recompareOnly) {
+    const worktree = path.join(root, `.factory/tmp-shots-${process.pid}`);
+    // A run killed mid-way (Ctrl-C, a dead session) leaves its worktree behind; sweep those.
+    for (const entry of fs.readdirSync(path.join(root, ".factory")))
+      if (entry.startsWith("tmp-shots-")) fs.rmSync(path.join(root, ".factory", entry), { recursive: true, force: true }); // prettier-ignore
     try {
-      git(`worktree remove --force "${worktree}"`);
+      git("worktree prune");
     } catch {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      // Nothing to prune is fine.
     }
-  }
-  if (failure) die(failure.message);
-  try {
-    await capture("after", root, shotsDir);
-  } catch (error) {
-    die(error.message);
+    let failure = null;
+    try {
+      git(`worktree add --detach "${worktree}" ${base}`);
+      // Same dependencies for both trees; a second install would be slow and could drift.
+      fs.symlinkSync(path.join(root, "node_modules"), path.join(worktree, "node_modules"), "dir");
+      // The spec does not exist at the base commit; bring it (and nothing else) along.
+      fs.copyFileSync(path.join(root, shots.spec), path.join(worktree, shots.spec));
+      await capture("before", worktree, shotsDir);
+    } catch (error) {
+      failure = error;
+    } finally {
+      fs.rmSync(path.join(worktree, "node_modules"), { force: true });
+      try {
+        git(`worktree remove --force "${worktree}"`);
+      } catch {
+        fs.rmSync(worktree, { recursive: true, force: true });
+        git("worktree prune");
+      }
+    }
+    if (failure) die(failure.message);
+    try {
+      await capture("after", root, shotsDir);
+    } catch (error) {
+      die(error.message);
+    }
   }
 
   const list = (label) => fs.readdirSync(path.join(shotsDir, label)).filter((f) => f.endsWith(".png")).sort(); // prettier-ignore
@@ -225,7 +256,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       fs.readFileSync(path.join(shotsDir, "before", name)),
       fs.readFileSync(path.join(shotsDir, "after", name)),
     );
-    if (diff.sizeDiffers || diff.ratio > 0) changed.set(name, diff.ratio);
+    if (diff.sizeDiffers || diff.ratio > 0 || diff.faintRatio > 0) changed.set(name, diff);
   }
   fs.writeFileSync(
     path.join(shotsDir, "compare.md"),

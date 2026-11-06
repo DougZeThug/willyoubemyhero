@@ -55,7 +55,7 @@ migration or an RPC changed — `test:db`; leave the browser to GitHub.
 **The one exception is the factory's screenshot capture.** Every polish run owes
 the user before/after screenshots, and `node .claude/factory/shots.mjs <task-id>`
 takes them by running `e2e/factory-shots.spec.ts` — a capture-only spec that is
-skipped unless `FACTORY_SHOTS` is set, so CI's `e2e` job never runs it — through
+skipped unless `FACTORY_SHOTS` and `FACTORY_SHOT_DIR` are set, so CI's `e2e` job never runs it — through
 the same Supabase-neutered `playwright.config.ts`, once on the base commit and
 once on the branch. That script is allowed; the suite still is not. Do not give
 the capture its own Playwright config: this one is what keeps it off the live

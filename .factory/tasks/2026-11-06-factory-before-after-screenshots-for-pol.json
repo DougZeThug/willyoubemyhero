@@ -13,9 +13,26 @@
     "Raw screenshot sets are gitignored; only shots/review/ is committed"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T20:36:45.785Z",
+      "head": "fdb44e768fbfea69eb7b28fbea1c75764c29afa8",
+      "fp": "45b9ed3a5789d9d73b2cd9a63964cb87026d894e",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
   "nextAction": "gates + independent review",
   "notes": [],
-  "updatedAt": "2026-11-06T20:36:27.333Z"
+  "updatedAt": "2026-11-06T20:39:02.693Z"
 }
