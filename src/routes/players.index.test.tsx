@@ -596,6 +596,21 @@ describe("the toast on pinning a card", () => {
     expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
   });
 
+  it("lets an older Undo remove only its own card, never a pin made after it", async () => {
+    // Undo has to read the pins as they are when it is tapped. One that closed over
+    // the list from the moment it was created would put that old list back and
+    // quietly unpin everything pinned since.
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    const undoGazebo = lastToast()[1].action;
+    await userEvent.click(screen.getByRole("button", { name: /^Pin Gary The Grill/ }));
+
+    act(() => undoGazebo.onClick());
+
+    expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Unpin Gary The Grill/ })).toBeVisible();
+  });
+
   it("reuses one toast id so rapid pins replace rather than stack", async () => {
     render(<PlayersPage />);
     await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
