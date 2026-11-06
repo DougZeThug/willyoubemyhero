@@ -151,7 +151,6 @@ type OpenRequest = {
   nonce: number;
 };
 
-/** The one slot ref the row stores per card, from a dealt slot. */
 /**
  * Words for the dealing slot once it has been bare too long.
  *
@@ -174,6 +173,7 @@ function SlowSignal() {
   );
 }
 
+/** The one slot ref the row stores per card, from a dealt slot. */
 function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
   const ref: PackSlotRef = { kind: slot.kind, id: slot.id };
   if (local) {
