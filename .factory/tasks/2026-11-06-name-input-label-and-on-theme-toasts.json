@@ -2,7 +2,7 @@
   "id": "2026-11-06-name-input-label-and-on-theme-toasts",
   "title": "Name input label and on-theme toasts",
   "kind": "polish",
-  "status": "building",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T22:53:12.993Z",
   "acceptance": [
@@ -13,9 +13,38 @@
     "No other component restyled"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T23:09:29.049Z",
+      "head": "045c7e22d39a611d6fea5d69c28081232cbc1466",
+      "fp": "6706e1957148e0684e1226681cf84860fa9b5771",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "factory-ui implements",
-  "notes": [],
-  "updatedAt": "2026-11-06T22:53:13.029Z"
+  "nextAction": "your review of shots/review",
+  "notes": [
+    {
+      "at": "2026-11-06T23:14:50.530Z",
+      "text": "Review of 17f2a5e..045c7e2: APPROVE. Screenshots viewed: pin toast before/after 390, trade success toast before/after 390. Cyan Undo kept global (judged legible on the success toast; fallback = scope to normal toasts). Unverified: success/error/neutral variants beyond the Declined toast, 320x568, real phone, Undo click, 44px close hit area on a thumb. Minor: --normal-bg-hover is a literal oklch."
+    }
+  ],
+  "updatedAt": "2026-11-06T23:14:50.693Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "045c7e22d39a611d6fea5d69c28081232cbc1466",
+    "fp": "6706e1957148e0684e1226681cf84860fa9b5771",
+    "at": "2026-11-06T23:14:50.601Z"
+  }
 }
