@@ -16,7 +16,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { devices, type Page } from "@playwright/test";
-import { expect, stubServerFns, test, type ServerFnMock } from "./fixtures";
+import {
+  expect,
+  packResponse,
+  sealedPack,
+  stubServerFns,
+  tearPack,
+  test,
+  turnCard,
+  type ServerFnMock,
+} from "./fixtures";
 
 const LABEL = process.env.FACTORY_SHOTS ?? "";
 const OUT = process.env.FACTORY_SHOT_DIR ?? "";
@@ -30,6 +39,11 @@ const VIEWPORTS = [
   { name: "430", width: 430, height: 932, phone: true },
   { name: "desktop", width: 1280, height: 800, phone: false },
 ];
+
+// Only for scenes that list it in `viewports`: the smallest phone the pack page
+// is expected to survive. Kept out of VIEWPORTS so existing scenes' file sets
+// do not change.
+const EXTRA_VIEWPORTS = [{ name: "320x568", width: 320, height: 568, phone: true }];
 
 const MEMBER_KEY = "wwbh:member-token";
 
@@ -54,6 +68,38 @@ async function asMember(page: Page) {
 }
 
 /**
+ * A stored Supabase session, so useAuthUser() finds a user without the network.
+ * The gate only renders for someone signed in who has not claimed a player. The
+ * storage key is sb-<first label of the project host>-auth-token, and the
+ * capture's dead host is 127.0.0.1; the far-future expiry keeps the client from
+ * trying to refresh against it.
+ */
+async function asSignedInGuest(page: Page) {
+  await page.addInitScript(() => {
+    const user = {
+      id: "00000000-0000-4000-8000-0000000000aa",
+      aud: "authenticated",
+      role: "authenticated",
+      email: "jane.doe@example.com",
+      app_metadata: {},
+      user_metadata: {},
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    localStorage.setItem(
+      "sb-127-auth-token",
+      JSON.stringify({
+        access_token: "capture.access.token",
+        refresh_token: "capture-refresh",
+        token_type: "bearer",
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 24 * 3600,
+        user,
+      }),
+    );
+  });
+}
+
+/**
  * Open the sort sheet. The page is server-rendered, so the Roster heading is on
  * screen before React hydrates; a click in that gap is silently lost. Retrying
  * until the sheet is actually there is steadier than guessing a delay.
@@ -71,6 +117,44 @@ type Scene = {
   arrange?: (server: ServerFnMock) => void;
   /** Drive the page into the state to photograph, after it has loaded. */
   act?: (page: Page, server: ServerFnMock) => Promise<void>;
+  /** Route to open. Defaults to the Vault. */
+  path?: string;
+  /** What proves the page has loaded. Defaults to the Vault's Roster heading and Alice link. */
+  ready?: (page: Page) => Promise<void>;
+  /** Names from EXTRA_VIEWPORTS to capture in addition to the default set. */
+  viewports?: string[];
+  /** False for a guest: no member token. Defaults to true. */
+  member?: boolean;
+  /** Seed a signed-in Supabase account that is not a member yet (the signup gate). */
+  signedIn?: boolean;
+};
+
+const packReady = async (page: Page) => {
+  await expect(sealedPack(page)).toBeVisible({ timeout: 40_000 });
+};
+
+// The stand, with the first card on it. Reduced motion is on in the context, so
+// the tear is short, but the step counter is the thing that proves it is there.
+const toStand = async (page: Page) => {
+  await tearPack(page);
+  await expect(page.getByTestId("stand-step")).toHaveText("1 / 3", { timeout: 20_000 });
+  await expect(page.getByRole("button", { name: /reveal all/i })).toBeEnabled();
+};
+
+const toSummary = async (page: Page) => {
+  await toStand(page);
+  await page.getByRole("button", { name: /reveal all/i }).click();
+  await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+  // The fixed sound toggle sits at the bottom-left; if the summary scrolls, the
+  // last controls are under it only once scrolled to the end, so go there.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+};
+
+const PACK = {
+  path: "/players/pack",
+  ready: packReady,
+  viewports: ["320x568"],
+  arrange: (server: ServerFnMock) => server.set("openPack", packResponse()),
 };
 
 const SCENES: Scene[] = [
@@ -116,6 +200,38 @@ const SCENES: Scene[] = [
       await page.waitForTimeout(800); // let React render the settled error
     },
   },
+  { ...PACK, name: "pack-sealed" },
+  {
+    ...PACK,
+    name: "pack-sealed-guest",
+    member: false,
+    signedIn: true,
+    // The gate renders above the pack, only for a signed-in non-member.
+    ready: async (page) => {
+      await packReady(page);
+      await expect(page.getByRole("heading", { name: "Pick a trading name" })).toBeVisible();
+    },
+  },
+  {
+    ...PACK,
+    name: "pack-stand",
+    // Turned, because Next only offers itself once the card is face-up.
+    act: async (page) => {
+      await toStand(page);
+      await turnCard(page);
+      await expect(page.getByRole("button", { name: /^next$/i })).toBeEnabled();
+    },
+  },
+  { ...PACK, name: "pack-summary", act: toSummary },
+  {
+    ...PACK,
+    name: "pack-retry",
+    arrange: (server: ServerFnMock) => server.fail("openPack", "capture: simulated dead spot"),
+    act: async (page) => {
+      await tearPack(page);
+      await expect(page.getByTestId("pack-retry")).toBeVisible({ timeout: 20_000 });
+    },
+  },
 ];
 
 test.describe("factory screenshots", () => {
@@ -125,9 +241,10 @@ test.describe("factory screenshots", () => {
   );
 
   for (const scene of SCENES.filter((s) => !ONLY.length || ONLY.includes(s.name))) {
-    for (const vp of VIEWPORTS.filter(
-      (v) => !ONLY_VIEWPORTS.length || ONLY_VIEWPORTS.includes(v.name),
-    )) {
+    for (const vp of [
+      ...VIEWPORTS,
+      ...EXTRA_VIEWPORTS.filter((v) => scene.viewports?.includes(v.name)),
+    ].filter((v) => !ONLY_VIEWPORTS.length || ONLY_VIEWPORTS.includes(v.name))) {
       // prettier-ignore
       test(`${scene.name} @ ${vp.name}`, async ({ browser }) => {
         // A scene that cannot reach its state should fail fast.
@@ -152,14 +269,18 @@ test.describe("factory screenshots", () => {
           new MutationObserver(hide).observe(document, { childList: true, subtree: true });
         });
         const server = await stubServerFns(page);
-        await asMember(page);
+        if (scene.member !== false) await asMember(page);
+        if (scene.signedIn) await asSignedInGuest(page);
         server.set("getMyCardStats", OWNS);
         scene.arrange?.(server);
-        await page.goto("/players");
-        await expect(page.getByRole("heading", { name: "Roster" })).toBeVisible();
-        // The heading is server-rendered, so it proves nothing about data. Photographing
-        // on it alone caught a skeleton in one tree and a loaded page in the other.
-        await expect(page.getByRole("link", { name: /^Alice Ace/ })).toBeVisible({ timeout: 40_000 });
+        await page.goto(scene.path ?? "/players");
+        if (scene.ready) await scene.ready(page);
+        else {
+          await expect(page.getByRole("heading", { name: "Roster" })).toBeVisible();
+          // The heading is server-rendered, so it proves nothing about data. Photographing
+          // on it alone caught a skeleton in one tree and a loaded page in the other.
+          await expect(page.getByRole("link", { name: /^Alice Ace/ })).toBeVisible({ timeout: 40_000 });
+        }
         // Shorter than the test timeout, so a failing step throws while the page is
         // still alive and the catch below can photograph it.
         page.setDefaultTimeout(10_000);
