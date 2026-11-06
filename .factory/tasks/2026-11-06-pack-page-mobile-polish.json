@@ -2,7 +2,7 @@
   "id": "2026-11-06-pack-page-mobile-polish",
   "title": "Pack page mobile polish",
   "kind": "polish",
-  "status": "verifying",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T21:05:40.850Z",
   "acceptance": [
@@ -28,10 +28,38 @@
       "skipped": [
         "db"
       ]
+    },
+    {
+      "at": "2026-11-06T21:28:03.076Z",
+      "head": "f2307732d2905c64328fb10fb4cc1175f74c8b40",
+      "fp": "cf90195ee8bb695f0254ce1b0830acbe86f19ac4",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
     }
   ],
   "interventions": 0,
-  "nextAction": "gates + review + screenshots",
-  "notes": [],
-  "updatedAt": "2026-11-06T21:22:55.115Z"
+  "nextAction": "your review: shots/review; decide guest signup placement and Next-pack-in-Nh copy",
+  "notes": [
+    {
+      "at": "2026-11-06T21:30:31.223Z",
+      "text": "Final review: A (pack src, byte-identical to earlier approval) and B (tooling delta) APPROVE. Screenshots viewed: stand 320x568 before/after, retry 390 after, sealed 390 after. Known: comment says 844px (true threshold 784px); NOISE_FLOOR=6 deemed defensible; guest-at-568 layout and summary in-flight opacity left for the user."
+    }
+  ],
+  "updatedAt": "2026-11-06T21:30:31.422Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "f2307732d2905c64328fb10fb4cc1175f74c8b40",
+    "fp": "cf90195ee8bb695f0254ce1b0830acbe86f19ac4",
+    "at": "2026-11-06T21:30:31.281Z"
+  }
 }
