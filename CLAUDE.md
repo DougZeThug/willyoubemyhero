@@ -52,6 +52,15 @@ nothing and costs a browser download, a production-shaped build and twenty
 minutes. Before pushing, run `format`, `lint`, `typecheck`, `test` and — when a
 migration or an RPC changed — `test:db`; leave the browser to GitHub.
 
+**The one exception is the factory's screenshot capture.** Every polish run owes
+the user before/after screenshots, and `node .claude/factory/shots.mjs <task-id>`
+takes them by running `e2e/factory-shots.spec.ts` — a capture-only spec that is
+skipped unless `FACTORY_SHOTS` is set, so CI's `e2e` job never runs it — through
+the same Supabase-neutered `playwright.config.ts`, once on the base commit and
+once on the branch. That script is allowed; the suite still is not. Do not give
+the capture its own Playwright config: this one is what keeps it off the live
+project.
+
 `test:db` finds `initdb` on PATH-style layouts (`/bin`, `/usr/bin`) and the
 usual Debian ones (`/usr/lib/postgresql/<v>/bin`). If yours lives somewhere
 else, point `PG_BIN_DIR` at the directory holding `initdb`. The first run is

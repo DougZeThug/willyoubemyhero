@@ -37,3 +37,9 @@ blob-report
 *.njsproj
 *.sln
 *.sw?
+
+# Factory screenshots: the raw before/after sets are large and stay local. Only shots/review/ is committed.
+.factory/evidence/*/shots/before/
+.factory/evidence/*/shots/after/
+.factory/evidence/*/shots/compare.md
+.factory/tmp-shots-*/

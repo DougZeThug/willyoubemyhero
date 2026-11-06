@@ -28,6 +28,7 @@ const portable = [
   ".claude/factory/factory.mjs",
   ".claude/factory/factory.test.mjs",
   ".claude/factory/director.md",
+  ".claude/factory/shots.mjs",
   ".claude/factory/install.mjs",
   ".claude/hooks/factory-guard.mjs",
   ...fs

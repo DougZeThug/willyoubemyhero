@@ -1,0 +1,21 @@
+{
+  "id": "2026-11-06-factory-before-after-screenshots-for-pol",
+  "title": "Factory before/after screenshots for polish runs",
+  "kind": "build",
+  "status": "verifying",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T20:36:27.292Z",
+  "acceptance": [
+    "shots.mjs captures base vs branch via e2e/factory-shots.spec.ts, compares pixels, and publishes shots/review/ (tested: pixelDiff)",
+    "The spec is skipped unless FACTORY_SHOTS is set, so CI e2e is unaffected",
+    "Capture cannot reach live data: it runs under the existing Supabase-neutered playwright.config.ts",
+    "factory-polish skill, director.md, README, installer and the one CLAUDE.md line state the standing rule",
+    "Raw screenshot sets are gitignored; only shots/review/ is committed"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "gates + independent review",
+  "notes": [],
+  "updatedAt": "2026-11-06T20:36:27.333Z"
+}

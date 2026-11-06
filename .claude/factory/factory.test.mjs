@@ -7,6 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs, selectGates } from "./factory.mjs";
 import { decide } from "../hooks/factory-guard.mjs";
+import zlib from "node:zlib";
+import { pixelDiff } from "./shots.mjs";
 
 const CLI = path.resolve(import.meta.dirname, "factory.mjs");
 
@@ -253,4 +255,55 @@ test("guard blocks protected paths and dangerous commands only", () => {
   assert.ok(bash("git push --force origin f"));
   assert.equal(bash("git push -u origin claude/main-menu"), null);
   assert.equal(bash("cat > f <<'EOF'\ngit push --force origin main\nEOF"), null);
+});
+
+// A tiny RGBA PNG with one filter-0 scanline per row, so the diff can be tested without a browser.
+function png(width, height, pixel) {
+  const crc = (buf) => {
+    let value = ~0;
+    for (const byte of buf) {
+      value ^= byte;
+      for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (0xedb88320 & -(value & 1));
+    }
+    return ~value >>> 0;
+  };
+  const chunk = (type, body) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(body.length);
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), body])));
+    return Buffer.concat([head, Buffer.from(type), body, tail]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const rows = [];
+  for (let y = 0; y < height; y++) {
+    rows.push(Buffer.from([0]));
+    for (let x = 0; x < width; x++) rows.push(Buffer.from(pixel(x, y)));
+  }
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", header),
+    chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+test("pixelDiff: identical, partly different, and different sizes", () => {
+  const grey = () => [90, 90, 90, 255];
+  assert.equal(pixelDiff(png(4, 4, grey), png(4, 4, grey)).ratio, 0);
+  const oneBright = (x, y) => (x === 0 && y === 0 ? [255, 255, 255, 255] : grey());
+  assert.equal(pixelDiff(png(4, 4, grey), png(4, 4, oneBright)).ratio, 1 / 16);
+  // A rounding-level shift is not a change.
+  assert.equal(
+    pixelDiff(
+      png(2, 2, grey),
+      png(2, 2, () => [91, 90, 90, 255]),
+    ).ratio,
+    0,
+  );
+  assert.equal(pixelDiff(png(2, 2, grey), png(3, 2, grey)).sizeDiffers, true);
 });
