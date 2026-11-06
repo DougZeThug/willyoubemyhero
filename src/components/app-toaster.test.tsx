@@ -6,7 +6,10 @@ import { AppToaster } from "./app-toaster";
 // jsdom does not load sonner's stylesheet, so this cannot show a colour. It pins
 // the wiring that produces one: the --normal-* variables reach the toaster
 // element (where they override the dark theme's black) and the action button
-// carries the primary fill inline. Whether it looks right is the screenshot's job.
+// carries the primary fill and a 44px floor inline, and the close disc has the
+// class that extends its hit area. It cannot measure either: the real 44px Undo
+// and 44px close hit box were measured in Chromium through the capture spec.
+// The primary fill is global, success toasts included (see the commit message). Whether it looks right is the screenshot's job.
 // Sonner mounts its list only once a toast exists, hence the toast in each test.
 async function showPinToast() {
   render(<AppToaster offset={{ bottom: "0px" }} />);
@@ -36,5 +39,17 @@ describe("AppToaster", () => {
     });
     expect(undo.style.background).toContain("var(--primary)");
     expect(undo.style.color).toContain("var(--primary-foreground)");
+    // The repo's 44px touch floor; sonner's own button is 24px.
+    expect(undo.style.minHeight).toBe("2.75rem");
+  });
+
+  it("widens the close disc's hit area through a class, not by resizing it", async () => {
+    await showPinToast();
+    const close = await waitFor(() => {
+      const b = document.querySelector<HTMLElement>("[data-close-button]");
+      expect(b).not.toBeNull();
+      return b!;
+    });
+    expect(close.className).toContain("after:-inset-[13px]");
   });
 });

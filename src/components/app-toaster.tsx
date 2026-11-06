@@ -22,6 +22,17 @@ export const TOAST_OPTIONS = {
     background: "var(--primary)",
     color: "var(--primary-foreground)",
     fontWeight: 700,
+    // The repo's 44px floor: Undo is the one control here that matters, pressed
+    // one-handed. Sonner's own button is 24px tall.
+    minHeight: "2.75rem",
+    padding: "0 1rem",
+    borderRadius: "9999px",
+  },
+  classNames: {
+    // Sonner's close disc is 20px and absolutely placed. An ::after reaching 13px
+    // past each edge makes the hit area 44px (the disc has a 1px border, so 13 not 12) without moving or resizing the disc;
+    // sonner styles no ::after, so nothing needs out-ranking.
+    closeButton: "after:absolute after:-inset-[13px] after:content-['']",
   },
 } satisfies NonNullable<React.ComponentProps<typeof Toaster>["toastOptions"]>;
 
