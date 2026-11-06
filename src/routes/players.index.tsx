@@ -1028,12 +1028,7 @@ function PlayersPage() {
             stats page it used to land on. Still a real Link: it is a shareable
             address, it right-clicks, and Back off the viewer returns to this
             shelf scrolled where it was left. */}
-        <Link
-          to="/players/$id"
-          params={{ id: p.id }}
-          search={{ view: 1 }}
-          className="group block focus:outline-none"
-        >
+        <Link to="/players/$id" params={{ id: p.id }} search={{ view: 1 }} className="group block">
           {/* Its own positioned box, so the pip below sits on the CARD rather
               than at the bottom of the caption under it. */}
           <div className="relative">
@@ -1355,6 +1350,24 @@ function PlayersPage() {
           onRearranging={setRearranging}
         />
 
+        {/* A failed secrets read renders no shelves, which reads as "my secrets
+            are gone". Say it failed instead. Deliberately silent on how many
+            cards or sets exist: that count is withheld. */}
+        {secrets.isError && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <p>Couldn&apos;t read your secrets just now.</p>
+            <button
+              type="button"
+              className="neon-btn-sm"
+              onClick={() => {
+                void secrets.refetch();
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         {/* Secrets keep shelves of their own rather than being interleaved into
             the roster: every roster sort reads a field a secret does not have,
             and editorially a secret is not a roster card. Now that the shelves
@@ -1373,7 +1386,10 @@ function PlayersPage() {
                 shelfRefs.current.set(id, el);
               }}
               className={cn(
-                "scroll-mt-4 rounded-xl transition-shadow",
+                // Clears the sticky site header (4rem + its safe-area inset) plus
+                // a little air: scrollIntoView({block:"start"}) otherwise lands the
+                // shelf's title underneath it.
+                "scroll-mt-[calc(4rem+env(safe-area-inset-top)+1rem)] rounded-xl transition-shadow",
                 flashed === id && "ring-2 ring-primary/60",
               )}
             >
@@ -1390,10 +1406,15 @@ function PlayersPage() {
                 // The one control the sort sheet is behind, on the shelf it
                 // sorts. In the page header it would sit above a shelf that can
                 // be rolled up, controlling nothing you can see.
+                // Icon-only while rearranging: the arrows take the row's width and
+                // at 320px the full label truncates the title to nothing. Not
+                // removed, because "Done rearranging" lives in the sheet this
+                // chip opens and the mode would have no exit.
                 action={
                   section.kind === "roster" ? (
                     <VaultSortChip
                       onOpen={() => setSortSheetOpen(true)}
+                      compact={rearranging}
                       active={sort !== "name" || filter !== "all" || density !== 2}
                     />
                   ) : undefined

@@ -67,6 +67,14 @@ describe("VaultHero", () => {
     expect(screen.getByRole("link", { name: /try again/i })).toHaveAttribute("href", "/auth");
   });
 
+  it("gives the sync-error retry link a thumb-sized target", () => {
+    // It sits in an 11px paragraph; bare text there was a few pixels tall.
+    renderHero({ syncError: "Could not link." });
+    const link = screen.getByRole("link", { name: /try again/i });
+    expect(link.className).toContain("min-h-11");
+    expect(link.className).toContain("inline-flex");
+  });
+
   it("counts nothing at all any more", () => {
     // "N of M cards printed" was an admin concept on a player-facing screen —
     // cards that have art, reading as a collector's number — and the packs and

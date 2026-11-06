@@ -80,7 +80,10 @@ export function VaultHero({
       {syncError && (
         <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
           {syncError}{" "}
-          <Link to="/auth" className="font-bold text-primary hover:underline">
+          <Link
+            to="/auth"
+            className="inline-flex min-h-11 items-center font-bold text-primary hover:underline"
+          >
             Try again
           </Link>
         </p>

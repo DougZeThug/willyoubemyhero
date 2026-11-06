@@ -26,7 +26,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    Link: (props: { to: string; children: ReactNode }) => <a href={props.to}>{props.children}</a>,
+    Link: (props: { to: string; children: ReactNode; className?: string }) => (
+      <a href={props.to} className={props.className}>
+        {props.children}
+      </a>
+    ),
     useNavigate: () => vi.fn(),
   };
 });
@@ -470,5 +474,58 @@ describe("the degraded-feed banner", () => {
     });
     render(<PlayersPage />);
     expect(screen.queryByText(BANNER)).toBeNull();
+  });
+});
+
+describe("vault mobile polish", () => {
+  it("leaves the global focus ring on the roster tile link", () => {
+    // A `focus:outline-none` utility beats the @layer base :focus-visible ring,
+    // so keyboard users saw no focus at all on the tiles.
+    useEventBundle.mockReturnValue(
+      settledBundle({ bundle: makeBundle({ participants: [makeParticipant()] }) }),
+    );
+    render(<PlayersPage />);
+    const tile = document.querySelector('a[href="/players/$id"]');
+    if (!tile) throw new Error("no roster tile link rendered");
+    expect(tile.className).toContain("group");
+    expect(tile.className).not.toContain("focus:outline-none");
+  });
+
+  it("offsets shelf scrolling below the sticky site header", () => {
+    render(<PlayersPage />);
+    const shelf = petsShelf().parentElement;
+    expect(shelf?.className).toContain("scroll-mt-[calc(4rem+env(safe-area-inset-top)+1rem)]");
+    expect(shelf?.className).not.toContain("scroll-mt-4");
+  });
+
+  it("shows no secrets panel when the secrets read is healthy", () => {
+    render(<PlayersPage />);
+    expect(screen.queryByText(/couldn.t read your secrets/i)).toBeNull();
+  });
+
+  it("says the secrets read failed, and retries it", async () => {
+    const refetch = vi.fn().mockResolvedValue(null);
+    useMySecrets.mockReturnValue({ data: undefined, isError: true, refetch });
+    render(<PlayersPage />);
+    const msg = screen.getByText(/couldn.t read your secrets just now/i);
+    // The count of secret cards and sets is withheld, so the copy has no number.
+    expect(msg.textContent).not.toMatch(/\d/);
+    await userEvent.click(
+      within(msg.parentElement as HTMLElement).getByRole("button", { name: "Try again" }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("collapses the sort chip to an icon while shelves are rearranged, keeping its way back", async () => {
+    // vaul claims the pointer on press and jsdom has no pointer capture.
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    render(<PlayersPage />);
+    const chip = () => screen.getByRole("button", { name: "Sort and filter the roster" });
+    expect(chip().querySelector("span")?.className ?? "").not.toContain("sr-only");
+    await userEvent.click(chip());
+    await userEvent.click(await screen.findByRole("button", { name: "Rearrange shelves" }));
+    expect(chip().querySelector("span")?.className).toContain("sr-only");
   });
 });

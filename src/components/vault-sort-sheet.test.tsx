@@ -41,6 +41,13 @@ function renderSheet(over: Partial<React.ComponentProps<typeof VaultSortSheet>> 
   return { props, ...render(<VaultSortSheet {...props} />) };
 }
 
+describe("the sheet's description", () => {
+  it("talks about the binder, because card size changes every shelf", () => {
+    renderSheet();
+    expect(screen.getByText("How your binder reads. Kept on this phone.")).toBeInTheDocument();
+  });
+});
+
 describe("sorting", () => {
   it("offers every order the roster has, including the one that re-deals", () => {
     renderSheet();
@@ -118,6 +125,12 @@ describe("the chip the sheet is behind", () => {
     render(<VaultSortChip onOpen={onOpen} active={false} />);
     await userEvent.click(screen.getByRole("button", { name: /sort and filter/i }));
     expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the button but hides its words when compact", () => {
+    render(<VaultSortChip onOpen={vi.fn()} active={false} compact />);
+    const chip = screen.getByRole("button", { name: "Sort and filter the roster" });
+    expect(chip.querySelector("span")?.className).toContain("sr-only");
   });
 
   it("lights up while anything is off the default", () => {
