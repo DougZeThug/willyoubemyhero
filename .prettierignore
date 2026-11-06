@@ -32,3 +32,8 @@ src/routes/\[.well-known\]/
 # turns every re-sync from upstream into a diff, and nothing in this repo reads
 # them as source — Claude Code reads them as skill text.
 .claude/skills/
+
+# Task records and gate/screenshot evidence written by the software factory
+# (.claude/factory). Machine output: formatting it only creates diffs in files
+# nobody edited, and `bun run format` rewrites all of it on every agent run.
+.factory/
