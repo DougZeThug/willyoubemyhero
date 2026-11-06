@@ -1,0 +1,22 @@
+{
+  "id": "2026-11-06-pack-page-next-pack-time-waiting-line-st",
+  "title": "Pack page: next-pack time, waiting line, steadier busy labels",
+  "kind": "polish",
+  "status": "building",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T21:38:16.510Z",
+  "acceptance": [
+    "Pack summary subtitle shows the time to the next pack via the existing nextPackLabel (e.g. 'Next pack in 6h') instead of 'come back tomorrow'; the secret variant and the streak line are unchanged; unit test and e2e/secrets.spec.ts assertion updated",
+    "After ~3s of waiting on the deal, the dealing slot shows 'Slow signal — it's yours either way' (polite status); absent before 3s and once the deal arrives; no new control, no timing change to the deal or its 8s timeout",
+    "Summary in-flight labels (Opening…/Rendering…) use disabled:opacity-55 instead of 40, matching the earlier Reveal-all fix; claim/share logic untouched",
+    "Scenes pack-dealing-slow (and, if reachable, a claim-in-flight summary) added to the capture spec and viewed",
+    "No change to odds, rarity, rewards, prices, dust, streaks, ceremony, gesture; guest signup card untouched",
+    "Before/after screenshots committed and described from the images"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "factory-ui implements",
+  "notes": [],
+  "updatedAt": "2026-11-06T21:38:16.552Z"
+}
