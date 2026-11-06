@@ -1,0 +1,22 @@
+{
+  "id": "2026-11-06-vault-feedback-toast-when-a-card-is-pinn",
+  "title": "Vault: feedback toast when a card is pinned",
+  "kind": "polish",
+  "status": "building",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T20:47:06.898Z",
+  "acceptance": [
+    "Pinning a card (roster tile or secret tile) shows a toast 'Pinned to Favourites' with an Undo action; unpinning shows none (tests in players.index.test.tsx)",
+    "Undo from the toast unpins that same card and the card returns to its shelf (test)",
+    "Existing pin behaviour is unchanged: the card still moves to Favourites, storage keys unchanged, star stays 44px, roles/labels used by e2e/favourites.spec.ts unchanged",
+    "Toast copy is generic: no names, counts or set information",
+    "A vault-pinned scene exists in e2e/factory-shots.spec.ts so the before/after shows the toast",
+    "Before/after screenshots committed under shots/review/ and described from the images themselves"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "factory-ui implements the toast",
+  "notes": [],
+  "updatedAt": "2026-11-06T20:47:06.935Z"
+}
