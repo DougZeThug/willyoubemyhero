@@ -1,0 +1,116 @@
+{
+  "id": "2026-10-30-pin-parsetime-input-forms-with-unit-test",
+  "title": "Pin parseTime input forms with unit tests",
+  "kind": "build",
+  "status": "ready",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-10-30T19:37:33.152Z",
+  "acceptance": [
+    "parseTime accepts 1:23.45, 83.45, 83, 1:23 with exact ms (test in format.test.ts)",
+    "whitespace is trimmed; empty/blank returns null",
+    "unreadable input returns null (abc, 1:2:3, -5)",
+    "zero forms return 0, not null",
+    "src/lib/format.ts is unchanged (git diff)"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-10-30T19:39:09.579Z",
+      "head": "840cdb27cf08761dffd4d78edb4fcc60c9e4a8c0",
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-10-30T19:42:50.338Z",
+      "head": "94873fa9c0491ba99ae9a1eccce73dc546023b76",
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-10-30T19:46:28.153Z",
+      "head": "95648053cc163b6d4c638d349d106fff4d0eebce",
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-06T19:01:01.426Z",
+      "head": "d858ef6fc45057fed71143bac4a1cdb3b3b7d37b",
+      "fp": "a3fda1afe03d5a92cecbcd939a3147b29269ddde",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-06T19:11:49.515Z",
+      "head": "d542f88aa820ec21f76255f16702520729895cee",
+      "fp": "3e4fe938990970f55995aec0e34aefe1357f5dfe",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review & merge of PR #208",
+  "notes": [
+    {
+      "at": "2026-10-30T19:49:13.557Z",
+      "text": "Review covered the parseTime test diff (840cdb2); two later factory-tooling fixes (stale-gate rule, lost-update) are covered by new node tests, not by the independent reviewer"
+    },
+    {
+      "at": "2026-11-06T19:04:11.362Z",
+      "text": "Fresh review of tooling fixes (840cdb2..d858ef6): APPROVE. Known minor: an empty gate selection reports pass; edits to .factory/project.json are not fingerprinted; stale warning only for checked-out branch."
+    },
+    {
+      "at": "2026-11-06T19:14:21.246Z",
+      "text": "Review of d542f88: APPROVE. Minor: path-scoped-only configs now fail on a diff matching no gate (documented behaviour change); not yet in README."
+    }
+  ],
+  "updatedAt": "2026-11-06T19:14:21.447Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "d542f88aa820ec21f76255f16702520729895cee",
+    "fp": "3e4fe938990970f55995aec0e34aefe1357f5dfe",
+    "at": "2026-11-06T19:14:21.334Z"
+  }
+}
