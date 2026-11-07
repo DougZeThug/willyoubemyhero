@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { devices, type Page } from "@playwright/test";
 import {
+  BUNDLE,
   expect,
   PLAYERS,
   packResponse,
@@ -158,8 +159,173 @@ const PACK = {
   arrange: (server: ServerFnMock) => server.set("openPack", packResponse()),
 };
 
+// The dust shop. Dust on is the commissioner's switch, carried on the event.
+const DUST_ON = (server: ServerFnMock, balance: number) => {
+  server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true });
+  server.set("getDustBalance", { balance });
+};
+
+const roster = (copyId: string, ep: string, edition: string, assertedBy = "server") => ({
+  copyId,
+  eventParticipantId: ep,
+  edition,
+  viewerOwns: true,
+  assertedBy,
+});
+
+const secret = (
+  pullId: string,
+  name: string,
+  tier: string,
+  over: Record<string, unknown> = {},
+) => ({
+  pullId,
+  name,
+  artUrl: null,
+  tier,
+  collection: null,
+  lastCopy: false,
+  viewerOwns: true,
+  ...over,
+});
+
+const spares = (rosterRows: unknown[], secrets: unknown[], ownedRoster = rosterRows) => ({
+  participantId: "p-alice",
+  ownedRoster,
+  roster: rosterRows,
+  secrets,
+  blocked: [],
+});
+
+// A rich set, so every section has rows. The secret is a last copy filed into the
+// longest-labelled shipped set ("Cornhole Collection"): the worst case for its meta line.
+const RICH_ROSTER = [
+  roster("00000000-0000-4000-8000-0000000000c1", "ep-alice", "gold"),
+  roster("00000000-0000-4000-8000-0000000000c2", "ep-bob", "silver"),
+  roster("00000000-0000-4000-8000-0000000000c3", "ep-carol", "standard", "client"),
+];
+const RICH_SECRETS = [
+  secret("00000000-0000-4000-8000-0000000000a1", "Gary The Grill", "legendary", { collection: "cornhole", lastCopy: true }), // prettier-ignore
+  secret("00000000-0000-4000-8000-0000000000a2", "Sir Barks A Lot", "rare", { collection: "pets" }),
+];
+const RICH_SPARES = spares(RICH_ROSTER, RICH_SECRETS);
+
+const SHOP = {
+  path: "/players/shop",
+  viewports: ["320x568"],
+  ready: async (page: Page) => {
+    await expect(page.getByRole("heading", { name: /^dust$/i })).toBeVisible({ timeout: 40_000 });
+  },
+};
+
+const shopRows = async (page: Page) => {
+  // Rows only exist once getTradeSpares has answered.
+  await expect(page.getByRole("button", { name: /^Burn \+/ }).first()).toBeVisible({ timeout: 40_000 }); // prettier-ignore
+};
+
+const LISTING_ITEM = (ep: string, edition: string) => ({ kind: "roster", eventParticipantId: ep, edition }); // prettier-ignore
+
 const SCENES: Scene[] = [
   { name: "vault" },
+  {
+    ...SHOP,
+    name: "shop",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", RICH_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      await expect(page.getByText("Gary The Grill")).toBeVisible();
+      const where = page.getByRole("heading", { name: /where dust comes from/i });
+      await where.scrollIntoViewIfNeeded();
+      await expect(where).toBeVisible();
+    },
+  },
+  {
+    ...SHOP,
+    name: "shop-market",
+    arrange: (server) => {
+      // 60, not 10: 10 cannot afford the 40 listing either, and one of the two
+      // should read as buyable.
+      DUST_ON(server, 60);
+      server.set("getTradeSpares", RICH_SPARES);
+      server.set("getMarketListings", {
+        listings: [
+          { id: "l-1", sellerId: "p-bob", price: 40, createdAt: "2026-08-30T00:00:00Z", item: LISTING_ITEM("ep-bob", "silver") }, // prettier-ignore
+          { id: "l-2", sellerId: "p-carol", price: 120, createdAt: "2026-08-30T00:00:00Z", item: LISTING_ITEM("ep-alice", "gold") }, // prettier-ignore
+        ],
+        nudgeTopic: null,
+      });
+      server.set("getMyStall", {
+        active: [
+          { id: "l-3", sellerId: "p-alice", price: 75, createdAt: "2026-08-30T00:00:00Z", item: LISTING_ITEM("ep-carol", "standard"), status: "active", buyerId: null, resolvedAt: null }, // prettier-ignore
+        ],
+        recent: [],
+      });
+    },
+    act: async (page) => {
+      await expect(page.getByRole("button", { name: /^120 dust$/i })).toBeDisabled({ timeout: 40_000 }); // prettier-ignore
+      await expect(page.getByRole("button", { name: /^Buy · 40$/ })).toBeEnabled();
+      await expect(page.getByRole("button", { name: /take down/i })).toBeVisible();
+      await page.getByRole("button", { name: /^120 dust$/i }).scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    ...SHOP,
+    name: "shop-unclaimed",
+    member: false,
+    arrange: (server) => server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true }),
+    act: async (page) => {
+      await expect(page.getByText(/needs a claimed player/i)).toBeVisible({ timeout: 40_000 });
+      await expect(page.getByRole("link", { name: /claim yours/i })).toBeVisible();
+    },
+  },
+  {
+    ...SHOP,
+    name: "shop-spares-error",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.fail("getTradeSpares", "capture: simulated outage");
+    },
+    // spares has retry:false, so it errors at once and the sections fall to their
+    // empty line; that line is the concrete thing to wait on.
+    act: async (page) => {
+      await expect(page.getByText("No spares yet.")).toBeVisible({ timeout: 40_000 });
+      await expect(page.getByText("No secrets yet.")).toBeVisible();
+      await expect(page.getByText("No cards yet.")).toBeVisible();
+    },
+  },
+  {
+    ...SHOP,
+    name: "shop-list-drawer",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", RICH_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      const list = page.getByRole("button", { name: "List a card" });
+      await expect(list).toBeEnabled();
+      // Hydration can lose an early click, so retry until the drawer is really up.
+      await expect(async () => {
+        await list.click();
+        await expect(page.getByRole("dialog")).toBeVisible({ timeout: 1_500 });
+      }).toPass({ timeout: 15_000 });
+      // The first tile in the grid; each tile is a button.
+      await page.getByRole("dialog").locator("ul button").first().click();
+      await expect(page.locator("#market-price")).toBeVisible();
+    },
+  },
+  {
+    ...SHOP,
+    name: "shop-dust-off",
+    // No arrange: the fixture event carries no dust_enabled, which is dust off.
+    act: async (page) => {
+      await expect(page.getByText(/has not switched dust on/i)).toBeVisible({ timeout: 40_000 });
+      await expect(page.getByRole("link", { name: /back to the vault/i })).toBeVisible();
+    },
+  },
   {
     name: "vault-sort-sheet",
     act: async (page) => {
