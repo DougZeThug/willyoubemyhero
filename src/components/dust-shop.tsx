@@ -18,6 +18,7 @@ import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
 import { LevelPips } from "@/components/level-pips";
+import { ListError } from "@/components/list-error";
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { SetChip } from "@/components/set-chip";
@@ -372,6 +373,8 @@ export function DustShopPanel({
         </p>
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting spares…</p>
+        ) : spares.isError ? (
+          <ListError what="your spares" onRetry={() => void spares.refetch()} />
         ) : burnable.length === 0 ? (
           <p className="mt-3 text-meta text-muted-foreground">No spares yet.</p>
         ) : (
@@ -418,6 +421,8 @@ export function DustShopPanel({
         </p>
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting secrets…</p>
+        ) : spares.isError ? (
+          <ListError what="your secrets" onRetry={() => void spares.refetch()} />
         ) : sellable.length === 0 ? (
           <p className="mt-3 text-meta text-muted-foreground">No secrets yet.</p>
         ) : (
@@ -429,7 +434,10 @@ export function DustShopPanel({
                 <li key={s.pullId} className={ROW}>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-badge font-bold">{s.name}</span>
-                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
+                    {/* Wraps rather than truncates: at 320 the level, a set chip and "last
+                        copy" together run under the Sell button, and the one fact
+                        that must never be cut is that this is the only copy. */}
+                    <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
                       {/* The level decides what this is worth — the row's whole
                           point — so it gets the shape as well as the word. */}
                       <LevelPips tier={s.tier} />
@@ -437,7 +445,7 @@ export function DustShopPanel({
                       {/* Which set you would be selling it out of. Two secrets of
                           the same level are worth the same dust, so the set is the
                           only thing on this row that makes them different cards. */}
-                      <SetChip collection={s.collection} sets={sets} />
+                      <SetChip collection={s.collection} sets={sets} className="shrink-0" />
                       {s.lastCopy && <span className="shrink-0">last copy</span>}
                     </span>
                   </span>
@@ -477,6 +485,8 @@ export function DustShopPanel({
         </p>
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting cards…</p>
+        ) : spares.isError ? (
+          <ListError what="your cards" onRetry={() => void spares.refetch()} />
         ) : rerollable.length === 0 ? (
           <p className="mt-3 text-meta text-muted-foreground">No cards yet.</p>
         ) : (
@@ -525,10 +535,18 @@ export function DustShopPanel({
         {/* The one panel on this screen that is a table rather than a list of
             actions, and the only place the rarity ladder is written down
             anywhere in the app. */}
-        <div className="surface-panel mt-3 grid grid-cols-2 gap-x-6 rounded-xl border p-3">
+        <div
+          className={cn(
+            "surface-panel mt-3 grid rounded-xl border p-3",
+            // Under 380px a 50/50 split leaves the level column ~119px for pips,
+            // "Legendary" and "120", which does not fit; the finish column is
+            // short, so it takes its content and the level column gets the rest.
+            "grid-cols-[auto_minmax(0,1fr)] gap-x-4 min-[380px]:grid-cols-2 min-[380px]:gap-x-6",
+          )}
+        >
           <ul className="space-y-1">
             {MILL_LADDER.map(({ edition, value }) => (
-              <li key={edition} className="flex items-center justify-between text-meta">
+              <li key={edition} className="flex items-center justify-between gap-2 text-meta">
                 <span style={{ color: editionStyle(edition).accent }}>
                   {editionStyle(edition).label}
                 </span>
@@ -538,8 +556,8 @@ export function DustShopPanel({
           </ul>
           <ul className="space-y-1">
             {SECRET_SELL_LADDER.map(({ tier, value }) => (
-              <li key={tier} className="flex items-center justify-between text-meta">
-                <span className="inline-flex items-center gap-1.5">
+              <li key={tier} className="flex items-center justify-between gap-2 text-meta">
+                <span className="inline-flex min-w-0 items-center gap-1.5">
                   <LevelPips tier={tier} />
                   <span style={{ color: secretTierStyle(tier).accent }}>
                     {secretTierStyle(tier).label}

@@ -449,3 +449,61 @@ describe("an older server's same-day refusal", () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Today's pull can be dusted from tomorrow")); // prettier-ignore
   });
 });
+
+describe("a failed spares read", () => {
+  it("says so in all three lists instead of reading as empty, and Try again asks once more", async () => {
+    // spares runs retry:false, so one rejection is the whole outage. Before this
+    // the three lists fell through to "No spares yet." and friends.
+    sparesFn.mockRejectedValue(new Error("boom"));
+    renderShop();
+
+    expect(await screen.findByText("Couldn't read your spares just now.")).toBeTruthy();
+    expect(screen.getByText("Couldn't read your secrets just now.")).toBeTruthy();
+    expect(screen.getByText("Couldn't read your cards just now.")).toBeTruthy();
+    expect(screen.queryByText("No spares yet.")).toBeNull();
+    expect(screen.queryByText("No secrets yet.")).toBeNull();
+
+    sparesFn.mockClear();
+    await userEvent.click(screen.getAllByRole("button", { name: "Try again" })[0]);
+    await waitFor(() => expect(sparesFn).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the plain empty lines for a read that succeeded with nothing", async () => {
+    renderShop();
+    expect(await screen.findByText("No spares yet.")).toBeTruthy();
+    expect(screen.queryByText(/Couldn't read/)).toBeNull();
+  });
+});
+
+describe("narrow-phone layout", () => {
+  it("lets the secret row's meta line wrap and keeps the set chip from shrinking", async () => {
+    // jsdom has no layout, so the class strings are the honest assertion: at 320
+    // this line ran under the Sell button and squeezed the chip to a letter.
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [],
+      secrets: [
+        { pullId: "p1", name: "Gary The Grill", artUrl: null, tier: "legendary", collection: "cornhole", lastCopy: true, viewerOwns: true }, // prettier-ignore
+      ],
+      blocked: [],
+    });
+    renderShop();
+    const last = await screen.findByText("last copy");
+    expect(last.parentElement?.className).toMatch(/\bflex-wrap\b/);
+    const chip = screen.getByText("Cornhole Collection");
+    expect(chip.className).toMatch(/\bshrink-0\b/);
+  });
+
+  it("keeps a gap between each ladder label and its number", () => {
+    renderShop();
+    const row = screen.getByText("Platinum").closest("li");
+    expect(row?.className).toMatch(/\bgap-2\b/);
+    // And the table gives the wider level column its room on a narrow phone.
+    expect(row?.parentElement?.parentElement?.className).toMatch(
+      /grid-cols-\[auto_minmax\(0,1fr\)\]/,
+    );
+    const secretRow = screen.getByText("Legendary").closest("li");
+    expect(secretRow?.className).toMatch(/\bgap-2\b/);
+  });
+});

@@ -150,13 +150,18 @@ function ShopPage() {
             </span>
           </div>
           <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Dust</h1>
-          <p className="mt-2 text-meta text-muted-foreground">
-            {!dustOn
-              ? "The commissioner has not switched dust on yet."
-              : dust.data?.balance == null
-                ? "Counting…"
-                : `You have ${dust.data.balance.toLocaleString()}.`}
-          </p>
+          {/* Nothing for somebody with no claimed player: there is no balance to
+              count, and "Counting…" would sit there forever above the paragraph
+              that says what they need. */}
+          {(!dustOn || participantId) && (
+            <p className="mt-2 text-meta text-muted-foreground">
+              {!dustOn
+                ? "The commissioner has not switched dust on yet."
+                : dust.data?.balance == null
+                  ? "Counting…"
+                  : `You have ${dust.data.balance.toLocaleString()}.`}
+            </p>
+          )}
         </div>
 
         {/* The tab disappears when dust is off, but a bookmark does not — and a
@@ -200,7 +205,13 @@ function ShopPage() {
         ) : !participantId ? (
           <p className="text-sm text-muted-foreground">
             Dust is banked against your name rather than this phone, so it needs a claimed player.{" "}
-            <Link to="/claim" className="font-bold text-primary hover:underline">
+            {/* A pseudo-element hit area rather than min-h-11: padding or flex on an
+                inline link inflates the paragraph's line gap. The ::before reaches
+                about 44px to a thumb and leaves the text where it was. */}
+            <Link
+              to="/claim"
+              className="relative font-bold text-primary before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] hover:underline"
+            >
               Claim yours
             </Link>
           </p>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-c
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
+import { ListError } from "@/components/list-error";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey, useMarketListings, useMyStall } from "@/hooks/use-market";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
@@ -23,6 +24,7 @@ import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { houseFloor, marketStatusLabel, MARKET_PRICE_MAX, MARKET_PRICE_MIN } from "@/lib/market";
@@ -194,6 +196,16 @@ export function MarketPanel({
   const [picking, setPicking] = useState(false);
   const [staged, setStaged] = useState<{ item: TradeItemView; floor: number } | null>(null);
   const [price, setPrice] = useState("");
+  // The staged form renders below the tile grid, which at 320x568 is past the
+  // drawer's fold with nothing to say it exists.
+  const formRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = usePrefersReducedMotion();
+  useEffect(() => {
+    if (!staged) return;
+    // "nearest", so a form already on screen does not move. Not focused: that
+    // would raise the keyboard for somebody who has not asked to type yet.
+    formRef.current?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); // prettier-ignore
+  }, [staged, reducedMotion]);
   /**
    * One id per BUY tap, reused if that tap is retried and rotated on success.
    * A lost response on a purchase is the worst bug this feature could ship, and
@@ -397,6 +409,8 @@ export function MarketPanel({
 
           {market.isLoading ? (
             <p className="mt-3 text-meta text-muted-foreground">Reading the shelf…</p>
+          ) : market.isError ? (
+            <ListError what="the market" onRetry={() => void market.refetch()} />
           ) : listings.length === 0 ? (
             <p className="mt-3 text-meta text-muted-foreground">Nothing for sale right now.</p>
           ) : (
@@ -477,6 +491,8 @@ export function MarketPanel({
 
         {stall.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting your stall…</p>
+        ) : stall.isError ? (
+          <ListError what="your stall" onRetry={() => void stall.refetch()} />
         ) : active.length === 0 ? (
           <p className="mt-3 text-meta text-muted-foreground">Nothing up at the moment.</p>
         ) : (
@@ -551,7 +567,9 @@ export function MarketPanel({
             </DrawerHeader>
 
             <div className="overflow-y-auto px-4 pb-6">
-              {sellable.length === 0 ? (
+              {spares.isError ? (
+                <ListError what="your spares" onRetry={() => void spares.refetch()} />
+              ) : sellable.length === 0 ? (
                 <p className="text-meta text-muted-foreground">
                   Nothing spare to sell yet. Roster cards need a second copy; any secret will do.
                 </p>
@@ -580,7 +598,7 @@ export function MarketPanel({
               )}
 
               {staged && (
-                <div className="mt-4 space-y-2 border-t border-border pt-4">
+                <div ref={formRef} className="mt-4 space-y-2 border-t border-border pt-4">
                   <label
                     htmlFor="market-price"
                     className="block font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground"
@@ -641,7 +659,7 @@ function StallLine({
        because the name is the longest of them and sits at the front. */
     <span className="min-w-0 flex-1">
       <span className="block truncate text-badge font-bold">{title}</span>
-      <span className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
+      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
         {/* Only a secret has a level; itemMeta collapses a finish and a level into
             the same {label, accent} shape, so the discriminator has to be here. */}
         {listing.item.kind === "secret" && <LevelPips tier={listing.item.tier} />}

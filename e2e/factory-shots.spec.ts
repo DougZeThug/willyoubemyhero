@@ -291,9 +291,15 @@ const SCENES: Scene[] = [
     // spares has retry:false, so it errors at once and the sections fall to their
     // empty line; that line is the concrete thing to wait on.
     act: async (page) => {
-      await expect(page.getByText("No spares yet.")).toBeVisible({ timeout: 40_000 });
-      await expect(page.getByText("No secrets yet.")).toBeVisible();
-      await expect(page.getByText("No cards yet.")).toBeVisible();
+      // Either wording, so the base tree (empty lines) and the branch (a read
+      // failure with Try again) are both photographed once settled.
+      for (const [empty, failed] of [
+        ["No spares yet.", /Couldn't read your spares/],
+        ["No secrets yet.", /Couldn't read your secrets/],
+        ["No cards yet.", /Couldn't read your cards/],
+      ] as const) {
+        await expect(page.getByText(empty).or(page.getByText(failed))).toBeVisible({ timeout: 40_000 }); // prettier-ignore
+      }
     },
   },
   {
@@ -315,6 +321,12 @@ const SCENES: Scene[] = [
       // The first tile in the grid; each tile is a button.
       await page.getByRole("dialog").locator("ul button").first().click();
       await expect(page.locator("#market-price")).toBeVisible();
+      // Tolerant on purpose: the before tree never scrolls the form into view, and
+      // it still has to be photographed. Waiting for the scroll to land is what
+      // lets the after frame be the settled one.
+      await expect(page.locator("#market-price"))
+        .toBeInViewport({ timeout: 3_000 })
+        .catch(() => undefined);
     },
   },
   {

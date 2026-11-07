@@ -537,3 +537,69 @@ describe("provenance on the shelf", () => {
     expect(await screen.findByText("Gold · unsettled")).toBeInTheDocument();
   });
 });
+
+describe("failed reads", () => {
+  it("says the market failed rather than that nothing is for sale, and Try again refetches", async () => {
+    browseFn.mockRejectedValue(new Error("boom"));
+    renderPanel();
+    expect(await screen.findByText("Couldn't read the market just now.")).toBeTruthy();
+    expect(screen.queryByText("Nothing for sale right now.")).toBeNull();
+
+    browseFn.mockClear();
+    browseFn.mockResolvedValue({ listings: [], nudgeTopic: null });
+    const section = screen.getByText("Couldn't read the market just now.").closest("div");
+    await userEvent.click(
+      within(section as HTMLElement).getByRole("button", { name: "Try again" }),
+    );
+    await waitFor(() => expect(browseFn).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Nothing for sale right now.")).toBeTruthy();
+  });
+
+  it("says the stall failed rather than that nothing is up", async () => {
+    stallFn.mockRejectedValue(new Error("boom"));
+    renderPanel();
+    expect(await screen.findByText("Couldn't read your stall just now.")).toBeTruthy();
+    expect(screen.queryByText("Nothing up at the moment.")).toBeNull();
+    stallFn.mockClear();
+    const box = screen.getByText("Couldn't read your stall just now.").closest("div");
+    await userEvent.click(within(box as HTMLElement).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(stallFn).toHaveBeenCalledTimes(1));
+  });
+
+  it("says the spares failed inside the List drawer", async () => {
+    // The List button is disabled while spares load and enabled once it settles —
+    // an error included — so the drawer is reachable with nothing to pick from.
+    sparesFn.mockRejectedValue(new Error("boom"));
+    renderPanel();
+    await userEvent.click(await screen.findByRole("button", { name: /list a card/i }));
+    expect(await screen.findByText("Couldn't read your spares just now.")).toBeTruthy();
+    expect(screen.queryByText(/nothing spare to sell yet/i)).toBeNull();
+    sparesFn.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(sparesFn).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("staging a card", () => {
+  it("scrolls the price form into view, nearest, without focusing it", async () => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [
+        { copyId: COPY, eventParticipantId: "ep-1", edition: "gold", viewerOwns: true, assertedBy: "server" }, // prettier-ignore
+      ],
+      secrets: [],
+      blocked: [],
+    });
+    renderPanel();
+    await userEvent.click(await screen.findByRole("button", { name: /list a card/i }));
+    const scroll = HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    scroll.mockClear();
+    await userEvent.click(await screen.findByRole("button", { name: /alice ace/i }));
+    const input = await screen.findByLabelText(/your price/i);
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.calls[0][0]).toMatchObject({ block: "nearest" });
+    expect(scroll.mock.instances[0]).toBe(input.parentElement);
+    expect(document.activeElement).not.toBe(input);
+  });
+});
