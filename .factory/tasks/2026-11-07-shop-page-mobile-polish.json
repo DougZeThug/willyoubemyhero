@@ -1,0 +1,20 @@
+{
+  "id": "2026-11-07-shop-page-mobile-polish",
+  "title": "Shop page mobile polish",
+  "kind": "polish",
+  "status": "building",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-07T14:37:09.983Z",
+  "acceptance": [
+    "Capture spec has shop scenes (dust-on member with spares and a market, unclaimed visitor, spares-query failing, list-a-card drawer with a staged tile) at 390, 320 and 320x568, each verified by looking at its PNG",
+    "Fix set chosen from the rendered frames, not code alone (decided after step 1)",
+    "No change to prices, dust amounts, the burn/sell/re-roll ladder, listing/buy rules, server functions or marketplace/ownership logic",
+    "Before/after screenshots committed under shots/review and described from the images"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "step 1: shop capture scenes",
+  "notes": [],
+  "updatedAt": "2026-11-07T14:37:10.027Z"
+}
