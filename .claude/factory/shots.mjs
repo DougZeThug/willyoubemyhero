@@ -274,7 +274,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // The raw set is large and stays local (gitignored). What gets committed for a
   // reviewer is the part that is evidence: every changed phone-width viewport shot,
   // plus one unchanged shot as a control showing nothing else moved.
-  const phoneShot = (name) => /-(320|390|320x568)\.png$/.test(name) && !name.endsWith("-full.png");
+  // Viewport shots at phone widths, plus the full-page shot at the short phone: tall
+  // screens (a shop, a long list) keep their evidence below the fold.
+  const phoneShot = (name) =>
+    (/-(320|390|320x568)\.png$/.test(name) && !name.endsWith("-full.png")) ||
+    name.endsWith("-320x568-full.png");
   const reviewNames = list("after").filter((name) => phoneShot(name) && changed.has(name));
   const control = list("after").find((name) => phoneShot(name) && !changed.has(name));
   if (control) reviewNames.push(control);

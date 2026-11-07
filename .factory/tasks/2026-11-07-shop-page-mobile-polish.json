@@ -2,7 +2,7 @@
   "id": "2026-11-07-shop-page-mobile-polish",
   "title": "Shop page mobile polish",
   "kind": "polish",
-  "status": "building",
+  "status": "verifying",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-07T14:37:09.983Z",
   "acceptance": [
@@ -12,9 +12,26 @@
     "Before/after screenshots committed under shots/review and described from the images"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-07T15:01:22.476Z",
+      "head": "807a4f31730554123205fa3eacf11abb90abdade",
+      "fp": "e6c98c42d23087ab3b754b6e5e3da7555e86d94b",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "step 1: shop capture scenes",
+  "nextAction": "gates + review + screenshots",
   "notes": [],
-  "updatedAt": "2026-11-07T14:37:10.027Z"
+  "updatedAt": "2026-11-07T15:05:00.765Z"
 }
