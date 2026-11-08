@@ -2,7 +2,7 @@
   "id": "2026-11-08-shop-declutter-shorter-intros-merged-emp",
   "title": "Shop: declutter - shorter intros, merged empty states, price table behind a disclosure",
   "kind": "polish",
-  "status": "planned",
+  "status": "ready",
   "branch": null,
   "createdAt": "2026-11-08T16:10:49.977Z",
   "acceptance": [
@@ -13,9 +13,33 @@
     "No price, rule, odds or server-call change; sticky chip structure unchanged; you-have-N still resolves to one node"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T16:16:35.717Z",
+      "head": "aa697f0cbc975b37843e02f1a92fb8d011c93471",
+      "fp": "cc55e945e9168bba10db08748c1675cbb35e6a71",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "plan",
+  "nextAction": "your review of shots/review; page is 17% shorter, below the stated target; decide on further declutter options",
   "notes": [],
-  "updatedAt": "2026-11-08T16:10:49.977Z"
+  "updatedAt": "2026-11-08T16:22:29.923Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "aa697f0cbc975b37843e02f1a92fb8d011c93471",
+    "fp": "cc55e945e9168bba10db08748c1675cbb35e6a71",
+    "at": "2026-11-08T16:22:29.797Z"
+  }
 }
