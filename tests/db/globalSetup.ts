@@ -5,7 +5,16 @@ import { startCluster, type Cluster } from "./cluster";
 let cluster: Cluster | undefined;
 
 export async function setup(project: TestProject) {
-  cluster = await startCluster();
+  try {
+    cluster = await startCluster();
+  } catch (err) {
+    // Vitest prints a startup error through a source-map lookup that itself throws
+    // on some Vite builds ("code.charCodeAt is not a function"), which buries the
+    // real reason under a crash and a misleading "No test files found". Say it
+    // plainly first.
+    console.error(`[db globalSetup] could not start Postgres: ${(err as Error).message}`);
+    throw err;
+  }
   // Test files run in their own workers, so the connection string is handed
   // across rather than shared in memory.
   project.provide("databaseUrl", cluster.connectionString);

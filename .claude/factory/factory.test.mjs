@@ -340,7 +340,7 @@ test("shots: the main-module check survives percent-encoded paths", () => {
   const file = path.join(os.tmpdir(), "a b%20c", "shots.mjs");
   assert.ok(isMainModule(pathToFileURL(file).href, file));
   assert.equal(isMainModule(pathToFileURL(file).href, "/other.mjs"), false);
-  assert.equal(isMainModule(pathToFileURL(file).href, undefined), false);
+  assert.equal(isMainModule(pathToFileURL(file).href), false);
 });
 
 test("shots: a capture on one side only is reported, never 'identical'", () => {

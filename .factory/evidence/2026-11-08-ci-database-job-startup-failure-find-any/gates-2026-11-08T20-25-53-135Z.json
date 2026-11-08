@@ -1,0 +1,43 @@
+{
+  "at": "2026-11-08T20:25:53.135Z",
+  "head": "fee111251434d2d9d7151c6ba202361887e28302",
+  "fp": "40377075788e5aadb74846c939270c3d9bfd78d7",
+  "partial": false,
+  "results": [
+    {
+      "gate": "lint",
+      "ok": false,
+      "ms": 31085,
+      "tail": "  1228 |   /**                                                                                                                                                                                                            react-hooks/set-state-in-effect\n  1517:25  warning  Error: Cannot access refs during render\n\nReact refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).\n\n/home/user/willyoubemyhero/src/routes/players.pack.tsx:1517:25\n  1515 |               busy={autoRunning}\n  1516 |               revealing={revealing}\n> 1517 |               fromPack={ceremonyRanRef.current}\n       |                         ^^^^^^^^^^^^^^^^^^^^^^ Cannot access ref value during render\n  1518 |               enteringFrom={entering}\n  1519 |               onEntered={() => setEntering(null)}\n  1520 |               onReveal={(i) => void revealAt(i)}                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/refs\n\n/home/user/willyoubemyhero/src/routes/players.trade.tsx\n  243:7  warning  Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n/home/user/willyoubemyhero/src/routes/players.trade.tsx:243:7\n  241 |     if (!intent) return;\n  242 |     if (builderOpen && myIdForIntent) {\n> 243 |       setIntent(null);\n      |       ^^^^^^^^^ Avoid calling setState() directly within an effect\n  244 |       return;\n  245 |     }\n  246 |     if (builderOpen) return;  react-hooks/set-state-in-effect\n\n✖ 67 problems (1 error, 66 warnings)\n  1 error and 0 warnings potentially fixable with the `--fix` option.\n\n$ eslint .\n(node:2283) [SYNCKIT_GUARD_ORDERING] Warning: synckit: this Node rejected the worker environment, so the failure guard loads after inherited `NODE_OPTIONS` preloads; a failure in one of those cannot be reported. Set `SYNCKIT_TIMEOUT` to bound the wait.\n(Use `node --trace-warnings ...` to show where the warning was created)\nerror: script \"lint\" exited with code 1\n"
+    },
+    {
+      "gate": "typecheck",
+      "ok": true,
+      "ms": 3698,
+      "tail": ""
+    },
+    {
+      "gate": "unit",
+      "ok": true,
+      "ms": 87266,
+      "tail": ""
+    },
+    {
+      "gate": "db",
+      "ok": true,
+      "ms": 57547,
+      "tail": ""
+    },
+    {
+      "gate": "build",
+      "ok": true,
+      "ms": 8532,
+      "tail": ""
+    }
+  ],
+  "passed": false,
+  "skipped": [],
+  "deferredToCI": [
+    "bun run test:e2e (CLAUDE.md: CI only, never locally)"
+  ]
+}

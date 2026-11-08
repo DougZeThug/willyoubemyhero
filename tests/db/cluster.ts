@@ -11,16 +11,15 @@
 // it does not prove the API layer in front of them.
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-const PG_CANDIDATES = [
-  "/usr/lib/postgresql/16/bin",
-  "/usr/lib/postgresql/15/bin",
+// Fixed locations, tried after any versioned /usr/lib/postgresql/<n>/bin.
+const PG_FIXED_DIRS = [
   "/usr/local/bin",
   // Nix-style images (the Lovable sandbox among them) put the postgres
   // binaries straight on PATH rather than in a versioned directory.
@@ -28,18 +27,48 @@ const PG_CANDIDATES = [
   "/bin",
 ];
 
+/** Newest first. A hard-coded major version went stale the day a runner image moved on. */
+export function versionedBinDirs(root = "/usr/lib/postgresql"): string[] {
+  try {
+    return readdirSync(root)
+      .filter((v) => /^\d+(\.\d+)?$/.test(v))
+      .sort((a, b) => Number(b) - Number(a))
+      .map((v) => path.join(root, v, "bin"));
+  } catch {
+    return [];
+  }
+}
+
 export const DB_NAME = "wwbh_test";
 const OWNER = "wwbh_owner";
 
-function pgBinDir(): string {
-  const fromEnv = process.env.PG_BIN_DIR;
-  if (fromEnv && existsSync(path.join(fromEnv, "initdb"))) return fromEnv;
-  for (const dir of PG_CANDIDATES) {
-    if (existsSync(path.join(dir, "initdb"))) return dir;
+/**
+ * PG_BIN_DIR wins when it really holds initdb. A value pointing at a directory that
+ * does not exist (CI's fallback guess for a runner without pg_ctl on PATH) falls
+ * through to the search instead of failing the whole suite.
+ */
+export function pickPgBinDir(opts: {
+  fromEnv?: string;
+  versioned: string[];
+  fixed: string[];
+  has: (dir: string) => boolean;
+}): string {
+  if (opts.fromEnv && opts.has(opts.fromEnv)) return opts.fromEnv;
+  for (const dir of [...opts.versioned, ...opts.fixed]) {
+    if (opts.has(dir)) return dir;
   }
   throw new Error(
     "No postgres binaries found. Install postgresql, or set PG_BIN_DIR to the directory holding initdb.",
   );
+}
+
+function pgBinDir(): string {
+  return pickPgBinDir({
+    fromEnv: process.env.PG_BIN_DIR,
+    versioned: versionedBinDirs(),
+    fixed: PG_FIXED_DIRS,
+    has: (dir) => existsSync(path.join(dir, "initdb")),
+  });
 }
 
 export type Cluster = {

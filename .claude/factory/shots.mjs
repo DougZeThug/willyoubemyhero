@@ -27,7 +27,8 @@ const flag = (name) => {
 export const isTaskId = (id) => /^[a-z0-9][a-z0-9-]*$/.test(id ?? "");
 
 /** True when this file is the script node was started with (robust to percent-encoded paths). */
-export const isMainModule = (metaUrl, argv1) => !!argv1 && pathToFileURL(argv1).href === metaUrl;
+export const isMainModule = (metaUrl, argv1) =>
+  Boolean(argv1) && pathToFileURL(argv1).href === metaUrl;
 
 /** Names captured on only one side: a missing screenshot must never pass as "unchanged". */
 export function oneSided(before, after) {
@@ -180,7 +181,7 @@ function verdict(diff) {
   return `**faint colour shift** (${(diff.faintRatio * 100).toFixed(2)}% of pixels, small tint/shadow/opacity change)`;
 }
 
-export function compareMarkdown(taskId, before, after, fontWarnings, changed = new Map()) {
+export function compareMarkdown(id, before, after, fontWarnings, changed = new Map()) {
   const names = [...new Set([...before, ...after])].sort(
     // Pairs that actually differ first: identical pairs are not evidence of anything.
     (a, b) => Number(changed.has(b)) - Number(changed.has(a)) || a.localeCompare(b),
@@ -198,7 +199,7 @@ export function compareMarkdown(taskId, before, after, fontWarnings, changed = n
       `| \`${name}\` | ${verdictFor(name)} | ${cell(before, "before", name)} | ${cell(after, "after", name)} |`,
   );
   return [
-    `# Before / after — ${taskId}`,
+    `# Before / after — ${id}`,
     "",
     ...(fontWarnings.length
       ? [
