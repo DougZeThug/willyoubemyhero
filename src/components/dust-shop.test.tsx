@@ -58,14 +58,16 @@ vi.mock("@tanstack/react-start", async (importOriginal) => ({
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
 
-function renderShop() {
+// null, not undefined, for "still loading": undefined would pick up the default.
+function renderShop(given: number | null = DUST_PRICES.bonusPull) {
+  const balance = given ?? undefined;
   const { wrapper, client } = createQueryWrapper();
   const invalidate = vi.spyOn(client, "invalidateQueries") as unknown as Invalidate;
   const Wrapper = wrapper;
   render(
     <Wrapper>
       <DustShopPanel
-        balance={DUST_PRICES.bonusPull}
+        balance={balance}
         participantId={ME}
         actor={ACTOR}
         eventId={EVENT}
@@ -505,5 +507,101 @@ describe("narrow-phone layout", () => {
     );
     const secretRow = screen.getByText("Legendary").closest("li");
     expect(secretRow?.className).toMatch(/\bgap-2\b/);
+  });
+});
+
+describe("saying why the re-roll buttons are dead", () => {
+  const ROLL = "99999999-9999-4999-8999-999999999999";
+
+  function withCards(rows: number) {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: Array.from({ length: rows }, (_, i) => ({
+        copyId: i === 0 ? ROLL : `copy-${i}`,
+        eventParticipantId: "ep-1",
+        edition: "gold",
+        assertedBy: "server",
+      })),
+      roster: [],
+      secrets: [],
+      blocked: [],
+    });
+  }
+
+  it("counts the shortfall when the balance is under the price and there are rows", async () => {
+    withCards(1);
+    renderShop(DUST_PRICES.reroll - 7);
+    expect(await screen.findByText("7 more to re-roll")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /re-roll/i })).toBeDisabled();
+  });
+
+  it("is absent once the price is covered", async () => {
+    withCards(1);
+    renderShop(DUST_PRICES.reroll);
+    await screen.findByRole("button", { name: /re-roll/i });
+    expect(screen.queryByText(/more to re-roll/)).toBeNull();
+  });
+
+  it("is absent when there is nothing to re-roll", async () => {
+    withCards(0);
+    renderShop(0);
+    await screen.findByText("No cards yet.");
+    expect(screen.queryByText(/more to re-roll/)).toBeNull();
+  });
+
+  it("is absent while the balance is still unknown", async () => {
+    withCards(1);
+    renderShop(null);
+    await screen.findByRole("button", { name: /re-roll/i });
+    expect(screen.queryByText(/more to re-roll/)).toBeNull();
+  });
+});
+
+describe("toasts name the card", () => {
+  const COPY = "77777777-7777-4777-8777-777777777777";
+  const PULL = "88888888-8888-4888-8888-888888888888";
+
+  beforeEach(() => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [
+        { copyId: COPY, eventParticipantId: "ep-1", edition: "gold", assertedBy: "server" },
+      ],
+      roster: [{ copyId: COPY, eventParticipantId: "ep-1", edition: "gold", assertedBy: "server" }],
+      secrets: [
+        {
+          pullId: PULL,
+          name: "Gary The Grill",
+          artUrl: null,
+          tier: "rare",
+          lastCopy: false,
+          viewerOwns: true,
+        },
+      ],
+      blocked: [],
+    });
+  });
+
+  it("burn: who and how much", async () => {
+    millFn.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: /burn \+/i }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Burned Alice Ace · +40 dust"));
+  });
+
+  it("sell: the secret's name and how much", async () => {
+    sellFn.mockResolvedValue({ ok: true, awarded: 120, balance: 200 });
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Sold Gary The Grill · +120 dust"));
+  });
+
+  it("re-roll: who, and both finishes", async () => {
+    rerollFn.mockResolvedValue({ ok: true, from: "gold", to: "platinum", balance: 10 });
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: /re-roll/i }));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(expect.stringMatching(/^Alice Ace: Gold → /)),
+    );
   });
 });

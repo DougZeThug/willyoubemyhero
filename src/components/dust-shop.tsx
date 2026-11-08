@@ -203,8 +203,11 @@ export function DustShopPanel({
   const millFn = useServerFn(millCardCopy);
   const [burning, setBurning] = useState<string | null>(null);
   const mill = useMutation({
-    mutationFn: (cardCopyId: string) => millFn({ data: { cardCopyId } }),
-    onSuccess: (res) => {
+    // The name rides along in the variables: the spares list is invalidated the
+    // moment the copy goes, so looking it up in onSuccess would race the refetch.
+    mutationFn: (v: { cardCopyId: string; name: string }) =>
+      millFn({ data: { cardCopyId: v.cardCopyId } }),
+    onSuccess: (res, v) => {
       if (!res.ok) {
         toast(
           res.reason === "last_copy"
@@ -227,7 +230,7 @@ export function DustShopPanel({
       // next door already invalidated both.
       void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
-      toast(`+${res.awarded} dust`);
+      toast(`Burned ${v.name} · +${res.awarded} dust`);
     },
     onError: () => toast("Could not burn that one"),
     onSettled: () => setBurning(null),
@@ -248,8 +251,9 @@ export function DustShopPanel({
   const sellFn = useServerFn(sellSecretCard);
   const [selling, setSelling] = useState<string | null>(null);
   const sell = useMutation({
-    mutationFn: (secretPullId: string) => sellFn({ data: { secretPullId } }),
-    onSuccess: (res) => {
+    mutationFn: (v: { secretPullId: string; name: string }) =>
+      sellFn({ data: { secretPullId: v.secretPullId } }),
+    onSuccess: (res, v) => {
       if (!res.ok) {
         toast(
           res.reason === "staked"
@@ -272,7 +276,7 @@ export function DustShopPanel({
       // the comment on the prop.
       void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
       void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
-      toast(`+${res.awarded} dust`);
+      toast(`Sold ${v.name} · +${res.awarded} dust`);
     },
     onError: () => toast("Could not sell that one"),
     onSettled: () => setSelling(null),
@@ -297,12 +301,13 @@ export function DustShopPanel({
   // roll it already sold rather than charging twice for it.
   const [rerollIds, setRerollIds] = useState<Record<string, string>>({});
   const reroll = useMutation({
-    mutationFn: (copyId: string) => {
+    mutationFn: (v: { copyId: string; name: string }) => {
+      const copyId = v.copyId;
       const requestId = rerollIds[copyId] ?? crypto.randomUUID();
       setRerollIds((prev) => ({ ...prev, [copyId]: requestId }));
       return rerollFn({ data: { cardCopyId: copyId, requestId } });
     },
-    onSuccess: (res, copyId) => {
+    onSuccess: (res, { copyId, name }) => {
       if (!res.ok) {
         toast(
           res.reason === "insufficient"
@@ -327,7 +332,7 @@ export function DustShopPanel({
       // Both ends, because it can go down — saying only the new one would read as
       // a win every time.
       toast(
-        `${editionStyle(toEdition(res.from)).label ?? "Standard"} → ${
+        `${name}: ${editionStyle(toEdition(res.from)).label ?? "Standard"} → ${
           editionStyle(toEdition(res.to)).label ?? "Standard"
         }`,
       );
@@ -401,7 +406,7 @@ export function DustShopPanel({
                     {...offlineReason(offline)}
                     onClick={() => {
                       setBurning(r.copyId);
-                      mill.mutate(r.copyId);
+                      mill.mutate({ cardCopyId: r.copyId, name: nameFor(r.eventParticipantId) });
                     }}
                   >
                     {burning === r.copyId && mill.isPending ? "…" : `Burn +${worth}`}
@@ -465,7 +470,7 @@ export function DustShopPanel({
                         return;
                       }
                       setSelling(s.pullId);
-                      sell.mutate(s.pullId);
+                      sell.mutate({ secretPullId: s.pullId, name: s.name });
                     }}
                   >
                     {selling === s.pullId && sell.isPending ? "…" : `Sell +${worth}`}
@@ -483,6 +488,13 @@ export function DustShopPanel({
           Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
           your only one — and it can go down.
         </p>
+        {/* Same voice as the bonus pull's "more to go": a row of dead buttons with no
+            reason beside them reads as broken, not as short of dust. */}
+        {rerollable.length > 0 && !canReroll && balance != null && (
+          <p className="mt-2 text-meta text-muted-foreground">
+            {DUST_PRICES.reroll - balance} more to re-roll
+          </p>
+        )}
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting cards…</p>
         ) : spares.isError ? (
@@ -513,7 +525,7 @@ export function DustShopPanel({
                     {...offlineReason(offline)}
                     onClick={() => {
                       setRolling(r.copyId);
-                      reroll.mutate(r.copyId);
+                      reroll.mutate({ copyId: r.copyId, name: nameFor(r.eventParticipantId) });
                     }}
                   >
                     {rolling === r.copyId && reroll.isPending
