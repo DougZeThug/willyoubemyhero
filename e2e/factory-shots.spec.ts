@@ -266,8 +266,14 @@ const SCENES: Scene[] = [
     },
     act: async (page) => {
       await shopRows(page);
-      await expect(page.getByText(/more to re-roll/)).toBeVisible();
-      await page.getByText(/more to re-roll/).scrollIntoViewIfNeeded();
+      // The hint exists only after the change; the before tree has none, and it still
+      // has to be photographed — so anchor on the section heading, which both have.
+      const section = page.getByRole("heading", { name: /^settle a finish$/i });
+      await section.scrollIntoViewIfNeeded();
+      await page
+        .getByText(/more to re-roll/)
+        .waitFor({ timeout: 2_000 })
+        .catch(() => undefined);
     },
   },
   {
@@ -284,7 +290,8 @@ const SCENES: Scene[] = [
         .getByRole("button", { name: /^Burn \+/ })
         .first()
         .click();
-      await expect(page.getByText(/^Burned .* · \+40 dust$/)).toBeVisible();
+      // "+40 dust" ends both the old toast and the one that names the card.
+      await expect(page.getByText(/\+40 dust$/)).toBeVisible();
     },
   },
   {
@@ -310,10 +317,10 @@ const SCENES: Scene[] = [
       });
     },
     act: async (page) => {
-      await expect(page.getByRole("button", { name: /^need 120$/i })).toBeDisabled({ timeout: 40_000 }); // prettier-ignore
+      await expect(page.getByRole("button", { name: /^(need 120|120 dust)$/i })).toBeDisabled({ timeout: 40_000 }); // prettier-ignore
       await expect(page.getByRole("button", { name: /^Buy · 40$/ })).toBeEnabled();
       await expect(page.getByRole("button", { name: /take down/i })).toBeVisible();
-      await page.getByRole("button", { name: /^need 120$/i }).scrollIntoViewIfNeeded();
+      await page.getByRole("button", { name: /^(need 120|120 dust)$/i }).scrollIntoViewIfNeeded();
     },
   },
   {
