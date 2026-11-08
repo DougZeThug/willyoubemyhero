@@ -487,13 +487,17 @@ export function DustShopPanel({
                       ellipsised at 320. Block (not the chip's inline-flex, where
                       truncate clips without an ellipsis) plus max-w-full keeps the
                       ellipsis as the safety net for a very long set name. */}
-                  <div className="min-w-0 basis-full">
-                    <SetChip
-                      collection={s.collection}
-                      sets={sets}
-                      className="block w-fit max-w-full"
-                    />
-                  </div>
+                  {/* Only when filed: an unfiled secret has no chip, and an empty
+                      full-width line would still cost the row's gap-y. */}
+                  {s.collection && (
+                    <div className="min-w-0 basis-full">
+                      <SetChip
+                        collection={s.collection}
+                        sets={sets}
+                        className="block w-fit max-w-full"
+                      />
+                    </div>
+                  )}
                 </li>
               );
             })}

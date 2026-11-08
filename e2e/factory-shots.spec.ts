@@ -210,6 +210,14 @@ const RICH_SECRETS = [
 ];
 const RICH_SPARES = spares(RICH_ROSTER, RICH_SECRETS);
 
+// Five re-rollable cards, so the Settle list has more than it shows by default.
+const MANY_ROSTER = [
+  ...RICH_ROSTER,
+  roster("00000000-0000-4000-8000-0000000000c4", "ep-dave", "bronze"),
+  roster("00000000-0000-4000-8000-0000000000c5", "ep-alice", "silver"),
+];
+const MANY_SPARES = spares(MANY_ROSTER, RICH_SECRETS);
+
 const SHOP = {
   path: "/players/shop",
   viewports: ["320x568"],
@@ -274,6 +282,36 @@ const SCENES: Scene[] = [
         .getByText(/more to re-roll/)
         .waitFor({ timeout: 2_000 })
         .catch(() => undefined);
+    },
+  },
+  {
+    // More cards than the Settle list shows by default: the cap and its button.
+    ...SHOP,
+    name: "shop-many",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", MANY_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      await page.getByRole("heading", { name: /^settle a finish$/i }).scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, 200));
+    },
+  },
+  {
+    // The same, opened: the before tree has no button and is already open.
+    ...SHOP,
+    name: "shop-many-open",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", MANY_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      const showAll = page.getByRole("button", { name: /^show all/i });
+      if (await showAll.isVisible().catch(() => false)) await showAll.click();
+      await page.getByRole("heading", { name: /^settle a finish$/i }).scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, 200));
     },
   },
   {

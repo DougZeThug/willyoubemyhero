@@ -512,6 +512,21 @@ describe("narrow-phone layout", () => {
     expect(chip.className).not.toMatch(/\bshrink-0\b/);
   });
 
+  it("leaves no empty chip line under a secret that is not filed in a set", async () => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [],
+      secrets: [
+        { pullId: "p2", name: "Loose Leaf", artUrl: null, tier: "rare", collection: null, lastCopy: false, viewerOwns: true }, // prettier-ignore
+      ],
+      blocked: [],
+    });
+    renderShop();
+    const row = (await screen.findByRole("button", { name: /sell \+/i })).closest("li") as HTMLElement; // prettier-ignore
+    expect(row.querySelector(".basis-full")).toBeNull();
+  });
+
   it("keeps a gap between each ladder label and its number", () => {
     renderShop();
     const row = screen.getByText("Platinum").closest("li");
