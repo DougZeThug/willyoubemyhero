@@ -1,0 +1,20 @@
+{
+  "id": "2026-11-08-shop-declutter-pass-2-one-line-bonus-cap",
+  "title": "Shop declutter pass 2: one-line bonus caption, tighter empty states, set chip on its own line",
+  "kind": "polish",
+  "status": "planned",
+  "branch": null,
+  "createdAt": "2026-11-08T16:31:28.308Z",
+  "acceptance": [
+    "Bonus pull shows one caption line under Buy combining the more-to-go hint and the does-not-touch-tomorrow note",
+    "Market and Stall empty states each take one line; stall rule that a roster card always leaves you one stays visible somewhere a lister sees it; unit tests updated together with strings",
+    "Secret row set chip never clips at 320: it sits on its own line, full text visible or gracefully truncated with an ellipsis",
+    "No price, rule, server-call or section-structure change; heading names and sticky chip unchanged"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "plan",
+  "notes": [],
+  "updatedAt": "2026-11-08T16:31:28.308Z"
+}
