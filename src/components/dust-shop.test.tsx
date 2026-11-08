@@ -580,6 +580,51 @@ describe("sell a secret: duplicates grouped by name", () => {
     expect(screen.getByRole("heading", { name: /sell a secret/i }).parentElement?.textContent).toMatch(/3/); // prettier-ignore
   });
 
+  it("describes each grouped Sell by the card's name and its own level, singles not at all", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary"),
+      copy("p2", "Gary The Grill", "common"),
+      copy("p3", "Loose Leaf", "rare"),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    const [legendary, common, single] = await within(section).findAllByRole("button", { name: /sell \+/i }); // prettier-ignore
+    const describe = (b: HTMLElement) =>
+      (b.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? "")
+        .join(" ");
+    expect(describe(legendary)).toBe("Gary The Grill Legendary");
+    expect(describe(common)).toBe("Gary The Grill Common");
+    expect(single.hasAttribute("aria-describedby")).toBe(false);
+    // The visible label stays the accessible name the tests and e2e look up.
+    expect(legendary.textContent).toBe(`Sell +${SELL_BY_SECRET_TIER.legendary}`);
+  });
+
+  it("groups by card id, so two different cards that share a name stay apart", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary", { cardId: "card-a" }),
+      copy("p2", "Gary The Grill", "common", { cardId: "card-b" }),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getAllByText("Gary The Grill")).toHaveLength(2);
+    expect(within(section).queryByText(/×/)).toBeNull();
+  });
+
+  it("groups copies of one card id even when the name text differs", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary", { cardId: "card-a" }),
+      copy("p2", "Gary the Grill", "common", { cardId: "card-a" }),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getByText("×2")).toBeTruthy();
+  });
+
   it("shows a shared set once under the name, differing sets per copy", async () => {
     hold([
       copy("p1", "Gary The Grill", "legendary", { collection: "cornhole" }),

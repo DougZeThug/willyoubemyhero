@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -304,12 +304,24 @@ export function DustShopPanel({
     onSettled: () => setSelling(null),
   });
 
-  const sellButton = (s: { pullId: string; name: string; tier: SecretTier; lastCopy: boolean }) => {
+  // Ids for the grouped copies' accessible description. Index-based, not name-based:
+  // a name has spaces and colons, and aria-describedby is a space-separated list.
+  const sellUid = useId();
+
+  const sellButton = (
+    s: { pullId: string; name: string; tier: SecretTier; lastCopy: boolean },
+    describedBy?: string,
+  ) => {
     const worth = secretSellValue(s.tier);
     return (
       <button
         type="button"
         className="neon-btn-quiet shrink-0"
+        // Inside a group every button reads "Sell +N"; the card's name and this
+        // copy's level are what tell a screen reader which is which. Not an
+        // aria-label: that would replace the visible text the tests and the
+        // e2e suite look the buttons up by.
+        aria-describedby={describedBy}
         disabled={sell.isPending || offline}
         {...offlineReason(offline)}
         onClick={() => {
@@ -484,7 +496,7 @@ export function DustShopPanel({
           <p className="mt-3 text-meta text-muted-foreground">No secrets yet.</p>
         ) : (
           <ul className={cn(ROW_LIST, "mt-3")}>
-            {sellGroups.map((g) => {
+            {sellGroups.map((g, gi) => {
               if (g.copies.length === 1) {
                 const s = g.copies[0];
                 const style = secretTierStyle(s.tier);
@@ -539,7 +551,12 @@ export function DustShopPanel({
               return (
                 <li key={g.key} className="px-3 py-2">
                   <div className="flex min-h-6 items-center gap-2">
-                    <span className="block min-w-0 truncate text-badge font-bold">{g.name}</span>
+                    <span
+                      id={`${sellUid}-n${gi}`}
+                      className="block min-w-0 truncate text-badge font-bold"
+                    >
+                      {g.name}
+                    </span>
                     <span className="shrink-0 rounded-full bg-white/10 px-1.5 text-meta text-muted-foreground">
                       ×{g.copies.length}
                     </span>
@@ -555,10 +572,12 @@ export function DustShopPanel({
                         >
                           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
                             <LevelPips tier={s.tier} />
-                            <span style={{ color: style.accent }}>{style.label}</span>
+                            <span id={`${sellUid}-l-${s.pullId}`} style={{ color: style.accent }}>
+                              {style.label}
+                            </span>
                             {s.lastCopy && <span className="shrink-0">last copy</span>}
                           </span>
-                          {sellButton(s)}
+                          {sellButton(s, `${sellUid}-n${gi} ${sellUid}-l-${s.pullId}`)}
                           {!sharedSet && s.collection && chip(s.collection)}
                         </li>
                       );
