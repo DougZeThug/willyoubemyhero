@@ -44,6 +44,9 @@ import type { TradeSpares } from "@/lib/trades";
  */
 const TOO_FRESH = "Today's pull can be dusted from tomorrow";
 
+/** Settle rows shown before "Show all". */
+const SETTLE_CAP = 3;
+
 /**
  * What dust buys, and what it is made of.
  *
@@ -295,8 +298,13 @@ export function DustShopPanel({
       ),
     [spares.data, nameFor],
   );
+  const settleCapped = rerollable.length > SETTLE_CAP;
 
   const rerollFn = useServerFn(rerollCopyEdition);
+  // Only the first few finishes show until asked. Local and keyed on nothing: a
+  // refetch that shrinks the list simply stops rendering the button (see
+  // `settleCapped`), so there is no stale flag to strand.
+  const [showAllSettle, setShowAllSettle] = useState(false);
   const [rolling, setRolling] = useState<string | null>(null);
   // One id per tap, same rule as the purchase: the RPC answers a repeat with the
   // roll it already sold rather than charging twice for it.
@@ -435,7 +443,9 @@ export function DustShopPanel({
               const style = secretTierStyle(s.tier);
               const worth = secretSellValue(s.tier);
               return (
-                <li key={s.pullId} className={ROW}>
+                // Wraps: name block and Sell are line one, the set chip is line two
+                // across the whole row, under the button too.
+                <li key={s.pullId} className={cn(ROW, "flex-wrap gap-y-1")}>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-badge font-bold">{s.name}</span>
                     {/* Wraps rather than truncates: at 320 the level and "last copy"
@@ -448,18 +458,6 @@ export function DustShopPanel({
                       <span style={{ color: style.accent }}>{style.label}</span>
                       {s.lastCopy && <span className="shrink-0">last copy</span>}
                     </span>
-                    {/* Which set you would be selling it out of. Two secrets of the
-                        same level are worth the same dust, so the set is the only
-                        thing on this row that makes them different cards. On its
-                        own line because at 320 "Cornhole Collection" clipped when it
-                        shared the level row; block (not the chip's inline-flex, where truncate
-                        clips without an ellipsis) plus max-w-full lets its own truncate
-                        ellipsise if even a full line is too short. */}
-                    <SetChip
-                      collection={s.collection}
-                      sets={sets}
-                      className="mt-0.5 block w-fit max-w-full"
-                    />
                   </span>
                   <button
                     type="button"
@@ -482,6 +480,20 @@ export function DustShopPanel({
                   >
                     {selling === s.pullId && sell.isPending ? "…" : `Sell +${worth}`}
                   </button>
+                  {/* Which set you would be selling it out of. Two secrets of the
+                      same level are worth the same dust, so the set is the only
+                      thing on this row that makes them different cards. Its own
+                      full-width line: beside the Sell button "Cornhole Collection"
+                      ellipsised at 320. Block (not the chip's inline-flex, where
+                      truncate clips without an ellipsis) plus max-w-full keeps the
+                      ellipsis as the safety net for a very long set name. */}
+                  <div className="min-w-0 basis-full">
+                    <SetChip
+                      collection={s.collection}
+                      sets={sets}
+                      className="block w-fit max-w-full"
+                    />
+                  </div>
                 </li>
               );
             })}
@@ -509,40 +521,55 @@ export function DustShopPanel({
         ) : rerollable.length === 0 ? (
           <p className="mt-3 text-meta text-muted-foreground">No cards yet.</p>
         ) : (
-          <ul className={cn(ROW_LIST, "mt-3")}>
-            {rerollable.map((r) => {
-              const style = editionStyle(r.edition);
-              return (
-                <li key={r.copyId} className={ROW}>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-badge font-bold">
-                      {nameFor(r.eventParticipantId)}
-                    </span>
-                    {(style.label || r.assertedBy !== "server") && (
-                      <span className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
-                        {style.label && <span style={{ color: style.accent }}>{style.label}</span>}
-                        {r.assertedBy !== "server" && <span>unsettled</span>}
+          <ul id="settle-list" className={cn(ROW_LIST, "mt-3")}>
+            {(settleCapped && !showAllSettle ? rerollable.slice(0, SETTLE_CAP) : rerollable).map(
+              (r) => {
+                const style = editionStyle(r.edition);
+                return (
+                  <li key={r.copyId} className={ROW}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-badge font-bold">
+                        {nameFor(r.eventParticipantId)}
                       </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    className="neon-btn-quiet shrink-0"
-                    disabled={!canReroll || reroll.isPending || offline}
-                    {...offlineReason(offline)}
-                    onClick={() => {
-                      setRolling(r.copyId);
-                      reroll.mutate({ copyId: r.copyId, name: nameFor(r.eventParticipantId) });
-                    }}
-                  >
-                    {rolling === r.copyId && reroll.isPending
-                      ? "…"
-                      : `Re-roll ${DUST_PRICES.reroll}`}
-                  </button>
-                </li>
-              );
-            })}
+                      {(style.label || r.assertedBy !== "server") && (
+                        <span className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
+                          {style.label && (
+                            <span style={{ color: style.accent }}>{style.label}</span>
+                          )}
+                          {r.assertedBy !== "server" && <span>unsettled</span>}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="neon-btn-quiet shrink-0"
+                      disabled={!canReroll || reroll.isPending || offline}
+                      {...offlineReason(offline)}
+                      onClick={() => {
+                        setRolling(r.copyId);
+                        reroll.mutate({ copyId: r.copyId, name: nameFor(r.eventParticipantId) });
+                      }}
+                    >
+                      {rolling === r.copyId && reroll.isPending
+                        ? "…"
+                        : `Re-roll ${DUST_PRICES.reroll}`}
+                    </button>
+                  </li>
+                );
+              },
+            )}
           </ul>
+        )}
+        {settleCapped && !spares.isLoading && !spares.isError && (
+          <button
+            type="button"
+            className="neon-btn-quiet mt-2 min-h-11 w-full"
+            aria-expanded={showAllSettle}
+            aria-controls="settle-list"
+            onClick={() => setShowAllSettle((v) => !v)}
+          >
+            {showAllSettle ? "Show less" : `Show all ${rerollable.length}`}
+          </button>
         )}
       </section>
 

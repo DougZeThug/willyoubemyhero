@@ -478,9 +478,9 @@ describe("a failed spares read", () => {
 });
 
 describe("narrow-phone layout", () => {
-  it("lets the secret row's meta line wrap and puts the set chip on its own ellipsising line", async () => {
-    // jsdom has no layout, so the class strings are the honest assertion: at 320
-    // this line ran under the Sell button and squeezed the chip to a letter.
+  it("puts the set chip on its own full-width line under the whole row, Sell included", async () => {
+    // jsdom has no layout, so the class strings are the honest assertion: beside
+    // the Sell button the chip was ~190px wide at 320 and ellipsised.
     sparesFn.mockResolvedValue({
       participantId: ME,
       ownedRoster: [],
@@ -494,10 +494,17 @@ describe("narrow-phone layout", () => {
     const last = await screen.findByText("last copy");
     expect(last.parentElement?.className).toMatch(/\bflex-wrap\b/);
     const chip = screen.getByText("Cornhole Collection");
-    // Was `shrink-0`, which kept the full width and so clipped at 320. Now a
-    // block-level, max-w-full chip beneath the level row: not inside the wrapping
-    // meta line, and truncate (real ellipsis) is what takes over if it overflows.
+    const row = chip.closest("li") as HTMLElement;
+    const sell = screen.getByRole("button", { name: /sell \+/i });
+    // The row wraps, and the chip's wrapper is a direct child of the row (a
+    // sibling of the Sell button, not inside the name column) taking a full line.
+    expect(row.className).toMatch(/\bflex-wrap\b/);
+    const wrapper = chip.parentElement as HTMLElement;
+    expect(wrapper.parentElement).toBe(row);
+    expect(wrapper.className).toMatch(/\bbasis-full\b/);
+    expect(wrapper.contains(sell)).toBe(false);
     expect(last.parentElement?.contains(chip)).toBe(false);
+    // Block + max-w-full + truncate stay as the safety net for a very long name.
     expect(chip.className).toMatch(/\bblock\b/);
     expect(chip.className).not.toMatch(/\binline-flex\b/);
     expect(chip.className).toMatch(/\bmax-w-full\b/);
@@ -515,6 +522,64 @@ describe("narrow-phone layout", () => {
     );
     const secretRow = screen.getByText("Legendary").closest("li");
     expect(secretRow?.className).toMatch(/\bgap-2\b/);
+  });
+});
+
+describe("the settle list cap", () => {
+  function withCards(n: number) {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: Array.from({ length: n }, (_, i) => ({
+        copyId: `copy-${i}`,
+        eventParticipantId: "ep-1",
+        edition: "gold",
+        assertedBy: "server",
+      })),
+      roster: [],
+      secrets: [],
+      blocked: [],
+    });
+  }
+
+  it("shows no button at 3 cards or fewer", async () => {
+    withCards(3);
+    renderShop();
+    expect(await screen.findAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /show (all|less)/i })).toBeNull();
+  });
+
+  it("shows 3 rows and Show all N past 3, with the total in the badge", async () => {
+    withCards(5);
+    renderShop();
+    expect(await screen.findAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+    const btn = screen.getByRole("button", { name: "Show all 5" });
+    expect(btn).toHaveAttribute("aria-expanded", "false");
+    const heading = screen.getByRole("heading", { name: /settle a finish/i });
+    expect(heading.parentElement?.textContent).toMatch(/5/);
+  });
+
+  it("reveals every row, flips to Show less, and folds back", async () => {
+    withCards(5);
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: "Show all 5" }));
+    expect(screen.getAllByRole("button", { name: /re-roll/i })).toHaveLength(5);
+    const less = screen.getByRole("button", { name: "Show less" });
+    expect(less).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(less.getAttribute("aria-controls") ?? "")).toBeTruthy();
+    await userEvent.click(less);
+    expect(screen.getAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+  });
+
+  it("drops the button when a refetch leaves 3 or fewer", async () => {
+    withCards(4);
+    const { client } = renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: "Show all 4" }));
+    withCards(3);
+    await client.invalidateQueries({ queryKey: ["dust-spares", ME] });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /show (all|less)/i })).toBeNull(),
+    );
+    expect(screen.getAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
   });
 });
 
