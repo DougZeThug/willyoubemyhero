@@ -478,7 +478,7 @@ describe("a failed spares read", () => {
 });
 
 describe("narrow-phone layout", () => {
-  it("lets the secret row's meta line wrap and keeps the set chip from shrinking", async () => {
+  it("lets the secret row's meta line wrap and puts the set chip on its own ellipsising line", async () => {
     // jsdom has no layout, so the class strings are the honest assertion: at 320
     // this line ran under the Sell button and squeezed the chip to a letter.
     sparesFn.mockResolvedValue({
@@ -494,7 +494,15 @@ describe("narrow-phone layout", () => {
     const last = await screen.findByText("last copy");
     expect(last.parentElement?.className).toMatch(/\bflex-wrap\b/);
     const chip = screen.getByText("Cornhole Collection");
-    expect(chip.className).toMatch(/\bshrink-0\b/);
+    // Was `shrink-0`, which kept the full width and so clipped at 320. Now a
+    // block-level, max-w-full chip beneath the level row: not inside the wrapping
+    // meta line, and truncate (real ellipsis) is what takes over if it overflows.
+    expect(last.parentElement?.contains(chip)).toBe(false);
+    expect(chip.className).toMatch(/\bblock\b/);
+    expect(chip.className).not.toMatch(/\binline-flex\b/);
+    expect(chip.className).toMatch(/\bmax-w-full\b/);
+    expect(chip.className).toMatch(/\btruncate\b/);
+    expect(chip.className).not.toMatch(/\bshrink-0\b/);
   });
 
   it("keeps a gap between each ladder label and its number", () => {
@@ -628,6 +636,20 @@ describe("the price table", () => {
       .closest("details") as HTMLDetailsElement;
     await userEvent.click(screen.getByText(/where dust comes from/i));
     expect(details.open).toBe(true);
+  });
+});
+
+describe("the bonus pull caption", () => {
+  it("is one line: the shortfall and the free-pull fact together when short", () => {
+    renderShop(DUST_PRICES.bonusPull - 30);
+    expect(screen.getByText("30 more to go · doesn't touch tomorrow's free one")).toBeTruthy();
+    expect(screen.queryByText("Doesn't touch tomorrow's free one.")).toBeNull();
+  });
+
+  it("drops the shortfall once affordable", () => {
+    renderShop();
+    expect(screen.getByText("Doesn't touch tomorrow's free one.")).toBeTruthy();
+    expect(screen.queryByText(/more to go/)).toBeNull();
   });
 });
 

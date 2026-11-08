@@ -467,6 +467,27 @@ describe("while the commissioner has dust switched off", () => {
     expect(screen.getByText("Nothing up at the moment.")).toBeInTheDocument();
   });
 
+  it("with dust on and nothing up, the stall's empty state is one line that carries the rule", async () => {
+    renderPanel();
+    const line = await screen.findByText(
+      "Nothing up. Spares only; a roster card always leaves you one.",
+    );
+    // The two-line intro is gone, not stacked above it.
+    expect(screen.queryByText(/Sales are between you and the buyer/)).toBeNull();
+    expect(screen.queryByText("Nothing up at the moment.")).toBeNull();
+    expect(line.previousElementSibling?.textContent).toBe("Your stall");
+  });
+
+  it("keeps the intro when listings are up", async () => {
+    stallFn.mockResolvedValue({
+      active: [{ ...rosterListing, sellerId: ME, status: "active", buyerId: null, resolvedAt: null }], // prettier-ignore
+      recent: [],
+    });
+    renderPanel();
+    await screen.findByRole("button", { name: /take down/i });
+    expect(screen.getByText(/Sales are between you and the buyer/)).toBeInTheDocument();
+  });
+
   it("says it is counting rather than going blank while the stall loads", async () => {
     // This path exists so a seller can always take a listing back down, so a
     // blank frame here — then a pop-in — reads as "my cards are gone".
@@ -564,7 +585,7 @@ describe("failed reads", () => {
     stallFn.mockRejectedValue(new Error("boom"));
     renderPanel();
     expect(await screen.findByText("Couldn't read your stall just now.")).toBeTruthy();
-    expect(screen.queryByText("Nothing up at the moment.")).toBeNull();
+    expect(screen.queryByText(/^Nothing up/)).toBeNull();
     stallFn.mockClear();
     const box = screen.getByText("Couldn't read your stall just now.").closest("div");
     await userEvent.click(within(box as HTMLElement).getByRole("button", { name: "Try again" }));

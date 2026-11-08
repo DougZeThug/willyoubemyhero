@@ -362,14 +362,12 @@ export function DustShopPanel({
         >
           {buy.isPending ? "Pulling…" : `Buy for ${DUST_PRICES.bonusPull}`}
         </button>
-        {!canAfford && balance != null && (
-          <p className="mt-2 text-center text-meta text-muted-foreground">
-            {DUST_PRICES.bonusPull - balance} more to go
-          </p>
-        )}
-        {/* The one fact from the old intro worth keeping: buying does not spend the free pull. */}
+        {/* One line, not two: the shortfall (when there is one) and the one fact
+            from the old intro worth keeping, that buying does not spend the free pull. */}
         <p className="mt-2 text-center text-meta text-muted-foreground">
-          Doesn&apos;t touch tomorrow&apos;s free one.
+          {!canAfford && balance != null
+            ? `${DUST_PRICES.bonusPull - balance} more to go · doesn't touch tomorrow's free one`
+            : "Doesn't touch tomorrow's free one."}
         </p>
       </section>
 
@@ -440,20 +438,28 @@ export function DustShopPanel({
                 <li key={s.pullId} className={ROW}>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-badge font-bold">{s.name}</span>
-                    {/* Wraps rather than truncates: at 320 the level, a set chip and "last
-                        copy" together run under the Sell button, and the one fact
-                        that must never be cut is that this is the only copy. */}
+                    {/* Wraps rather than truncates: at 320 the level and "last copy"
+                        run under the Sell button, and the one fact that must never
+                        be cut is that this is the only copy. */}
                     <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
                       {/* The level decides what this is worth — the row's whole
                           point — so it gets the shape as well as the word. */}
                       <LevelPips tier={s.tier} />
                       <span style={{ color: style.accent }}>{style.label}</span>
-                      {/* Which set you would be selling it out of. Two secrets of
-                          the same level are worth the same dust, so the set is the
-                          only thing on this row that makes them different cards. */}
-                      <SetChip collection={s.collection} sets={sets} className="shrink-0" />
                       {s.lastCopy && <span className="shrink-0">last copy</span>}
                     </span>
+                    {/* Which set you would be selling it out of. Two secrets of the
+                        same level are worth the same dust, so the set is the only
+                        thing on this row that makes them different cards. On its
+                        own line because at 320 "Cornhole Collection" clipped when it
+                        shared the level row; block (not the chip's inline-flex, where truncate
+                        clips without an ellipsis) plus max-w-full lets its own truncate
+                        ellipsise if even a full line is too short. */}
+                    <SetChip
+                      collection={s.collection}
+                      sets={sets}
+                      className="mt-0.5 block w-fit max-w-full"
+                    />
                   </span>
                   <button
                     type="button"

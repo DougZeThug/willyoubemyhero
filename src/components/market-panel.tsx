@@ -319,6 +319,7 @@ export function MarketPanel({
 
   const listings = market.data?.listings ?? [];
   const active = stall.data?.active ?? [];
+  const stallEmptyDustOn = dustOn && !stall.isLoading && !stall.isError && active.length === 0;
   const recent = stall.data?.recent ?? [];
 
   /** Your spares, as tiles the picker can stage. */
@@ -474,22 +475,34 @@ export function MarketPanel({
 
       <section>
         <SectionTitle label="Your stall" count={active.length || undefined} />
-        <p className="text-meta text-muted-foreground">
-          {dustOn
-            ? "Spares only; a roster card always leaves you one. Sales are between you and the buyer."
-            : active.length > 0
-              ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
-              : // Nothing up, so there is nothing to take back — and with dust off
-                // the panel is only on screen at all because something settled.
-                "The market is shut while dust is off. Nothing of yours is on it."}
-        </p>
+        {/* Dust on and nothing up: the intro and the empty line collapse into the
+            one below, so an empty stall costs a single line, not two. */}
+        {!stallEmptyDustOn && (
+          <p className="text-meta text-muted-foreground">
+            {dustOn
+              ? "Spares only; a roster card always leaves you one. Sales are between you and the buyer."
+              : active.length > 0
+                ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
+                : // Nothing up, so there is nothing to take back — and with dust off
+                  // the panel is only on screen at all because something settled.
+                  "The market is shut while dust is off. Nothing of yours is on it."}
+          </p>
+        )}
 
         {stall.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting your stall…</p>
         ) : stall.isError ? (
           <ListError what="your stall" onRetry={() => void stall.refetch()} />
         ) : active.length === 0 ? (
-          <p className="mt-3 text-meta text-muted-foreground">Nothing up at the moment.</p>
+          stallEmptyDustOn ? (
+            // The picker only states the one-copy rule once it is empty, so the
+            // rule rides here, where a seller first looks for what to list.
+            <p className="text-meta text-muted-foreground">
+              Nothing up. Spares only; a roster card always leaves you one.
+            </p>
+          ) : (
+            <p className="mt-3 text-meta text-muted-foreground">Nothing up at the moment.</p>
+          )
         ) : (
           <ul className={cn(ROW_LIST, "mt-3")}>
             {active.map((listing) => (
