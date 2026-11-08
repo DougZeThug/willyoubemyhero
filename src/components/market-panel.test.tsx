@@ -592,6 +592,14 @@ describe("failed reads", () => {
     await waitFor(() => expect(stallFn).toHaveBeenCalledTimes(1));
   });
 
+  it("with dust off, still shows the stall error and retry, and does not claim it is empty", async () => {
+    stallFn.mockRejectedValue(new Error("boom"));
+    renderPanel(500, false);
+    expect(await screen.findByText("Couldn't read your stall just now.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText(/Nothing of yours is on it/)).toBeNull();
+  });
+
   it("says the spares failed inside the List drawer", async () => {
     // The List button is disabled while spares load and enabled once it settles —
     // an error included — so the drawer is reachable with nothing to pick from.

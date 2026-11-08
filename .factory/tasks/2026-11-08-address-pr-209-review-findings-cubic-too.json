@@ -1,0 +1,59 @@
+{
+  "id": "2026-11-08-address-pr-209-review-findings-cubic-too",
+  "title": "Address PR 209 review findings (cubic): tooling hardening, stall error, toaster merge, pack-stand floor, docs and records",
+  "kind": "polish",
+  "status": "ready",
+  "branch": null,
+  "createdAt": "2026-11-08T19:46:12.799Z",
+  "acceptance": [
+    "Each cubic finding is verified against the code; real ones fixed with a regression test, the rest answered in-thread",
+    "Toast look is unchanged or deliberately restored: before/after captures of a toast and the pack stand at 320x568",
+    "shots.mjs rejects bad task ids and runs git without a shell; no price, rule or server-call change"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T19:46:12.901Z",
+      "head": "6e0730ce610c18341220f6bdd68b67767fa36394",
+      "fp": "649171a6f826f1000d42f7aff19e2065e7eb3260",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-08T19:53:09.943Z",
+      "head": "6e0730ce610c18341220f6bdd68b67767fa36394",
+      "fp": "2a28603c020dbe1edb9efb9a9015a5d9b0d8348b",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "PR 209 review findings addressed; threads answered",
+  "notes": [],
+  "updatedAt": "2026-11-08T19:55:44.817Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "6e0730ce610c18341220f6bdd68b67767fa36394",
+    "fp": "2a28603c020dbe1edb9efb9a9015a5d9b0d8348b",
+    "at": "2026-11-08T19:55:44.715Z"
+  }
+}

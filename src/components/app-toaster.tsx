@@ -36,6 +36,16 @@ export const TOAST_OPTIONS = {
   },
 } satisfies NonNullable<React.ComponentProps<typeof Toaster>["toastOptions"]>;
 
+// The shadcn wrapper's own classNames; toastOptions passed to it replace its
+// default object wholesale rather than merging, so they are re-spread here.
+export const SHADCN_TOAST_CLASSNAMES = {
+  toast:
+    "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+  description: "group-[.toast]:text-muted-foreground",
+  actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
+  cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+};
+
 export function AppToaster({ offset }: { offset: { bottom: string } }) {
   return (
     <Toaster
@@ -46,7 +56,10 @@ export function AppToaster({ offset }: { offset: { bottom: string } }) {
       offset={offset}
       mobileOffset={offset}
       style={TOAST_THEME}
-      toastOptions={TOAST_OPTIONS}
+      toastOptions={{
+        ...TOAST_OPTIONS,
+        classNames: { ...SHADCN_TOAST_CLASSNAMES, ...TOAST_OPTIONS.classNames },
+      }}
     />
   );
 }

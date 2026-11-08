@@ -21,8 +21,9 @@ yours. You approve; the factory never merges or deploys.
 
 Every `/factory-polish` run ends with them. `node .claude/factory/shots.mjs <task-id>`
 runs the project's capture spec (`shots.spec` in `.factory/project.json`) twice, on
-the base commit and on the branch, compares the images pixel by pixel and commits a
-curated `shots/review/` set (changed phone shots plus an identical control). The
+the base commit and on the branch, compares the images pixel by pixel and writes a
+curated `.factory/evidence/<task-id>/shots/review/` set (changed phone shots plus an
+identical control). You commit that directory. The
 spec is the project-specific part: it defines the scenes. When it is missing for a
 screen, adding one is part of the polish. The runner is portable; the spec is not.
 

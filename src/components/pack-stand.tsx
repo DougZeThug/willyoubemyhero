@@ -711,10 +711,15 @@ export function PackStand({
             reserved padding on purpose, and the Next and Reveal all controls
             below (two 44px targets) are part of the budget too. At 19rem
             "Reveal all" sat half below the edge on a 320x568 phone. A 320px card
-            still binds from 844px of height up (844 - 336 = 508 * 5/7 = 363). */}
+            still binds from 844px of height up (844 - 336 = 508 * 5/7 = 363).
+
+            max(10rem, ...) is the floor: under 336px of height the calc goes
+            negative, which CSS clamps to 0 for a width, collapsing the card in a
+            short landscape phone. 160px is above 568px's 166px result, so that
+            size is unchanged. */}
         <div
           ref={slotRef}
-          className="relative aspect-[5/7] w-full max-w-[min(320px,calc((100svh-21rem)*5/7))]"
+          className="relative aspect-[5/7] w-full max-w-[min(320px,max(10rem,calc((100svh-21rem)*5/7)))]"
         >
           {/* What is left of the pack, waiting behind this card. */}
           {!reduced && <StandDeck count={behind} art={universalBack} width={slot?.width ?? 0} />}

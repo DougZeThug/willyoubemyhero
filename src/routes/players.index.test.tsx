@@ -529,6 +529,14 @@ describe("vault mobile polish", () => {
     expect(screen.queryByText(/couldn.t read your secrets/i)).toBeNull();
   });
 
+  afterEach(() => {
+    // jsdom has none of these natively; leaving the stubs on the prototype leaks
+    // into every later test in the file.
+    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).releasePointerCapture;
+  });
+
   it("collapses the sort chip to an icon while shelves are rearranged, keeping its way back", async () => {
     // vaul claims the pointer on press and jsdom has no pointer capture.
     HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);

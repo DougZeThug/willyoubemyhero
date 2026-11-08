@@ -7,13 +7,14 @@
 // current tree. PNGs and a compare.md land in .factory/evidence/<task-id>/shots/.
 // The spec is project-specific (it knows the app's screens); this runner is not.
 // process.exit is deliberate: this is a CLI whose exit code is its API.
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import zlib from "node:zlib";
 
-const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const config = JSON.parse(fs.readFileSync(path.join(root, ".factory/project.json"), "utf8"));
 const args = process.argv.slice(2);
 const taskId = args.find((arg) => !arg.startsWith("--"));
@@ -22,12 +23,27 @@ const flag = (name) => {
   return at >= 0 ? args[at + 1] : undefined;
 };
 
+/** Same shape factory.mjs generates (date-slug, may end in a hyphen); no dots or slashes, so no traversal. */
+export const isTaskId = (id) => /^[a-z0-9][a-z0-9-]*$/.test(id ?? "");
+
+/** True when this file is the script node was started with (robust to percent-encoded paths). */
+export const isMainModule = (metaUrl, argv1) => !!argv1 && pathToFileURL(argv1).href === metaUrl;
+
+/** Names captured on only one side: a missing screenshot must never pass as "unchanged". */
+export function oneSided(before, after) {
+  return [
+    ...before.filter((name) => !after.includes(name)).map((name) => ({ name, side: "after" })),
+    ...after.filter((name) => !before.includes(name)).map((name) => ({ name, side: "before" })),
+  ];
+}
+
 function die(message) {
   console.error(`shots: ${message}`);
   process.exit(1);
 }
 const shots = config.shots;
-const git = (cmd) => execSync(`git ${cmd}`, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(); // prettier-ignore
+// An argument array, never a shell string: --base and the task id are user input.
+const git = (...gitArgs) => execFileSync("git", gitArgs, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(); // prettier-ignore
 const base = flag("base") ?? `origin/${config.baseBranch ?? "main"}`;
 
 /** A free port, so a stale dev server is never silently reused for the wrong tree. */
@@ -171,9 +187,15 @@ export function compareMarkdown(taskId, before, after, fontWarnings, changed = n
   );
   const cell = (set, side, name) =>
     set.includes(name) ? `![${side} ${name}](${side}/${name})` : "_not captured_";
+  const verdictFor = (name) =>
+    !before.includes(name)
+      ? "**missing before**"
+      : !after.includes(name)
+        ? "**missing after**"
+        : verdict(changed.get(name));
   const rows = names.map(
     (name) =>
-      `| \`${name}\` | ${verdict(changed.get(name))} | ${cell(before, "before", name)} | ${cell(after, "after", name)} |`,
+      `| \`${name}\` | ${verdictFor(name)} | ${cell(before, "before", name)} | ${cell(after, "after", name)} |`,
   );
   return [
     `# Before / after — ${taskId}`,
@@ -196,12 +218,16 @@ export function compareMarkdown(taskId, before, after, fontWarnings, changed = n
   ].join("\n");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   // Checked here, not at import time, so the pure helpers above can be unit-tested.
   if (!taskId) die("usage: shots.mjs <task-id> [--scenes a,b] [--base <ref>]");
   if (!shots?.spec) die('.factory/project.json has no "shots": { "spec": "<path>" }');
+  if (base.startsWith("-")) die(`base ref "${base}" must not start with a hyphen`);
+  if (!isTaskId(taskId)) die(`task id "${taskId}" must be lowercase letters, digits and hyphens`);
+  if (!fs.existsSync(path.join(root, ".factory/tasks", `${taskId}.json`)))
+    die(`no task record .factory/tasks/${taskId}.json`);
   try {
-    git(`rev-parse --verify -q ${base}`);
+    git("rev-parse", "--verify", "-q", base);
   } catch {
     die(`base ref ${base} not found (git fetch origin ${config.baseBranch ?? "main"})`);
   }
@@ -218,13 +244,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const entry of fs.readdirSync(path.join(root, ".factory")))
       if (entry.startsWith("tmp-shots-")) fs.rmSync(path.join(root, ".factory", entry), { recursive: true, force: true }); // prettier-ignore
     try {
-      git("worktree prune");
+      git("worktree", "prune");
     } catch {
       // Nothing to prune is fine.
     }
     let failure = null;
     try {
-      git(`worktree add --detach "${worktree}" ${base}`);
+      git("worktree", "add", "--detach", worktree, base);
       // Same dependencies for both trees; a second install would be slow and could drift.
       fs.symlinkSync(path.join(root, "node_modules"), path.join(worktree, "node_modules"), "dir");
       // The spec does not exist at the base commit; bring it (and nothing else) along.
@@ -235,10 +261,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     } finally {
       fs.rmSync(path.join(worktree, "node_modules"), { force: true });
       try {
-        git(`worktree remove --force "${worktree}"`);
+        git("worktree", "remove", "--force", worktree);
       } catch {
         fs.rmSync(worktree, { recursive: true, force: true });
-        git("worktree prune");
+        git("worktree", "prune");
       }
     }
     if (failure) die(failure.message);
@@ -277,10 +303,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Viewport shots at phone widths, plus the full-page shot at the short phone: tall
   // screens (a shop, a long list) keep their evidence below the fold.
   const phoneShot = (name) =>
-    (/-(320|390|320x568)\.png$/.test(name) && !name.endsWith("-full.png")) ||
+    (/-(320|390|430|320x568)\.png$/.test(name) && !name.endsWith("-full.png")) ||
     name.endsWith("-320x568-full.png");
-  const reviewNames = list("after").filter((name) => phoneShot(name) && changed.has(name));
-  const control = list("after").find((name) => phoneShot(name) && !changed.has(name));
+  // Both sides must have the file, or the copy below would throw and a one-sided
+  // shot would pose as an unchanged control.
+  const both = list("after").filter((name) => list("before").includes(name));
+  const reviewNames = both.filter((name) => phoneShot(name) && changed.has(name));
+  const control = both.find((name) => phoneShot(name) && !changed.has(name));
   if (control) reviewNames.push(control);
   const reviewDir = path.join(shotsDir, "review");
   fs.rmSync(reviewDir, { recursive: true, force: true });
@@ -301,4 +330,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   );
   if (fontWarnings.length)
     console.log("⚠ the real display font did not load; widths are approximate");
+  // A --scenes run legitimately leaves other scenes' files from earlier runs, so only a full run is judged.
+  const lopsided = oneSided(list("before"), list("after"));
+  if (lopsided.length && !flag("scenes")) {
+    for (const { name, side } of lopsided) console.error(`shots: ${name} is missing ${side}`);
+    die(`${lopsided.length} capture(s) exist on one side only; this is not proof of "unchanged"`);
+  }
 }

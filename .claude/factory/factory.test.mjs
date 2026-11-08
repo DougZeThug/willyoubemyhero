@@ -8,7 +8,8 @@ import path from "node:path";
 import { parseArgs, selectGates } from "./factory.mjs";
 import { decide } from "../hooks/factory-guard.mjs";
 import zlib from "node:zlib";
-import { pixelDiff } from "./shots.mjs";
+import { pathToFileURL } from "node:url";
+import { compareMarkdown, isMainModule, isTaskId, oneSided, pixelDiff } from "./shots.mjs";
 
 const CLI = path.resolve(import.meta.dirname, "factory.mjs");
 
@@ -327,4 +328,28 @@ test("decodePng reads Sub- and Up-filtered scanlines the way Chromium writes the
     const diff = pixelDiff(png(5, 5, gradient, 0), png(5, 5, gradient, filter));
     assert.deepEqual([diff.ratio, diff.faintRatio], [0, 0], `filter ${filter}`);
   }
+});
+
+test("shots: task ids are slug-shaped, so they cannot traverse out of the evidence dir", () => {
+  assert.ok(isTaskId("2026-11-08-shop-group-duplicate-secrets-by-name-in-"));
+  for (const bad of ["../x", "a/b", "A", "", undefined, "..", ".hidden", "a b"])
+    assert.equal(isTaskId(bad), false, String(bad));
+});
+
+test("shots: the main-module check survives percent-encoded paths", () => {
+  const file = path.join(os.tmpdir(), "a b%20c", "shots.mjs");
+  assert.ok(isMainModule(pathToFileURL(file).href, file));
+  assert.equal(isMainModule(pathToFileURL(file).href, "/other.mjs"), false);
+  assert.equal(isMainModule(pathToFileURL(file).href, undefined), false);
+});
+
+test("shots: a capture on one side only is reported, never 'identical'", () => {
+  assert.deepEqual(oneSided(["a.png", "b.png"], ["a.png", "c.png"]), [
+    { name: "b.png", side: "after" },
+    { name: "c.png", side: "before" },
+  ]);
+  const md = compareMarkdown("t", ["a.png", "b.png"], ["a.png", "c.png"], []);
+  assert.match(md, /`b\.png` \| \*\*missing after\*\*/);
+  assert.match(md, /`c\.png` \| \*\*missing before\*\*/);
+  assert.match(md, /`a\.png` \| identical/);
 });

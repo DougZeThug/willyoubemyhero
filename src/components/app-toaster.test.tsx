@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { AppToaster } from "./app-toaster";
@@ -20,6 +20,13 @@ async function showPinToast() {
 }
 
 describe("AppToaster", () => {
+  // Sonner's store is module-global and outlives the unmounted toaster.
+  afterEach(() => {
+    act(() => {
+      toast.dismiss();
+    });
+  });
+
   it("points sonner's normal palette at the app tokens, and only the normal one", async () => {
     await showPinToast();
     const el = document.querySelector<HTMLElement>("[data-sonner-toaster]")!;
@@ -51,5 +58,17 @@ describe("AppToaster", () => {
       return b!;
     });
     expect(close.className).toContain("after:-inset-[13px]");
+  });
+
+  it("keeps the shadcn wrapper's class mapping alongside ours", async () => {
+    await showPinToast();
+    const t = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>("[data-sonner-toast]");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(t.className).toContain("group-[.toaster]:bg-background");
+    const undo = document.querySelector<HTMLElement>("[data-button]")!;
+    expect(undo.className).toContain("group-[.toast]:bg-primary");
   });
 });

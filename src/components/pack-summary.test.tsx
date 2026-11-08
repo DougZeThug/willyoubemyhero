@@ -40,6 +40,13 @@ vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children?: ReactNode }) => children,
 }));
 
+// Held open per test so the Share button can be observed mid-render.
+const shareMocks = vi.hoisted(() => ({
+  exportCardPng: vi.fn<(node: unknown, name: string) => Promise<void>>(),
+  waitForPaint: vi.fn<(node: unknown) => Promise<void>>(),
+}));
+vi.mock("@/lib/share-card", () => shareMocks);
+
 const PACK = [
   { id: "ep-1", participant_id: "p-1", running_order: 1, bib_number: 1, selected_draft_position: null, participant: { name: "Alice Ace" } }, // prettier-ignore
   { id: "ep-2", participant_id: "p-2", running_order: 2, bib_number: 2, selected_draft_position: null, participant: { name: "Bob Blitz" } }, // prettier-ignore
@@ -252,11 +259,17 @@ describe("the subtitle's next-pack time", () => {
     }
   });
 
-  it("falls back to this device's midnight when the server has said nothing", () => {
-    renderSummary();
-    expect(
-      screen.getByText(/^That's today's pack\. Next pack (in \d+[hm]|tomorrow)$/),
-    ).toBeInTheDocument();
+  it("falls back to this device's next local midnight when the server has said nothing", () => {
+    // Local time on purpose: the fallback is the phone's own midnight, so a UTC
+    // instant would give a different answer in every timezone CI might run in.
+    vi.useFakeTimers({ now: new Date(2026, 8, 4, 20, 15, 0) });
+    try {
+      renderSummary();
+      // 20:15 to 00:00 is 3h45m, which the label rounds up.
+      expect(screen.getByText("That's today's pack. Next pack in 4h")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("leaves the secret subtitle alone", () => {
@@ -276,10 +289,22 @@ describe("the busy labels", () => {
     expect(claim).toBeDisabled();
     expect(claim.className).toContain("disabled:opacity-55");
     expect(claim.className).not.toContain("opacity-40");
+  });
 
+  it("shows 'Rendering…' on Share while the export is pending, disabled and dimmed at 0.55", async () => {
+    let finish!: () => void;
+    shareMocks.waitForPaint.mockResolvedValue(undefined);
+    shareMocks.exportCardPng.mockReturnValue(new Promise<void>((r) => (finish = r)));
+    renderSummary();
     const share = screen.getByRole("button", { name: /share pack/i });
-    expect(share.className).toContain("disabled:opacity-55");
-    expect(share.className).not.toContain("opacity-40");
+    expect(share).toBeEnabled();
+    await userEvent.click(share);
+    const busy = await screen.findByRole("button", { name: /rendering/i });
+    expect(busy).toBeDisabled();
+    expect(busy.className).toContain("disabled:opacity-55");
+    expect(busy.className).not.toContain("opacity-40");
+    finish();
+    await waitFor(() => expect(screen.getByRole("button", { name: /shared/i })).toBeEnabled());
   });
 });
 

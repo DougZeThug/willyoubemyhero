@@ -559,13 +559,17 @@ describe("sell a secret: duplicates grouped by name", () => {
 
   it("still confirms before selling a last copy inside a group", async () => {
     hold([copy("p1", "Gary The Grill", "legendary", { lastCopy: true }), copy("p2", "Gary The Grill", "common")]); // prettier-ignore
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    renderShop();
-    const section = await sellSection();
-    const [first] = await within(section).findAllByRole("button", { name: /sell \+/i });
-    await userEvent.click(first);
-    expect(window.confirm).toHaveBeenCalled();
-    expect(sellFn).not.toHaveBeenCalled();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      renderShop();
+      const section = await sellSection();
+      const [first] = await within(section).findAllByRole("button", { name: /sell \+/i });
+      await userEvent.click(first);
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(sellFn).not.toHaveBeenCalled();
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   it("counts copies, not names, in the badge", async () => {

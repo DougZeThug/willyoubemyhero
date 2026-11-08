@@ -396,7 +396,13 @@ export function MarketPanel({
   // listing down after dust is switched off, and returning null while the stall
   // was still in flight rendered a blank frame that then popped in — which,
   // right there, reads as "my cards are gone".
-  if (!dustOn && active.length === 0 && recent.length === 0 && !stall.isLoading) return null;
+  //
+  // `!stall.isError` for the same reason from the other side: a failed first read
+  // leaves active and recent both empty, and "empty" there means "unknown". With
+  // dust off that would hide the retry, and the seller could not reach a listing
+  // they may still need to take down.
+  if (!dustOn && active.length === 0 && recent.length === 0 && !stall.isLoading && !stall.isError)
+    return null;
 
   return (
     <div className="space-y-section-gap">
@@ -483,9 +489,12 @@ export function MarketPanel({
               ? "Spares only; a roster card always leaves you one. Sales are between you and the buyer."
               : active.length > 0
                 ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
-                : // Nothing up, so there is nothing to take back — and with dust off
-                  // the panel is only on screen at all because something settled.
-                  "The market is shut while dust is off. Nothing of yours is on it."}
+                : stall.isError
+                  ? // The read failed, so emptiness is unknown: do not claim it.
+                    "The market is shut while dust is off."
+                  : // Nothing up, so there is nothing to take back — and with dust off
+                    // the panel is only on screen at all because something settled.
+                    "The market is shut while dust is off. Nothing of yours is on it."}
           </p>
         )}
 

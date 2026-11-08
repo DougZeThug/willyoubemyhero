@@ -48,6 +48,11 @@ const NAME_BOX =
  * ring that marks it out, the collection counter that was hidden for the whole
  * reveal, and somewhere to go next.
  */
+function nextPackSentence(resetsAt: string | null | undefined): string {
+  const now = Date.now();
+  return `That's today's pack. ${nextPackLabel(packResetAt(resetsAt, now), now)}`;
+}
+
 export function PackSummary({
   slots,
   bundle,
@@ -186,9 +191,11 @@ export function PackSummary({
           {secretRevealed
             ? "That's today's pack, secret and all"
             : // Says when, not just "tomorrow": the label is the Vault's own, so the
-              // two screens never quote different times. Read once per render —
-              // nothing on this screen ticks, and a minute stale is still true.
-              `That's today's pack. ${nextPackLabel(packResetAt(resetsAt, Date.now()), Date.now())}`}
+              // two screens never quote different times. Read once per render and
+              // not ticked: it can lag while someone sits here (an "in 2h" is still
+              // "in 2h" an hour on) and corrects on the next render. One `now`, so
+              // the fallback midnight and the countdown cannot straddle midnight.
+              nextPackSentence(resetsAt)}
         </p>
       </motion.div>
 

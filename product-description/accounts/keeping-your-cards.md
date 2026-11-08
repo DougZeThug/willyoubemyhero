@@ -210,10 +210,12 @@ spoken is the vault's breadcrumb line, which is ordinary text.
   is staring at an empty vault the token that would have proved they had a
   collection is gone.
 - **Claiming halfway through a pack.** The pack you are holding was dealt to the
-  device; once you are a member the packs are dealt to _you_, so today's pack is
-  re-dealt and the wrapper is sealed again. The day still counts once toward the
-  streak, because the server keeps one pack record per person per day and merges
-  rather than duplicating.
+  device. At the moment you claim, the stored pack is carried across to your
+  name (same device, same league day), so the wrapper stays as it was and no
+  second pack is offered. The server agrees: it moves the guest's pack record to
+  the member, and keeps the member's own if they already had one for the day, so
+  the day counts once toward the streak. Any other change of identity on the
+  handset still seals the pack again (see B-07 in the bug triage).
 - **A shared phone.** Whoever claims on a handset adopts the roster cards sitting
   on it, including somebody else's. The cards were never attributable to anyone,
   so there is nothing to attribute them by.
@@ -247,9 +249,10 @@ spoken is the vault's breadcrumb line, which is ordinary text.
 - Whether a failed upload leaves any visible trace has not been confirmed. Every
   caller swallows it, so the expectation is silence, which is worth checking
   against a real failure.
-- The re-dealt pack after a mid-pack claim was derived from how a pack is keyed
-  to an identity and how the pack record merges. It has not been reproduced by
-  hand, and it is the most user-visible surprise in this document.
+- The carry-across after a mid-pack claim is pinned by unit, end-to-end and
+  database tests (B-07). It has not been walked by hand on a phone, and the
+  case where the claimed player already pulled today on another device has no
+  test of its own.
 - The breadcrumb line has a component test but has not been seen on a real phone
   after a real expiry, which takes 90 days to arrange honestly.
 - Assumption: the three taps named above are the complete set of identity

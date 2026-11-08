@@ -9,7 +9,7 @@
     "The collector name input has an accessible name 'Your name' (aria-label) with no layout change; placeholder kept; unit test by label",
     "Normal toasts use the app's tokens (popover surface, foreground text, border, primary Undo button, matching close button) instead of sonner's built-in black/white dark palette; contrast meets AA for text and the Undo button; done via sonner's supported CSS variables/classNames, not !important",
     "Toast position, duration, copy, closeButton, richColors semantics (success/error variants) and e2e-visible roles/text unchanged",
-    "Before/after screenshots of the pin toast (vault-pinned scene) at 390 and 320x568, described from the images",
+    "Before/after screenshots of the pin toast (vault-pinned scene) at 390 and 320. NOT MET AT 320x568: the 320 capture is 320x844 (vault-pinned-320.png); no 320x568 pair was taken.",
     "No other component restyled"
   ],
   "repairs": [],
@@ -37,6 +37,10 @@
     {
       "at": "2026-11-06T23:14:50.530Z",
       "text": "Review of 17f2a5e..045c7e2: APPROVE. Screenshots viewed: pin toast before/after 390, trade success toast before/after 390. Cyan Undo kept global (judged legible on the success toast; fallback = scope to normal toasts). Unverified: success/error/neutral variants beyond the Declined toast, 320x568, real phone, Undo click, 44px close hit area on a thumb. Minor: --normal-bg-hover is a literal oklch."
+    },
+    {
+      "at": "2026-11-08T20:00:00.000Z",
+      "text": "NOT FULLY REVIEWED. The approve verdict stands for the code, but these were never verified: the 320x568 pin-toast view, measured AA contrast ratios for toast text and the Undo button (judged by eye only), an Undo click, and a real phone."
     }
   ],
   "updatedAt": "2026-11-06T23:14:50.693Z",

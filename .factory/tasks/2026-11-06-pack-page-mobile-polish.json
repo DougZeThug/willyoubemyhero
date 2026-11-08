@@ -6,7 +6,7 @@
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T21:05:40.850Z",
   "acceptance": [
-    "Capture spec has pack scenes (sealed, stand, summary, failed-deal retry) with per-scene path/ready and an optional short 320x568 viewport; each verified by looking at its PNG",
+    "Capture spec has pack scenes (sealed, stand, summary, failed-deal retry) with per-scene path/ready and an optional short 320x568 viewport. Looked at in this task: sealed, stand and retry. The summary scene was not captured or viewed here; it is covered in the pack-page-next-pack-time-waiting-line task (pack-summary shots).",
     "Fix set chosen from the rendered scenes, not from code alone (decided after step 1)",
     "No change to odds, rarity, rewards, prices, dust, streaks, ceremony timing/animation/sound/haptics, or the tear threshold",
     "Before/after screenshots committed under shots/review and described from the images"

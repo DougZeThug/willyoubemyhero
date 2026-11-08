@@ -82,7 +82,11 @@ export function VaultHero({
           {syncError}{" "}
           <Link
             to="/auth"
-            className="inline-flex min-h-11 items-center font-bold text-primary hover:underline"
+            // The hit area is a pseudo-element, so the 44px target does not inflate
+            // the paragraph's line box the way min-h-11 on an inline link did. 16px
+            // either side: an inline box's content area is only ~13px at 11px text,
+            // so the 14px used on the shop's 14px link would land near 41px here.
+            className="relative font-bold text-primary before:absolute before:-inset-x-1 before:-inset-y-4 before:content-[''] hover:underline"
           >
             Try again
           </Link>
