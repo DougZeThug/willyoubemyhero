@@ -218,6 +218,17 @@ const MANY_ROSTER = [
 ];
 const MANY_SPARES = spares(MANY_ROSTER, RICH_SECRETS);
 
+// Duplicates of two secrets plus a loose single: the grouped Sell list.
+const DUPE_SECRETS = [
+  secret("00000000-0000-4000-8000-0000000000d1", "Gary The Grill", "legendary", { collection: "cornhole" }), // prettier-ignore
+  secret("00000000-0000-4000-8000-0000000000d2", "Gary The Grill", "rare", { collection: "cornhole" }), // prettier-ignore
+  secret("00000000-0000-4000-8000-0000000000d3", "Gary The Grill", "common", { collection: "cornhole" }), // prettier-ignore
+  secret("00000000-0000-4000-8000-0000000000d4", "Sir Barks A Lot", "epic", { collection: "pets" }),
+  secret("00000000-0000-4000-8000-0000000000d5", "Sir Barks A Lot", "common", { collection: "pets" }), // prettier-ignore
+  secret("00000000-0000-4000-8000-0000000000d6", "Loose Leaf", "rare", { collection: null }),
+];
+const DUPE_SPARES = spares(RICH_ROSTER, DUPE_SECRETS);
+
 const SHOP = {
   path: "/players/shop",
   viewports: ["320x568"],
@@ -262,6 +273,20 @@ const SCENES: Scene[] = [
       await shopRows(page);
       await page.getByRole("heading", { name: /^sell a secret$/i }).scrollIntoViewIfNeeded();
       await page.evaluate(() => window.scrollBy(0, 120));
+    },
+  },
+  {
+    // Duplicate secrets grouped by name in the Sell list.
+    ...SHOP,
+    name: "shop-dupes",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", DUPE_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      await page.getByRole("heading", { name: /^sell a secret$/i }).scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, 100));
     },
   },
   {

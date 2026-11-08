@@ -10,7 +10,7 @@
 // is no last-copy rule in SQL — any secret sells, which is the feature — so that
 // dialog is the only thing between a thumb and a vanished mythic.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
@@ -474,6 +474,123 @@ describe("a failed spares read", () => {
     renderShop();
     expect(await screen.findByText("No spares yet.")).toBeTruthy();
     expect(screen.queryByText(/Couldn't read/)).toBeNull();
+  });
+});
+
+describe("sell a secret: duplicates grouped by name", () => {
+  const copy = (
+    pullId: string,
+    name: string,
+    tier: string,
+    over: Record<string, unknown> = {},
+  ) => ({
+    pullId,
+    name,
+    artUrl: null,
+    tier,
+    collection: null,
+    lastCopy: false,
+    viewerOwns: true,
+    ...over, // prettier-ignore
+  });
+  const hold = (secrets: unknown[]) =>
+    sparesFn.mockResolvedValue({ participantId: ME, ownedRoster: [], roster: [], secrets, blocked: [] }); // prettier-ignore
+  const sellSection = async () => {
+    const heading = await screen.findByRole("heading", { name: /sell a secret/i });
+    return heading.closest("section") as HTMLElement;
+  };
+
+  it("orders groups by their best copy and copies inside a group by value", async () => {
+    // Interleaved on purpose: a flat sort by value would put Loose Leaf's rare
+    // between two Gary copies.
+    hold([
+      copy("p1", "Gary The Grill", "common"),
+      copy("p2", "Loose Leaf", "rare"),
+      copy("p3", "Gary The Grill", "legendary"),
+      copy("p4", "Sir Barks A Lot", "epic"),
+      copy("p5", "Gary The Grill", "rare"),
+      copy("p6", "Sir Barks A Lot", "common"),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    const text = (el: Element) => el.textContent ?? "";
+    const names = within(section)
+      .getAllByText(/^(Gary The Grill|Loose Leaf|Sir Barks A Lot)$/)
+      .map(text);
+    expect(names).toEqual(["Gary The Grill", "Sir Barks A Lot", "Loose Leaf"]);
+    const prices = within(section)
+      .getAllByRole("button", { name: /sell \+/i })
+      .map((b) => Number(/\d+/.exec(text(b))?.[0]));
+    const v = SELL_BY_SECRET_TIER;
+    expect(prices).toEqual([v.legendary, v.rare, v.common, v.epic, v.common, v.rare]);
+  });
+
+  it("keeps a single copy as a plain row with no count", async () => {
+    hold([copy("p1", "Loose Leaf", "rare")]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findByRole("button", { name: /sell \+/i });
+    expect(within(section).queryByText(/×/)).toBeNull();
+    expect(within(section).getByText("Loose Leaf").closest("li")?.className).toMatch(/flex-wrap/);
+  });
+
+  it("shows a duplicate's name once with ×N and a Sell at each copy's own price", async () => {
+    hold([copy("p1", "Gary The Grill", "legendary"), copy("p2", "Gary The Grill", "common")]);
+    renderShop();
+    const section = await sellSection();
+    const buttons = await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getAllByText("Gary The Grill")).toHaveLength(1);
+    expect(within(section).getByText("×2")).toBeTruthy();
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      `Sell +${SELL_BY_SECRET_TIER.legendary}`,
+      `Sell +${SELL_BY_SECRET_TIER.common}`,
+    ]);
+    sellFn.mockResolvedValue({
+      ok: true,
+      awarded: 1,
+      tier: "common",
+      secretCardId: "x",
+      balance: 1,
+    });
+    await userEvent.click(buttons[1]);
+    await waitFor(() => expect(sellFn).toHaveBeenCalledWith({ data: { secretPullId: "p2" } }));
+  });
+
+  it("still confirms before selling a last copy inside a group", async () => {
+    hold([copy("p1", "Gary The Grill", "legendary", { lastCopy: true }), copy("p2", "Gary The Grill", "common")]); // prettier-ignore
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderShop();
+    const section = await sellSection();
+    const [first] = await within(section).findAllByRole("button", { name: /sell \+/i });
+    await userEvent.click(first);
+    expect(window.confirm).toHaveBeenCalled();
+    expect(sellFn).not.toHaveBeenCalled();
+  });
+
+  it("counts copies, not names, in the badge", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary"),
+      copy("p2", "Gary The Grill", "common"),
+      copy("p3", "Loose Leaf", "rare"),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(screen.getByRole("heading", { name: /sell a secret/i }).parentElement?.textContent).toMatch(/3/); // prettier-ignore
+  });
+
+  it("shows a shared set once under the name, differing sets per copy", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary", { collection: "cornhole" }),
+      copy("p2", "Gary The Grill", "common", { collection: "cornhole" }),
+      copy("p3", "Sir Barks A Lot", "epic", { collection: "cornhole" }),
+      copy("p4", "Sir Barks A Lot", "common", { collection: "pets" }),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getAllByText("Cornhole Collection")).toHaveLength(2);
   });
 });
 

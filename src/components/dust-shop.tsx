@@ -13,7 +13,7 @@ import {
   SECRET_SELL_LADDER,
   secretSellValue,
 } from "@/lib/dust";
-import { secretTierStyle } from "@/lib/secret-rarity";
+import { secretTierStyle, type SecretTier } from "@/lib/secret-rarity";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
@@ -240,17 +240,35 @@ export function DustShopPanel({
     onSettled: () => setBurning(null),
   });
 
-  // Sorted the way `burnable` is: biggest payout at the top of the thumb, name as
-  // the tiebreak. `secrets` is already exactly the right subset — every copy
-  // you hold, today's pull included, which is precisely what sell_secret_card
-  // accepts — so this needs no query of its own.
-  const sellable = useMemo(
-    () =>
-      [...(spares.data?.secrets ?? [])].sort(
-        (a, b) => secretSellValue(b.tier) - secretSellValue(a.tier) || a.name.localeCompare(b.name),
-      ),
-    [spares.data],
-  );
+  // `secrets` is already exactly the right subset — every copy you hold, today's
+  // pull included, which is precisely what sell_secret_card accepts — so this
+  // needs no query of its own. Copies of one card sit together so a duplicate
+  // reads as one card held several times. Keyed by the card's id where the
+  // server gave one (names are not unique), else by name. Groups order by their
+  // best copy so the biggest payout is still at the top of the thumb.
+  const sellGroups = useMemo(() => {
+    const byKey = new Map<string, NonNullable<typeof spares.data>["secrets"]>();
+    for (const s of spares.data?.secrets ?? []) {
+      const key = s.cardId ?? `name:${s.name}`;
+      byKey.set(key, [...(byKey.get(key) ?? []), s]);
+    }
+    return [...byKey.entries()]
+      .map(([key, copies]) => ({
+        key,
+        name: copies[0].name,
+        copies: copies.sort(
+          (a, b) =>
+            secretSellValue(b.tier) - secretSellValue(a.tier) || a.pullId.localeCompare(b.pullId),
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          secretSellValue(b.copies[0].tier) - secretSellValue(a.copies[0].tier) ||
+          a.name.localeCompare(b.name),
+      );
+  }, [spares.data]);
+  // The badge counts copies, not names.
+  const sellableCount = sellGroups.reduce((n, g) => n + g.copies.length, 0);
 
   const sellFn = useServerFn(sellSecretCard);
   const [selling, setSelling] = useState<string | null>(null);
@@ -285,6 +303,33 @@ export function DustShopPanel({
     onError: () => toast("Could not sell that one"),
     onSettled: () => setSelling(null),
   });
+
+  const sellButton = (s: { pullId: string; name: string; tier: SecretTier; lastCopy: boolean }) => {
+    const worth = secretSellValue(s.tier);
+    return (
+      <button
+        type="button"
+        className="neon-btn-quiet shrink-0"
+        disabled={sell.isPending || offline}
+        {...offlineReason(offline)}
+        onClick={() => {
+          // The card genuinely leaves the collection when it is the
+          // only one, which is what `lastCopy` is carried for. Same
+          // shape as the confirm in dust-admin-panel.tsx.
+          if (
+            s.lastCopy &&
+            !confirm(`Sell your only ${s.name} for ${worth}? It leaves your vault.`)
+          ) {
+            return;
+          }
+          setSelling(s.pullId);
+          sell.mutate({ secretPullId: s.pullId, name: s.name });
+        }}
+      >
+        {selling === s.pullId && sell.isPending ? "…" : `Sell +${worth}`}
+      </button>
+    );
+  };
 
   // Every copy, not just the spares: reroll_copy_edition has no spare rule, and a
   // card you hold once is the one most worth settling. Unsettled finishes lead,
@@ -427,7 +472,7 @@ export function DustShopPanel({
       </section>
 
       <section>
-        <SectionTitle label="Sell a secret" count={sellable.length || undefined} />
+        <SectionTitle label="Sell a secret" count={sellableCount || undefined} />
         <p className="text-meta text-muted-foreground">
           Includes your only copy, and today&apos;s pull.
         </p>
@@ -435,69 +480,90 @@ export function DustShopPanel({
           <p className="mt-3 text-meta text-muted-foreground">Counting secrets…</p>
         ) : spares.isError ? (
           <ListError what="your secrets" onRetry={() => void spares.refetch()} />
-        ) : sellable.length === 0 ? (
+        ) : sellableCount === 0 ? (
           <p className="mt-3 text-meta text-muted-foreground">No secrets yet.</p>
         ) : (
           <ul className={cn(ROW_LIST, "mt-3")}>
-            {sellable.map((s) => {
-              const style = secretTierStyle(s.tier);
-              const worth = secretSellValue(s.tier);
-              return (
-                // Wraps: name block and Sell are line one, the set chip is line two
-                // across the whole row, under the button too.
-                <li key={s.pullId} className={cn(ROW, "flex-wrap gap-y-1")}>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-badge font-bold">{s.name}</span>
-                    {/* Wraps rather than truncates: at 320 the level and "last copy"
+            {sellGroups.map((g) => {
+              if (g.copies.length === 1) {
+                const s = g.copies[0];
+                const style = secretTierStyle(s.tier);
+                return (
+                  // Wraps: name block and Sell are line one, the set chip is line two
+                  // across the whole row, under the button too.
+                  <li key={s.pullId} className={cn(ROW, "flex-wrap gap-y-1")}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-badge font-bold">{s.name}</span>
+                      {/* Wraps rather than truncates: at 320 the level and "last copy"
                         run under the Sell button, and the one fact that must never
                         be cut is that this is the only copy. */}
-                    <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
-                      {/* The level decides what this is worth — the row's whole
+                      <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
+                        {/* The level decides what this is worth — the row's whole
                           point — so it gets the shape as well as the word. */}
-                      <LevelPips tier={s.tier} />
-                      <span style={{ color: style.accent }}>{style.label}</span>
-                      {s.lastCopy && <span className="shrink-0">last copy</span>}
+                        <LevelPips tier={s.tier} />
+                        <span style={{ color: style.accent }}>{style.label}</span>
+                        {s.lastCopy && <span className="shrink-0">last copy</span>}
+                      </span>
                     </span>
-                  </span>
-                  <button
-                    type="button"
-                    className="neon-btn-quiet shrink-0"
-                    disabled={sell.isPending || offline}
-                    {...offlineReason(offline)}
-                    onClick={() => {
-                      // The card genuinely leaves the collection when it is the
-                      // only one, which is what `lastCopy` is carried for. Same
-                      // shape as the confirm in dust-admin-panel.tsx.
-                      if (
-                        s.lastCopy &&
-                        !confirm(`Sell your only ${s.name} for ${worth}? It leaves your vault.`)
-                      ) {
-                        return;
-                      }
-                      setSelling(s.pullId);
-                      sell.mutate({ secretPullId: s.pullId, name: s.name });
-                    }}
-                  >
-                    {selling === s.pullId && sell.isPending ? "…" : `Sell +${worth}`}
-                  </button>
-                  {/* Which set you would be selling it out of. Two secrets of the
+                    {sellButton(s)}
+                    {/* Which set you would be selling it out of. Two secrets of the
                       same level are worth the same dust, so the set is the only
                       thing on this row that makes them different cards. Its own
                       full-width line: beside the Sell button "Cornhole Collection"
                       ellipsised at 320. Block (not the chip's inline-flex, where
                       truncate clips without an ellipsis) plus max-w-full keeps the
                       ellipsis as the safety net for a very long set name. */}
-                  {/* Only when filed: an unfiled secret has no chip, and an empty
+                    {/* Only when filed: an unfiled secret has no chip, and an empty
                       full-width line would still cost the row's gap-y. */}
-                  {s.collection && (
-                    <div className="min-w-0 basis-full">
-                      <SetChip
-                        collection={s.collection}
-                        sets={sets}
-                        className="block w-fit max-w-full"
-                      />
-                    </div>
-                  )}
+                    {s.collection && (
+                      <div className="min-w-0 basis-full">
+                        <SetChip
+                          collection={s.collection}
+                          sets={sets}
+                          className="block w-fit max-w-full"
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              }
+              // A duplicate: the name once, then a line per copy with its own price.
+              // The set shows once under the name when every copy shares it, else on
+              // each copy line, since the set is what tells two copies apart.
+              const sharedSet = g.copies.every((c) => c.collection === g.copies[0].collection);
+              const chip = (collection: string) => (
+                <div className="min-w-0 basis-full">
+                  <SetChip collection={collection} sets={sets} className="block w-fit max-w-full" />
+                </div>
+              );
+              return (
+                <li key={g.key} className="px-3 py-2">
+                  <div className="flex min-h-6 items-center gap-2">
+                    <span className="block min-w-0 truncate text-badge font-bold">{g.name}</span>
+                    <span className="shrink-0 rounded-full bg-white/10 px-1.5 text-meta text-muted-foreground">
+                      ×{g.copies.length}
+                    </span>
+                  </div>
+                  {sharedSet && g.copies[0].collection && chip(g.copies[0].collection)}
+                  <ul className="divide-y divide-white/5">
+                    {g.copies.map((s) => {
+                      const style = secretTierStyle(s.tier);
+                      return (
+                        <li
+                          key={s.pullId}
+                          className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1"
+                        >
+                          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
+                            <LevelPips tier={s.tier} />
+                            <span style={{ color: style.accent }}>{style.label}</span>
+                            {s.lastCopy && <span className="shrink-0">last copy</span>}
+                          </span>
+                          {sellButton(s)}
+                          {!sharedSet && s.collection && chip(s.collection)}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </li>
               );
             })}
