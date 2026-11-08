@@ -1,0 +1,39 @@
+{
+  "at": "2026-11-08T16:35:51.389Z",
+  "head": "89da1c49f7e80a16831f846ae4bc4b7e7680f7d8",
+  "fp": "b3ca98168cc546dd7634ff5e3fdbc849b3bf9d0e",
+  "partial": false,
+  "results": [
+    {
+      "gate": "lint",
+      "ok": true,
+      "ms": 34864,
+      "tail": ""
+    },
+    {
+      "gate": "typecheck",
+      "ok": true,
+      "ms": 4552,
+      "tail": ""
+    },
+    {
+      "gate": "unit",
+      "ok": true,
+      "ms": 89509,
+      "tail": ""
+    },
+    {
+      "gate": "build",
+      "ok": true,
+      "ms": 8658,
+      "tail": ""
+    }
+  ],
+  "passed": true,
+  "skipped": [
+    "db"
+  ],
+  "deferredToCI": [
+    "bun run test:e2e (CLAUDE.md: CI only, never locally)"
+  ]
+}
