@@ -587,6 +587,9 @@ describe("toasts name the card", () => {
     renderShop();
     await userEvent.click(await screen.findByRole("button", { name: /burn \+/i }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Burned Alice Ace · +40 dust"));
+    // The name is for the toast only. What reaches the server is the copy id and
+    // nothing else: it is the client's word for who, and the server never needs it.
+    expect(millFn).toHaveBeenCalledWith({ data: { cardCopyId: COPY } });
   });
 
   it("sell: the secret's name and how much", async () => {
@@ -594,14 +597,13 @@ describe("toasts name the card", () => {
     renderShop();
     await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Sold Gary The Grill · +120 dust"));
+    expect(sellFn).toHaveBeenCalledWith({ data: { secretPullId: PULL } });
   });
 
   it("re-roll: who, and both finishes", async () => {
     rerollFn.mockResolvedValue({ ok: true, from: "gold", to: "platinum", balance: 10 });
     renderShop();
     await userEvent.click(await screen.findByRole("button", { name: /re-roll/i }));
-    await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.stringMatching(/^Alice Ace: Gold → /)),
-    );
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Alice Ace: Gold → Platinum"));
   });
 });

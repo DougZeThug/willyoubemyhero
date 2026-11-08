@@ -2,7 +2,7 @@
   "id": "2026-11-08-shop-explain-disabled-states-name-cards-",
   "title": "Shop: explain disabled states, name cards in toasts, steadier disabled look",
   "kind": "polish",
-  "status": "building",
+  "status": "verifying",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-08T14:23:07.873Z",
   "acceptance": [
@@ -15,9 +15,26 @@
     "Before/after screenshots committed and described from the images"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T14:35:28.021Z",
+      "head": "46f4bdd541f06e97f13cde7c9ccac6c2a18f32b5",
+      "fp": "170a50114fcf1701c26c71af0bb38adc5a17cbf8",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "factory-ui implements",
+  "nextAction": "gates + review + screenshots",
   "notes": [],
-  "updatedAt": "2026-11-08T14:23:07.912Z"
+  "updatedAt": "2026-11-08T14:37:45.229Z"
 }
