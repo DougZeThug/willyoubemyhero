@@ -280,8 +280,13 @@ describe("buying", () => {
     // Being told the number you cannot meet is more use than a toast that says no,
     // and the RPC would refuse it anyway.
     renderPanel(10);
-    const button = await screen.findByRole("button", { name: /120/ });
+    const button = await screen.findByRole("button", { name: "Need 120" });
     expect(button).toBeDisabled();
+  });
+
+  it("keeps Buy · N for a price you can meet", async () => {
+    renderPanel(500);
+    expect(await screen.findByRole("button", { name: "Buy · 120" })).toBeEnabled();
   });
 });
 

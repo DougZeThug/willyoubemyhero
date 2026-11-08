@@ -442,7 +442,7 @@ export function MarketPanel({
                       type="button"
                       // Back on the pill's own size now the cell is 128px rather
                       // than 88: the label this has to hold on one line is the
-                      // refused one ("120 dust"), which is longer than the live
+                      // refused one ("Need 120"), which is longer than the live
                       // one, and it fits.
                       className="neon-btn-sm w-full px-2"
                       // Said on the button rather than discovered on tap: the RPC
@@ -455,7 +455,7 @@ export function MarketPanel({
                         buy.mutate(listing);
                       }}
                     >
-                      {busy ? "…" : broke ? `${listing.price} dust` : `Buy · ${listing.price}`}
+                      {busy ? "…" : broke ? `Need ${listing.price}` : `Buy · ${listing.price}`}
                     </button>
                     {/* No pips here: the tile above is a TradeItemTile and draws
                         them under the name already. This line is the seller-side
