@@ -19,6 +19,7 @@ import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
 import { LevelPips } from "@/components/level-pips";
 import { ListError } from "@/components/list-error";
+import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { SetChip } from "@/components/set-chip";
@@ -352,9 +353,6 @@ export function DustShopPanel({
     <div className="space-y-section-gap">
       <section>
         <SectionTitle label="Bonus secret pull" />
-        <p className="text-meta text-muted-foreground">
-          One extra pull, right now. It does not touch tomorrow&apos;s free one.
-        </p>
         <button
           type="button"
           className="neon-btn neon-btn-hero mt-3 w-full"
@@ -369,12 +367,16 @@ export function DustShopPanel({
             {DUST_PRICES.bonusPull - balance} more to go
           </p>
         )}
+        {/* The one fact from the old intro worth keeping: buying does not spend the free pull. */}
+        <p className="mt-2 text-center text-meta text-muted-foreground">
+          Doesn&apos;t touch tomorrow&apos;s free one.
+        </p>
       </section>
 
       <section>
         <SectionTitle label="Burn a spare" count={burnable.length || undefined} />
         <p className="text-meta text-muted-foreground">
-          Only cards you hold two or more of — today&apos;s pull included. You always keep one.
+          Spares only, today&apos;s pull included. You always keep one.
         </p>
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting spares…</p>
@@ -421,8 +423,7 @@ export function DustShopPanel({
       <section>
         <SectionTitle label="Sell a secret" count={sellable.length || undefined} />
         <p className="text-meta text-muted-foreground">
-          Any secret you hold, priced by the level on your copy — including your only one, and the
-          one you pulled today.
+          Includes your only copy, and today&apos;s pull.
         </p>
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting secrets…</p>
@@ -485,8 +486,8 @@ export function DustShopPanel({
       <section>
         <SectionTitle label="Settle a finish" count={rerollable.length || undefined} />
         <p className="text-meta text-muted-foreground">
-          Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
-          your only one — and it can go down.
+          Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card, even your only one —
+          and it can go down.
         </p>
         {/* Same voice as the bonus pull's "more to go": a row of dead buttons with no
             reason beside them reads as broken, not as short of dust. */}
@@ -540,50 +541,59 @@ export function DustShopPanel({
       </section>
 
       <section>
-        <SectionTitle label="Where dust comes from" />
-        <p className="text-meta text-muted-foreground">
-          Burning a spare pays by its finish, and selling a secret pays by its level:
-        </p>
-        {/* The one panel on this screen that is a table rather than a list of
+        {/* Reference, not an action: closed until asked for. The h2 lives inside the
+            summary so the heading role (and the e2e's name lookup) survives. */}
+        <details className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-primary [&::-webkit-details-marker]:hidden">
+            <h2 className="font-display text-badge font-bold uppercase tracking-[0.08em]">
+              Where dust comes from
+            </h2>
+            <ChevronDown
+              aria-hidden
+              className="h-4 w-4 transition-transform group-open:rotate-180"
+            />
+          </summary>
+          {/* The one panel on this screen that is a table rather than a list of
             actions, and the only place the rarity ladder is written down
             anywhere in the app. */}
-        <div
-          className={cn(
-            "surface-panel mt-3 grid rounded-xl border p-3",
-            // Under 380px a 50/50 split leaves the level column ~119px for pips,
-            // "Legendary" and "120", which does not fit; the finish column is
-            // short, so it takes its content and the level column gets the rest.
-            "grid-cols-[auto_minmax(0,1fr)] gap-x-4 min-[380px]:grid-cols-2 min-[380px]:gap-x-6",
-          )}
-        >
-          <ul className="space-y-1">
-            {MILL_LADDER.map(({ edition, value }) => (
-              <li key={edition} className="flex items-center justify-between gap-2 text-meta">
-                <span style={{ color: editionStyle(edition).accent }}>
-                  {editionStyle(edition).label}
-                </span>
-                <span className="font-mono">{value}</span>
-              </li>
-            ))}
-          </ul>
-          <ul className="space-y-1">
-            {SECRET_SELL_LADDER.map(({ tier, value }) => (
-              <li key={tier} className="flex items-center justify-between gap-2 text-meta">
-                <span className="inline-flex min-w-0 items-center gap-1.5">
-                  <LevelPips tier={tier} />
-                  <span style={{ color: secretTierStyle(tier).accent }}>
-                    {secretTierStyle(tier).label}
+          <div
+            className={cn(
+              "surface-panel mt-3 grid rounded-xl border p-3",
+              // Under 380px a 50/50 split leaves the level column ~119px for pips,
+              // "Legendary" and "120", which does not fit; the finish column is
+              // short, so it takes its content and the level column gets the rest.
+              "grid-cols-[auto_minmax(0,1fr)] gap-x-4 min-[380px]:grid-cols-2 min-[380px]:gap-x-6",
+            )}
+          >
+            <ul className="space-y-1">
+              {MILL_LADDER.map(({ edition, value }) => (
+                <li key={edition} className="flex items-center justify-between gap-2 text-meta">
+                  <span style={{ color: editionStyle(edition).accent }}>
+                    {editionStyle(edition).label}
                   </span>
-                </span>
-                <span className="font-mono">{value}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="mt-3 text-meta text-muted-foreground">
-          Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
-          whatever they say on them. Settling one above fixes that.
-        </p>
+                  <span className="font-mono">{value}</span>
+                </li>
+              ))}
+            </ul>
+            <ul className="space-y-1">
+              {SECRET_SELL_LADDER.map(({ tier, value }) => (
+                <li key={tier} className="flex items-center justify-between gap-2 text-meta">
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <LevelPips tier={tier} />
+                    <span style={{ color: secretTierStyle(tier).accent }}>
+                      {secretTierStyle(tier).label}
+                    </span>
+                  </span>
+                  <span className="font-mono">{value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="mt-3 text-meta text-muted-foreground">
+            Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
+            whatever they say on them. Settling one above fixes that.
+          </p>
+        </details>
       </section>
 
       {/* While the reveal owns the screen the nav behind it goes inert —

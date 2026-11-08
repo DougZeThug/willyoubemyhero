@@ -402,11 +402,6 @@ export function MarketPanel({
       {dustOn && (
         <section>
           <SectionTitle label="The market" count={listings.length || undefined} />
-          <p className="text-meta text-muted-foreground">
-            Cards other people have put up. The price is theirs to set, and the dust goes straight
-            to them.
-          </p>
-
           {market.isLoading ? (
             <p className="mt-3 text-meta text-muted-foreground">Reading the shelf…</p>
           ) : market.isError ? (
@@ -481,7 +476,7 @@ export function MarketPanel({
         <SectionTitle label="Your stall" count={active.length || undefined} />
         <p className="text-meta text-muted-foreground">
           {dustOn
-            ? "Spares only, and a roster card always leaves you one. A sale is between you and the buyer — nobody else is told."
+            ? "Spares only; a roster card always leaves you one. Sales are between you and the buyer."
             : active.length > 0
               ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
               : // Nothing up, so there is nothing to take back — and with dust off

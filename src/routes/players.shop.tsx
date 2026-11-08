@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMemberSession } from "@/lib/member-token";
 import { useSecretActor } from "@/hooks/use-daily-secret";
@@ -143,13 +142,7 @@ function ShopPage() {
           with no signal is the exact failure the health states exist for. */}
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
-          <div className="flex items-center gap-2 text-primary">
-            <Sparkles className="h-5 w-5" />
-            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
-              Economy
-            </span>
-          </div>
-          <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Dust</h1>
+          <h1 className="font-display text-3xl font-black uppercase leading-none">Dust</h1>
           {/* Nothing for somebody with no claimed player: there is no balance to
               count, and "Counting…" would sit there forever above the paragraph
               that says what they need. */}

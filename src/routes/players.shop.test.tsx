@@ -81,6 +81,12 @@ describe("the unclaimed shop", () => {
     expect(screen.getByText("The commissioner has not switched dust on yet.")).toBeTruthy();
   });
 
+  it("heads the page with Dust alone, no eyebrow above it", () => {
+    render(<Page />);
+    expect(screen.getByRole("heading", { level: 1, name: /^dust$/i })).toBeTruthy();
+    expect(screen.queryByText("Economy")).toBeNull();
+  });
+
   it("reaches the Claim link with a pseudo-element hit area, not inline padding", () => {
     // jsdom has no layout; the class string is what can be pinned. min-h-11 here
     // would inflate the paragraph's line gap, which is why it is a ::before.

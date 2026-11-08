@@ -607,3 +607,36 @@ describe("toasts name the card", () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Alice Ace: Gold → Platinum"));
   });
 });
+
+describe("the price table", () => {
+  it("is closed by default, with its rungs still in the DOM", () => {
+    renderShop();
+    const summary = screen.getByText(/where dust comes from/i);
+    const details = summary.closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    // Closed content stays in the DOM (that is what a native disclosure is).
+    expect(details.textContent).toContain("Mythic");
+    expect(details.textContent).toContain("Common");
+    // And it is still reachable as a heading.
+    expect(screen.getByRole("heading", { name: /where dust comes from/i })).toBeTruthy();
+  });
+
+  it("opens on click", async () => {
+    renderShop();
+    const details = screen
+      .getByText(/where dust comes from/i)
+      .closest("details") as HTMLDetailsElement;
+    await userEvent.click(screen.getByText(/where dust comes from/i));
+    expect(details.open).toBe(true);
+  });
+});
+
+describe("the intros", () => {
+  it("keeps the facts that must be seen without a tap", () => {
+    renderShop();
+    expect(screen.getByText(/you always keep one/i)).toBeTruthy();
+    expect(screen.getByText(/includes your only copy/i)).toBeTruthy();
+    expect(screen.getByText(/it can go down/i)).toBeTruthy();
+    expect(screen.getByText(/doesn't touch tomorrow's free one/i)).toBeTruthy();
+  });
+});
