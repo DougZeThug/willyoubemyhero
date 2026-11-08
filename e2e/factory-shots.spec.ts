@@ -243,6 +243,51 @@ const SCENES: Scene[] = [
     },
   },
   {
+    // Past the divider, so the balance chip is in its stuck position under the header.
+    ...SHOP,
+    name: "shop-scrolled",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", RICH_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      await page.getByRole("heading", { name: /^sell a secret$/i }).scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, 120));
+    },
+  },
+  {
+    // Short of dust with rows on screen: the re-roll hint and the dead buttons.
+    ...SHOP,
+    name: "shop-broke",
+    arrange: (server) => {
+      DUST_ON(server, 20);
+      server.set("getTradeSpares", RICH_SPARES);
+    },
+    act: async (page) => {
+      await shopRows(page);
+      await expect(page.getByText(/more to re-roll/)).toBeVisible();
+      await page.getByText(/more to re-roll/).scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    ...SHOP,
+    name: "shop-burn-toast",
+    arrange: (server) => {
+      DUST_ON(server, 140);
+      server.set("getTradeSpares", RICH_SPARES);
+      server.set("millCardCopy", { ok: true, awarded: 40, balance: 180 });
+    },
+    act: async (page) => {
+      await shopRows(page);
+      await page
+        .getByRole("button", { name: /^Burn \+/ })
+        .first()
+        .click();
+      await expect(page.getByText(/^Burned .* · \+40 dust$/)).toBeVisible();
+    },
+  },
+  {
     ...SHOP,
     name: "shop-market",
     arrange: (server) => {
@@ -265,10 +310,10 @@ const SCENES: Scene[] = [
       });
     },
     act: async (page) => {
-      await expect(page.getByRole("button", { name: /^120 dust$/i })).toBeDisabled({ timeout: 40_000 }); // prettier-ignore
+      await expect(page.getByRole("button", { name: /^need 120$/i })).toBeDisabled({ timeout: 40_000 }); // prettier-ignore
       await expect(page.getByRole("button", { name: /^Buy · 40$/ })).toBeEnabled();
       await expect(page.getByRole("button", { name: /take down/i })).toBeVisible();
-      await page.getByRole("button", { name: /^120 dust$/i }).scrollIntoViewIfNeeded();
+      await page.getByRole("button", { name: /^need 120$/i }).scrollIntoViewIfNeeded();
     },
   },
   {

@@ -239,7 +239,12 @@ function ShopPage() {
                 Four sections spend against that number and it was off screen by
                 the time you reached any of them; saying "You have N." twice would
                 resolve the suite's /you have 120/i to two nodes. */}
-            <div className="flex items-center gap-3">
+            {/* Sticky under the site header (sticky top-0 z-30, 4rem + 1px + the
+                notch — the sum --page-min-h subtracts) so the balance stays in view
+                while the Burn, Sell and Re-roll lists, the longest part of the
+                page, scroll under it. z-20: below the header and the bottom bar,
+                above the cards' own stacking. */}
+            <div className="sticky top-[calc(4rem+1px+env(safe-area-inset-top))] z-20 flex items-center gap-3 bg-background py-2">
               <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Spend &amp; earn
               </span>

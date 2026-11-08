@@ -92,3 +92,18 @@ describe("the unclaimed shop", () => {
     expect(link.className).not.toMatch(/min-h-11/);
   });
 });
+
+describe("the balance seam", () => {
+  it("sticks under the site header, below it in the stack, so the balance follows the long lists", () => {
+    // jsdom has no layout: the class string is what can be pinned. z-20 sits
+    // under the header's and the bottom bar's z-30; the offset is the header's
+    // own 4rem + 1px + notch.
+    member.current = { participantId: "p-alice" };
+    render(<Page />);
+    const bar = screen.getByText("Spend & earn").parentElement!;
+    expect(bar.className).toMatch(/\bsticky\b/);
+    expect(bar.className).toContain("top-[calc(4rem+1px+env(safe-area-inset-top))]");
+    expect(bar.className).toMatch(/\bz-20\b/);
+    expect(bar.className).toMatch(/bg-background(?!\/)/);
+  });
+});
