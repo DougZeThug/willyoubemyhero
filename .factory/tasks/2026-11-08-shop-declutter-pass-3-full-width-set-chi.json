@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-08-shop-declutter-pass-3-full-width-set-chi",
+  "title": "Shop declutter pass 3: full-width set chip, Settle list capped with Show all",
+  "kind": "polish",
+  "status": "planned",
+  "branch": null,
+  "createdAt": "2026-11-08T17:02:06.380Z",
+  "acceptance": [
+    "Secret row set chip spans the row under the Sell button and shows its full text at 320 and 390",
+    "Settle a finish shows the first 3 cards with a Show all N button (44px target) when there are more than 3; Show less collapses; count badge still shows the total; all re-roll behaviour unchanged",
+    "No price, rule, server-call change; other sections, headings and sticky chip unchanged"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "plan",
+  "notes": [],
+  "updatedAt": "2026-11-08T17:02:06.380Z"
+}
