@@ -2,7 +2,7 @@
   "id": "2026-11-08-shop-explain-disabled-states-name-cards-",
   "title": "Shop: explain disabled states, name cards in toasts, steadier disabled look",
   "kind": "polish",
-  "status": "verifying",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-08T14:23:07.873Z",
   "acceptance": [
@@ -31,10 +31,33 @@
       "skipped": [
         "db"
       ]
+    },
+    {
+      "at": "2026-11-08T14:43:56.728Z",
+      "head": "0e9dcff102917ecf90721e450c3737f532918cde",
+      "fp": "e5efab5137009e72a63cfe41604ffda3725d8796",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
     }
   ],
   "interventions": 0,
-  "nextAction": "gates + review + screenshots",
+  "nextAction": "your review of shots/review; sticky chip is faint-banded; button opacity overrides listed in report",
   "notes": [],
-  "updatedAt": "2026-11-08T14:37:45.229Z"
+  "updatedAt": "2026-11-08T14:46:46.222Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "9a319d46dcaccbe4ae0692d4e2ffc27d42c25de1",
+    "fp": "e5efab5137009e72a63cfe41604ffda3725d8796",
+    "at": "2026-11-08T14:46:46.127Z"
+  }
 }
