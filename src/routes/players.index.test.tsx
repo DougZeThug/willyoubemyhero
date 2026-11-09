@@ -7,13 +7,16 @@
 // itself — they live in the condition at the render site — so this is where they
 // have to be held.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import PlayersPage from "./players.index";
 import { rosterFavouriteId, setVaultFavourites } from "@/lib/vault-favourites";
 import { setVaultLayout, type VaultFilter } from "@/lib/vault-layout";
 import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/fixtures";
+
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({ toast }));
 
 const useEventBundle = vi.fn();
 const useCollectionTrophies = vi.fn();
@@ -26,7 +29,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    Link: (props: { to: string; children: ReactNode }) => <a href={props.to}>{props.children}</a>,
+    Link: (props: { to: string; children: ReactNode; className?: string }) => (
+      <a href={props.to} className={props.className}>
+        {props.children}
+      </a>
+    ),
     useNavigate: () => vi.fn(),
   };
 });
@@ -470,5 +477,154 @@ describe("the degraded-feed banner", () => {
     });
     render(<PlayersPage />);
     expect(screen.queryByText(BANNER)).toBeNull();
+  });
+});
+
+describe("vault mobile polish", () => {
+  it("leaves the global focus ring on the roster tile link", () => {
+    // A `focus:outline-none` utility beats the @layer base :focus-visible ring,
+    // so keyboard users saw no focus at all on the tiles.
+    useEventBundle.mockReturnValue(
+      settledBundle({ bundle: makeBundle({ participants: [makeParticipant()] }) }),
+    );
+    render(<PlayersPage />);
+    const tile = document.querySelector('a[href="/players/$id"]');
+    if (!tile) throw new Error("no roster tile link rendered");
+    expect(tile.className).toContain("group");
+    expect(tile.className).not.toContain("focus:outline-none");
+  });
+
+  it("offsets shelf scrolling below the sticky site header", () => {
+    render(<PlayersPage />);
+    const shelf = petsShelf().parentElement;
+    expect(shelf?.className).toContain("scroll-mt-[calc(4rem+env(safe-area-inset-top)+1rem)]");
+    expect(shelf?.className).not.toContain("scroll-mt-4");
+  });
+
+  it("shows no secrets panel when the secrets read is healthy", () => {
+    render(<PlayersPage />);
+    expect(screen.queryByText(/couldn.t read your secrets/i)).toBeNull();
+  });
+
+  it("says the secrets read failed, and retries it", async () => {
+    const refetch = vi.fn().mockResolvedValue(null);
+    useMySecrets.mockReturnValue({ data: undefined, isError: true, refetch });
+    render(<PlayersPage />);
+    const msg = screen.getByText(/couldn.t read your secrets just now/i);
+    // The count of secret cards and sets is withheld, so the copy has no number.
+    expect(msg.textContent).not.toMatch(/\d/);
+    await userEvent.click(
+      within(msg.parentElement as HTMLElement).getByRole("button", { name: "Try again" }),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("stays quiet when a refetch fails but the last good secrets are still on screen", () => {
+    useMySecrets.mockReturnValue({
+      data: { cards: PETS, pulled: PETS.length },
+      isError: true,
+      refetch: vi.fn(),
+    });
+    render(<PlayersPage />);
+    expect(screen.queryByText(/couldn.t read your secrets/i)).toBeNull();
+  });
+
+  afterEach(() => {
+    // jsdom has none of these natively; leaving the stubs on the prototype leaks
+    // into every later test in the file.
+    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).releasePointerCapture;
+  });
+
+  it("collapses the sort chip to an icon while shelves are rearranged, keeping its way back", async () => {
+    // vaul claims the pointer on press and jsdom has no pointer capture.
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    render(<PlayersPage />);
+    const chip = () => screen.getByRole("button", { name: "Sort and filter the roster" });
+    expect(chip().querySelector("span")?.className ?? "").not.toContain("sr-only");
+    await userEvent.click(chip());
+    await userEvent.click(await screen.findByRole("button", { name: "Rearrange shelves" }));
+    expect(chip().querySelector("span")?.className).toContain("sr-only");
+  });
+});
+
+// Pinning lifts a card to the top of the page, so the tap that did it says where
+// it went. Unpinning sends the card back to a shelf in view and stays silent.
+describe("the toast on pinning a card", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    setVaultFavourites([]);
+    toast.mockClear();
+  });
+  afterEach(() => setVaultFavourites([]));
+
+  type PinToast = [string, { id: string; action: { label: string; onClick: () => void } }];
+  const lastToast = () => toast.mock.calls.at(-1) as PinToast;
+
+  it("says where the card went and offers Undo", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+
+    expect(toast).toHaveBeenCalledTimes(1);
+    const [text, opts] = lastToast();
+    expect(text).toBe("Pinned to Favourites");
+    expect(opts.action.label).toBe("Undo");
+  });
+
+  it("unpins that card when Undo is tapped", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    expect(screen.getByRole("button", { name: "Unpin The Gazebo from the top" })).toBeVisible();
+
+    act(() => lastToast()[1].action.onClick());
+
+    expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
+  });
+
+  it("stays silent on unpin", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    toast.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Unpin The Gazebo from the top" }));
+
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("never re-pins on Undo after the card was unpinned by hand", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    const { action } = lastToast()[1];
+    await userEvent.click(screen.getByRole("button", { name: "Unpin The Gazebo from the top" }));
+
+    act(() => action.onClick());
+
+    expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
+  });
+
+  it("lets an older Undo remove only its own card, never a pin made after it", async () => {
+    // Undo has to read the pins as they are when it is tapped. One that closed over
+    // the list from the moment it was created would put that old list back and
+    // quietly unpin everything pinned since.
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    const undoGazebo = lastToast()[1].action;
+    await userEvent.click(screen.getByRole("button", { name: /^Pin Gary The Grill/ }));
+
+    act(() => undoGazebo.onClick());
+
+    expect(screen.getByRole("button", { name: "Pin The Gazebo to the top" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Unpin Gary The Grill/ })).toBeVisible();
+  });
+
+  it("reuses one toast id so rapid pins replace rather than stack", async () => {
+    render(<PlayersPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Pin The Gazebo to the top" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Pin Gary The Grill/ }));
+
+    expect(toast).toHaveBeenCalledTimes(2);
+    expect(toast.mock.calls[0][1].id).toBe(toast.mock.calls[1][1].id);
   });
 });

@@ -41,6 +41,8 @@ trust a record over git: `status` cross-checks branches and gate freshness.
 7. **Repair.** On FAIL: record with `factory.mjs repair <id> --issue <key> --result failed|fixed --note "<cause>"`, send `factory-fixer` the failing output, rerun the failing gate. The tool enforces the budget (default 3 per issue) and blocks on an identical repeat. When blocked: stop, keep the evidence, report the exact failure and one recommendation. Never skip/loosen a test, remove functionality or relax a security check.
 8. **Review.** `set --status reviewing`; `factory-reviewer` gets request + criteria + base..head, not the builder's conclusions. Blocker/major findings go back through build/repair, then re-review. Record: `set <id> --review approve|changes --reviewer factory-reviewer`.
 9. **Ready.** `set <id> --status ready` is refused unless the latest gate run passed on the current HEAD and the review is approve. Do not work around the refusal.
+
+   **9b. Screenshots (visual work).** For `polish`, and for any build/fix whose diff changes what a screen looks like, run `node .claude/factory/shots.mjs <task-id>` and look at the result before reporting (see `/factory-polish` step 5). `polish` always owes them; for the rest, skip only when nothing visible changed, and say so.
 10. **Deliver.** Commit; push **only** the task branch (`git push -u origin <branch>`); PR only when the user asked or the task came from an approved queue item. Never merge, deploy, run production migrations or touch live data. Report (below).
 
 ## Hard boundaries (also enforced by `.claude/settings.json` and `factory-guard.mjs`)

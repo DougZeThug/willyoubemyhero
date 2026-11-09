@@ -5,6 +5,8 @@
 // generates a minimal .factory/project.json from the target's package.json, and
 // MERGES settings.json (union of lists) without overwriting existing entries.
 // Project-specific rules are never copied: edit the generated project.json.
+// shots.mjs ships too but needs a capture spec: add "shots": { "spec": "<playwright spec>" }
+// (optionally "project") to project.json, or it exits "no shots.spec".
 import fs from "node:fs";
 import path from "node:path";
 
@@ -28,6 +30,7 @@ const portable = [
   ".claude/factory/factory.mjs",
   ".claude/factory/factory.test.mjs",
   ".claude/factory/director.md",
+  ".claude/factory/shots.mjs",
   ".claude/factory/install.mjs",
   ".claude/hooks/factory-guard.mjs",
   ...fs

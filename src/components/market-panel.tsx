@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-c
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
+import { ListError } from "@/components/list-error";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey, useMarketListings, useMyStall } from "@/hooks/use-market";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
@@ -23,6 +24,7 @@ import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { houseFloor, marketStatusLabel, MARKET_PRICE_MAX, MARKET_PRICE_MIN } from "@/lib/market";
@@ -194,6 +196,16 @@ export function MarketPanel({
   const [picking, setPicking] = useState(false);
   const [staged, setStaged] = useState<{ item: TradeItemView; floor: number } | null>(null);
   const [price, setPrice] = useState("");
+  // The staged form renders below the tile grid, which at 320x568 is past the
+  // drawer's fold with nothing to say it exists.
+  const formRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = usePrefersReducedMotion();
+  useEffect(() => {
+    if (!staged) return;
+    // "nearest", so a form already on screen does not move. Not focused: that
+    // would raise the keyboard for somebody who has not asked to type yet.
+    formRef.current?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); // prettier-ignore
+  }, [staged, reducedMotion]);
   /**
    * One id per BUY tap, reused if that tap is retried and rotated on success.
    * A lost response on a purchase is the worst bug this feature could ship, and
@@ -307,6 +319,7 @@ export function MarketPanel({
 
   const listings = market.data?.listings ?? [];
   const active = stall.data?.active ?? [];
+  const stallEmptyDustOn = dustOn && !stall.isLoading && !stall.isError && active.length === 0;
   const recent = stall.data?.recent ?? [];
 
   /** Your spares, as tiles the picker can stage. */
@@ -383,20 +396,23 @@ export function MarketPanel({
   // listing down after dust is switched off, and returning null while the stall
   // was still in flight rendered a blank frame that then popped in — which,
   // right there, reads as "my cards are gone".
-  if (!dustOn && active.length === 0 && recent.length === 0 && !stall.isLoading) return null;
+  //
+  // `!stall.isError` for the same reason from the other side: a failed first read
+  // leaves active and recent both empty, and "empty" there means "unknown". With
+  // dust off that would hide the retry, and the seller could not reach a listing
+  // they may still need to take down.
+  if (!dustOn && active.length === 0 && recent.length === 0 && !stall.isLoading && !stall.isError)
+    return null;
 
   return (
     <div className="space-y-section-gap">
       {dustOn && (
         <section>
           <SectionTitle label="The market" count={listings.length || undefined} />
-          <p className="text-meta text-muted-foreground">
-            Cards other people have put up. The price is theirs to set, and the dust goes straight
-            to them.
-          </p>
-
           {market.isLoading ? (
             <p className="mt-3 text-meta text-muted-foreground">Reading the shelf…</p>
+          ) : market.isError ? (
+            <ListError what="the market" onRetry={() => void market.refetch()} />
           ) : listings.length === 0 ? (
             <p className="mt-3 text-meta text-muted-foreground">Nothing for sale right now.</p>
           ) : (
@@ -428,7 +444,7 @@ export function MarketPanel({
                       type="button"
                       // Back on the pill's own size now the cell is 128px rather
                       // than 88: the label this has to hold on one line is the
-                      // refused one ("120 dust"), which is longer than the live
+                      // refused one ("Need 120"), which is longer than the live
                       // one, and it fits.
                       className="neon-btn-sm w-full px-2"
                       // Said on the button rather than discovered on tap: the RPC
@@ -441,7 +457,7 @@ export function MarketPanel({
                         buy.mutate(listing);
                       }}
                     >
-                      {busy ? "…" : broke ? `${listing.price} dust` : `Buy · ${listing.price}`}
+                      {busy ? "…" : broke ? `Need ${listing.price}` : `Buy · ${listing.price}`}
                     </button>
                     {/* No pips here: the tile above is a TradeItemTile and draws
                         them under the name already. This line is the seller-side
@@ -465,20 +481,37 @@ export function MarketPanel({
 
       <section>
         <SectionTitle label="Your stall" count={active.length || undefined} />
-        <p className="text-meta text-muted-foreground">
-          {dustOn
-            ? "Spares only, and a roster card always leaves you one. A sale is between you and the buyer — nobody else is told."
-            : active.length > 0
-              ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
-              : // Nothing up, so there is nothing to take back — and with dust off
-                // the panel is only on screen at all because something settled.
-                "The market is shut while dust is off. Nothing of yours is on it."}
-        </p>
+        {/* Dust on and nothing up: the intro and the empty line collapse into the
+            one below, so an empty stall costs a single line, not two. */}
+        {!stallEmptyDustOn && (
+          <p className="text-meta text-muted-foreground">
+            {dustOn
+              ? "Spares only; a roster card always leaves you one. Sales are between you and the buyer."
+              : active.length > 0
+                ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
+                : stall.isError
+                  ? // The read failed, so emptiness is unknown: do not claim it.
+                    "The market is shut while dust is off."
+                  : // Nothing up, so there is nothing to take back — and with dust off
+                    // the panel is only on screen at all because something settled.
+                    "The market is shut while dust is off. Nothing of yours is on it."}
+          </p>
+        )}
 
         {stall.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting your stall…</p>
+        ) : stall.isError ? (
+          <ListError what="your stall" onRetry={() => void stall.refetch()} />
         ) : active.length === 0 ? (
-          <p className="mt-3 text-meta text-muted-foreground">Nothing up at the moment.</p>
+          stallEmptyDustOn ? (
+            // The picker only states the one-copy rule once it is empty, so the
+            // rule rides here, where a seller first looks for what to list.
+            <p className="text-meta text-muted-foreground">
+              Nothing up. Spares only; a roster card always leaves you one.
+            </p>
+          ) : (
+            <p className="mt-3 text-meta text-muted-foreground">Nothing up at the moment.</p>
+          )
         ) : (
           <ul className={cn(ROW_LIST, "mt-3")}>
             {active.map((listing) => (
@@ -551,7 +584,9 @@ export function MarketPanel({
             </DrawerHeader>
 
             <div className="overflow-y-auto px-4 pb-6">
-              {sellable.length === 0 ? (
+              {spares.isError ? (
+                <ListError what="your spares" onRetry={() => void spares.refetch()} />
+              ) : sellable.length === 0 ? (
                 <p className="text-meta text-muted-foreground">
                   Nothing spare to sell yet. Roster cards need a second copy; any secret will do.
                 </p>
@@ -580,7 +615,7 @@ export function MarketPanel({
               )}
 
               {staged && (
-                <div className="mt-4 space-y-2 border-t border-border pt-4">
+                <div ref={formRef} className="mt-4 space-y-2 border-t border-border pt-4">
                   <label
                     htmlFor="market-price"
                     className="block font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground"
@@ -641,7 +676,7 @@ function StallLine({
        because the name is the longest of them and sits at the front. */
     <span className="min-w-0 flex-1">
       <span className="block truncate text-badge font-bold">{title}</span>
-      <span className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
+      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-meta text-muted-foreground">
         {/* Only a secret has a level; itemMeta collapses a finish and a level into
             the same {label, accent} shape, so the discriminator has to be here. */}
         {listing.item.kind === "secret" && <LevelPips tier={listing.item.tier} />}

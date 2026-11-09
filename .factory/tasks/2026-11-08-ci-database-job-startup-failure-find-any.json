@@ -1,0 +1,72 @@
+{
+  "id": "2026-11-08-ci-database-job-startup-failure-find-any",
+  "title": "CI: database job startup failure - find any installed Postgres, show the real startup error",
+  "kind": "fix",
+  "status": "ready",
+  "branch": null,
+  "createdAt": "2026-11-08T20:25:42.158Z",
+  "acceptance": [
+    "tests/db finds the newest installed Postgres under /usr/lib/postgresql instead of assuming 16, and a stale PG_BIN_DIR falls through to the search",
+    "A globalSetup failure logs its real message before Vitest's own printer runs; unit-tested pickPgBinDir",
+    "Full test:db suite passes locally; no migration, RPC or test behaviour change"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T20:25:53.135Z",
+      "head": "fee111251434d2d9d7151c6ba202361887e28302",
+      "fp": "40377075788e5aadb74846c939270c3d9bfd78d7",
+      "partial": false,
+      "passed": false,
+      "gates": [
+        "lint:FAIL",
+        "typecheck:pass",
+        "unit:pass",
+        "db:pass",
+        "build:pass"
+      ],
+      "skipped": []
+    },
+    {
+      "at": "2026-11-08T20:31:01.071Z",
+      "head": "fee111251434d2d9d7151c6ba202361887e28302",
+      "fp": "474fedac94d6cedf64702d1128447205db7a3294",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "db:pass",
+        "build:pass"
+      ],
+      "skipped": []
+    },
+    {
+      "at": "2026-11-08T20:34:31.227Z",
+      "head": "fee111251434d2d9d7151c6ba202361887e28302",
+      "fp": "ab4bef4f2e014200ce7d7d3e99b5e1ea8ada36d2",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "db:pass",
+        "build:pass"
+      ],
+      "skipped": []
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "watch PR 209 CI: confirm the database job passes; if it still fails, the new log line names the real error",
+  "notes": [],
+  "updatedAt": "2026-11-08T20:38:14.063Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "fee111251434d2d9d7151c6ba202361887e28302",
+    "fp": "ab4bef4f2e014200ce7d7d3e99b5e1ea8ada36d2",
+    "at": "2026-11-08T20:38:13.971Z"
+  }
+}

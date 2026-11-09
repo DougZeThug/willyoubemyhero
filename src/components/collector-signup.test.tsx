@@ -56,16 +56,16 @@ function user(email: string | null = "jane.doe@example.com"): User {
   return { id: "auth-1", email } as User;
 }
 
-async function renderSignup() {
+async function renderSignup(props: { compact?: boolean } = {}) {
   const { CollectorSignup } = await import("./collector-signup");
   const { wrapper } = createQueryWrapper();
-  return render(<CollectorSignup />, { wrapper });
+  return render(<CollectorSignup {...props} />, { wrapper });
 }
 
-async function renderGate() {
+async function renderGate(props: { compact?: boolean } = {}) {
   const { CollectorSignupGate } = await import("./collector-signup");
   const { wrapper } = createQueryWrapper();
-  return render(<CollectorSignupGate />, { wrapper });
+  return render(<CollectorSignupGate {...props} />, { wrapper });
 }
 
 /** A signed token this device would actually keep — `getMemberToken` parses it. */
@@ -122,6 +122,76 @@ describe("the gate", () => {
   it("opens for the case it exists for: signed in, no player", async () => {
     await renderGate();
     expect(await screen.findByPlaceholderText("Your name")).toBeInTheDocument();
+  });
+});
+
+// The pack screen's short viewport: opt-in, one row until tapped.
+describe("compact", () => {
+  it("collapses to the heading and an Add name button, with no input", async () => {
+    await renderSignup({ compact: true });
+    expect(screen.getAllByRole("heading", { name: "Pick a trading name" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Add name" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByPlaceholderText("Your name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start trading/i })).not.toBeInTheDocument();
+  });
+
+  it("expands in place to the form and focuses the name box", async () => {
+    await renderSignup({ compact: true });
+    const toggle = screen.getByRole("button", { name: "Add name" });
+    const controls = toggle.getAttribute("aria-controls");
+    await userEvent.click(toggle);
+
+    const box = screen.getByPlaceholderText("Your name");
+    expect(box).toHaveFocus();
+    expect(box.closest("form")).toHaveAttribute("id", controls);
+    expect(screen.queryByRole("button", { name: "Add name" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Pick a trading name" })).toHaveLength(1);
+  });
+
+  it("names the box for assistive tech in both forms, not just by its placeholder", async () => {
+    const { unmount } = await renderSignup();
+    expect(screen.getByLabelText("Your name")).toBeInstanceOf(HTMLInputElement);
+    unmount();
+    await renderSignup({ compact: true });
+    await userEvent.click(screen.getByRole("button", { name: "Add name" }));
+    expect(screen.getByLabelText("Your name")).toHaveFocus();
+  });
+
+  it("submits from the expanded form exactly as the open one does", async () => {
+    await renderSignup({ compact: true });
+    await userEvent.click(screen.getByRole("button", { name: "Add name" }));
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+    await waitFor(() =>
+      expect(createCollectorIdentity).toHaveBeenCalledWith({ data: { displayName: "Jane Doe" } }),
+    );
+  });
+
+  it("is off by default: the vault and trade page get the form directly, unfocused", async () => {
+    await renderSignup();
+    const box = screen.getByPlaceholderText("Your name");
+    expect(box).not.toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Add name" })).not.toBeInTheDocument();
+  });
+
+  it("passes compact through the gate for signed in, no player", async () => {
+    await renderGate({ compact: true });
+    expect(await screen.findByRole("button", { name: "Add name" })).toBeInTheDocument();
+  });
+
+  it("keeps a signed-out guest out of the compact gate too", async () => {
+    authUser.mockReturnValue({ user: null, loading: false });
+    await renderGate({ compact: true });
+    expect(screen.queryByRole("button", { name: "Add name" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pick a trading name" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a member out of the compact gate too", async () => {
+    setMemberToken(`m.${PID}.${Date.now() + 60_000}.signature`, "Doug");
+    await renderGate({ compact: true });
+    expect(screen.queryByRole("button", { name: "Add name" })).not.toBeInTheDocument();
   });
 });
 

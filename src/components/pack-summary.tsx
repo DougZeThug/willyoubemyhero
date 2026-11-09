@@ -15,7 +15,7 @@ import { upgradeLabel } from "@/lib/pack-outcome";
 import { nextMilestoneLine, type Streak } from "@/lib/streaks";
 import { secretTierCaption, secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
 import type { StandSlot } from "@/components/pack-stand";
-import { copiesAfterSale } from "@/lib/pack";
+import { copiesAfterSale, nextPackLabel, packResetAt } from "@/lib/pack";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
@@ -48,6 +48,11 @@ const NAME_BOX =
  * ring that marks it out, the collection counter that was hidden for the whole
  * reveal, and somewhere to go next.
  */
+function nextPackSentence(resetsAt: string | null | undefined): string {
+  const now = Date.now();
+  return `That's today's pack. ${nextPackLabel(packResetAt(resetsAt, now), now)}`;
+}
+
 export function PackSummary({
   slots,
   bundle,
@@ -66,6 +71,7 @@ export function PackSummary({
   onClaim,
   onSell,
   sold,
+  resetsAt,
 }: {
   /**
    * The pack as the stand showed it, slot by slot. Every number on a slot —
@@ -99,6 +105,11 @@ export function PackSummary({
   onSell?: (index: number) => Promise<string | null>;
   /** Dust each slot has already been sold for this visit, by slot index. */
   sold?: Record<number, number>;
+  /**
+   * When the next pack lands, from `PackStatus.resetsAt`. Null or absent falls
+   * back to this device's midnight, the same answer the Vault's Today card gives.
+   */
+  resetsAt?: string | null;
 }) {
   // The claim mints a card on the server, so it cannot be taken in a dead spot.
   // Read here rather than passed in: the button is the only thing on this screen
@@ -179,7 +190,12 @@ export function PackSummary({
         <p className="mt-1 text-meta font-semibold text-muted-foreground">
           {secretRevealed
             ? "That's today's pack, secret and all"
-            : "That's today's pack — come back tomorrow"}
+            : // Says when, not just "tomorrow": the label is the Vault's own, so the
+              // two screens never quote different times. Read once per render and
+              // not ticked: it can lag while someone sits here (an "in 2h" is still
+              // "in 2h" an hour on) and corrects on the next render. One `now`, so
+              // the fallback midnight and the countdown cannot straddle midnight.
+              nextPackSentence(resetsAt)}
         </p>
       </motion.div>
 
@@ -458,7 +474,7 @@ export function PackSummary({
                   disabled={claiming || offline}
                   {...offlineReason(offline)}
                   data-testid="streak-claim"
-                  className="neon-btn-sm disabled:opacity-40"
+                  className="neon-btn-sm disabled:opacity-55"
                 >
                   {claiming ? "Opening…" : `Claim ${claimable.label}`}
                 </button>
@@ -536,7 +552,7 @@ export function PackSummary({
         <button
           onClick={() => void share()}
           disabled={sharing || shareCards.length === 0}
-          className="neon-btn-lg w-full disabled:opacity-40"
+          className="neon-btn-lg w-full disabled:opacity-55"
         >
           {shared ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
           {sharing ? "Rendering…" : shared ? "Shared" : "Share pack"}

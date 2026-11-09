@@ -17,6 +17,16 @@ You get a short report: what changed, evidence (gates, tests, what could _not_
 be verified), repairs, review verdict, and only the decisions that are really
 yours. You approve; the factory never merges or deploys.
 
+## Before/after screenshots
+
+Every `/factory-polish` run ends with them. `node .claude/factory/shots.mjs <task-id>`
+runs the project's capture spec (`shots.spec` in `.factory/project.json`) twice, on
+the base commit and on the branch, compares the images pixel by pixel and writes a
+curated `.factory/evidence/<task-id>/shots/review/` set (changed phone shots plus an
+identical control). You commit that directory. The
+spec is the project-specific part: it defines the scenes. When it is missing for a
+screen, adding one is part of the polish. The runner is portable; the spec is not.
+
 ## Moving parts
 
 | Piece                                         | Job                                                           |
@@ -24,6 +34,7 @@ yours. You approve; the factory never merges or deploys.
 | `.claude/skills/factory-*`                    | the six commands; the main session becomes the Director       |
 | `.claude/factory/director.md`                 | the pipeline, routes, retry rules, report format (one source) |
 | `.claude/agents/factory-*`                    | architect, builder, ui, qa, fixer, reviewer                   |
+| `.claude/factory/shots.mjs`                   | before/after screenshot runner                                |
 | `.claude/factory/factory.mjs`                 | task state, gate runner, repair budget, `ready` enforcement   |
 | `.claude/hooks/factory-guard.mjs`             | blocks protected paths and push-to-main / force / deploy      |
 | `.claude/settings.json`                       | allow/deny permission rules, hook wiring                      |

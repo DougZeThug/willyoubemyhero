@@ -7,6 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs, selectGates } from "./factory.mjs";
 import { decide } from "../hooks/factory-guard.mjs";
+import zlib from "node:zlib";
+import { pathToFileURL } from "node:url";
+import { compareMarkdown, isMainModule, isTaskId, oneSided, pixelDiff } from "./shots.mjs";
 
 const CLI = path.resolve(import.meta.dirname, "factory.mjs");
 
@@ -253,4 +256,100 @@ test("guard blocks protected paths and dangerous commands only", () => {
   assert.ok(bash("git push --force origin f"));
   assert.equal(bash("git push -u origin claude/main-menu"), null);
   assert.equal(bash("cat > f <<'EOF'\ngit push --force origin main\nEOF"), null);
+});
+
+// A tiny RGBA PNG with one filter-0 scanline per row, so the diff can be tested without a browser.
+function png(width, height, pixel, filter = 0) {
+  const crc = (buf) => {
+    let value = ~0;
+    for (const byte of buf) {
+      value ^= byte;
+      for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (0xedb88320 & -(value & 1));
+    }
+    return ~value >>> 0;
+  };
+  const chunk = (type, body) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(body.length);
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(type), body])));
+    return Buffer.concat([head, Buffer.from(type), body, tail]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const rows = [];
+  for (let y = 0; y < height; y++) {
+    rows.push(Buffer.from([filter]));
+    for (let x = 0; x < width; x++) {
+      const now = pixel(x, y);
+      // Sub (1) stores the difference from the pixel to the left, Up (2) from the one above.
+      let reference = [0, 0, 0, 0];
+      if (filter === 1 && x) reference = pixel(x - 1, y);
+      if (filter === 2 && y) reference = pixel(x, y - 1);
+      rows.push(Buffer.from(now.map((value, i) => (value - reference[i]) & 255)));
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", header),
+    chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+test("pixelDiff: identical, partly different, and different sizes", () => {
+  const grey = () => [90, 90, 90, 255];
+  assert.equal(pixelDiff(png(4, 4, grey), png(4, 4, grey)).ratio, 0);
+  const oneBright = (x, y) => (x === 0 && y === 0 ? [255, 255, 255, 255] : grey());
+  assert.equal(pixelDiff(png(4, 4, grey), png(4, 4, oneBright)).ratio, 1 / 16);
+  // A faint shift (a tint or shadow tweak) is a change too, just not a strong one: it
+  // must never read as "identical", or a real faint edit hides under the control's label.
+  const faint = pixelDiff(
+    png(2, 2, grey),
+    png(2, 2, () => [100, 90, 90, 255]),
+  );
+  assert.equal(faint.ratio, 0);
+  assert.equal(faint.faintRatio, 1);
+  // Dithering-level noise (a few levels) is not a change at all.
+  const noise = pixelDiff(
+    png(2, 2, grey),
+    png(2, 2, () => [92, 91, 90, 255]),
+  );
+  assert.deepEqual([noise.ratio, noise.faintRatio], [0, 0]);
+  assert.equal(pixelDiff(png(2, 2, grey), png(3, 2, grey)).sizeDiffers, true);
+});
+
+test("decodePng reads Sub- and Up-filtered scanlines the way Chromium writes them", () => {
+  const gradient = (x, y) => [x * 40, y * 30, 7, 255];
+  for (const filter of [1, 2]) {
+    const diff = pixelDiff(png(5, 5, gradient, 0), png(5, 5, gradient, filter));
+    assert.deepEqual([diff.ratio, diff.faintRatio], [0, 0], `filter ${filter}`);
+  }
+});
+
+test("shots: task ids are slug-shaped, so they cannot traverse out of the evidence dir", () => {
+  assert.ok(isTaskId("2026-11-08-shop-group-duplicate-secrets-by-name-in-"));
+  for (const bad of ["../x", "a/b", "A", "", undefined, "..", ".hidden", "a b"])
+    assert.equal(isTaskId(bad), false, String(bad));
+});
+
+test("shots: the main-module check survives percent-encoded paths", () => {
+  const file = path.join(os.tmpdir(), "a b%20c", "shots.mjs");
+  assert.ok(isMainModule(pathToFileURL(file).href, file));
+  assert.equal(isMainModule(pathToFileURL(file).href, "/other.mjs"), false);
+  assert.equal(isMainModule(pathToFileURL(file).href), false);
+});
+
+test("shots: a capture on one side only is reported, never 'identical'", () => {
+  assert.deepEqual(oneSided(["a.png", "b.png"], ["a.png", "c.png"]), [
+    { name: "b.png", side: "after" },
+    { name: "c.png", side: "before" },
+  ]);
+  const md = compareMarkdown("t", ["a.png", "b.png"], ["a.png", "c.png"], []);
+  assert.match(md, /`b\.png` \| \*\*missing after\*\*/);
+  assert.match(md, /`c\.png` \| \*\*missing before\*\*/);
+  assert.match(md, /`a\.png` \| identical/);
 });

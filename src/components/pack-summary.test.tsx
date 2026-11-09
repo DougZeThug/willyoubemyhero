@@ -40,6 +40,13 @@ vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children?: ReactNode }) => children,
 }));
 
+// Held open per test so the Share button can be observed mid-render.
+const shareMocks = vi.hoisted(() => ({
+  exportCardPng: vi.fn<(node: unknown, name: string) => Promise<void>>(),
+  waitForPaint: vi.fn<(node: unknown) => Promise<void>>(),
+}));
+vi.mock("@/lib/share-card", () => shareMocks);
+
 const PACK = [
   { id: "ep-1", participant_id: "p-1", running_order: 1, bib_number: 1, selected_draft_position: null, participant: { name: "Alice Ace" } }, // prettier-ignore
   { id: "ep-2", participant_id: "p-2", running_order: 2, bib_number: 2, selected_draft_position: null, participant: { name: "Bob Blitz" } }, // prettier-ignore
@@ -224,7 +231,80 @@ describe("a secret in its slot", () => {
 
   it("keeps the subtitle quiet while it is still face-down", () => {
     renderSummary({ slots: [secret(), roster(1), roster(2)], revealed: [1, 2] });
-    expect(screen.getByText(/come back tomorrow/i)).toBeInTheDocument();
+    expect(screen.getByText(/today's pack\. next pack/i)).toBeInTheDocument();
+  });
+});
+
+describe("the subtitle's next-pack time", () => {
+  const NOW = Date.parse("2026-09-04T18:00:00Z");
+
+  it("says when the next pack lands, from resetsAt, and drops 'come back tomorrow'", () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      renderSummary({ resetsAt: "2026-09-04T23:50:00Z" });
+      expect(screen.getByText("That's today's pack. Next pack in 6h")).toBeInTheDocument();
+      expect(screen.queryByText(/come back tomorrow/i)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts in minutes inside the hour", () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      renderSummary({ resetsAt: "2026-09-04T18:12:00Z" });
+      expect(screen.getByText("That's today's pack. Next pack in 12m")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to this device's next local midnight when the server has said nothing", () => {
+    // Local time on purpose: the fallback is the phone's own midnight, so a UTC
+    // instant would give a different answer in every timezone CI might run in.
+    vi.useFakeTimers({ now: new Date(2026, 8, 4, 20, 15, 0) });
+    try {
+      renderSummary();
+      // 20:15 to 00:00 is 3h45m, which the label rounds up.
+      expect(screen.getByText("That's today's pack. Next pack in 4h")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves the secret subtitle alone", () => {
+    renderSummary({ slots: [secret(), roster(1), roster(2)], resetsAt: "2026-09-04T23:50:00Z" });
+    expect(screen.getByText("That's today's pack, secret and all")).toBeInTheDocument();
+  });
+});
+
+describe("the busy labels", () => {
+  // One 0.55 step, as 'Reveal all': under it the label is 'nothing at all in a garden'.
+  it("dims 'Opening…' and 'Rendering…' at 0.55, not 0.4", async () => {
+    const claimable = { days: 3, label: "Day 3", blurb: "", tierFloor: null, earned: true, claimed: false }; // prettier-ignore
+    const streak = { current: 3, startedOn: "2026-09-02", lastOpenedOn: "2026-09-04", openedToday: true }; // prettier-ignore
+    renderSummary({ streak, claimable, canClaim: true, claiming: true });
+    const claim = screen.getByTestId("streak-claim");
+    expect(claim).toHaveTextContent("Opening…");
+    expect(claim).toBeDisabled();
+    expect(claim.className).toContain("disabled:opacity-55");
+    expect(claim.className).not.toContain("opacity-40");
+  });
+
+  it("shows 'Rendering…' on Share while the export is pending, disabled and dimmed at 0.55", async () => {
+    let finish!: () => void;
+    shareMocks.waitForPaint.mockResolvedValue(undefined);
+    shareMocks.exportCardPng.mockReturnValue(new Promise<void>((r) => (finish = r)));
+    renderSummary();
+    const share = screen.getByRole("button", { name: /share pack/i });
+    expect(share).toBeEnabled();
+    await userEvent.click(share);
+    const busy = await screen.findByRole("button", { name: /rendering/i });
+    expect(busy).toBeDisabled();
+    expect(busy.className).toContain("disabled:opacity-55");
+    expect(busy.className).not.toContain("opacity-40");
+    finish();
+    await waitFor(() => expect(screen.getByRole("button", { name: /shared/i })).toBeEnabled());
   });
 });
 

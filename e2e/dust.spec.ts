@@ -205,6 +205,11 @@ test.describe("selling a secret", () => {
     await shopWithSecret(page, server);
     const where = page.locator("section", { hasText: /where dust comes from/i }).last();
     await expect(where).not.toContainText(/duplicate secret pays/i);
+    // The rules that matter are on the page with no tap; the table is behind a disclosure.
+    await expect(page.getByText(/you always keep one/i)).toBeVisible();
+    await expect(page.getByText(/includes your only copy/i)).toBeVisible();
+    await expect(page.getByText(/it can go down/i)).toBeVisible();
+    await where.getByText(/where dust comes from/i).click();
     for (const rung of ["Mythic", "Legendary", "Epic", "Rare", "Common"]) {
       await expect(where.getByText(rung, { exact: true })).toBeVisible();
     }
@@ -270,7 +275,7 @@ test.describe("the marketplace", () => {
     await page.goto("/players/shop");
 
     const market = page.locator("section", { hasText: /the market/i }).first();
-    await expect(market.getByRole("button", { name: /^120 dust$/i })).toBeDisabled();
+    await expect(market.getByRole("button", { name: /^need 120$/i })).toBeDisabled();
   });
 
   test("never names a secret the viewer has not pulled", async ({ page, server }) => {

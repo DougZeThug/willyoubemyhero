@@ -134,7 +134,7 @@ test.describe("a secret in the pack", () => {
     await revealAll(page);
     await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/not on the roster/i)).toHaveCount(0);
-    await expect(page.getByText(/come back tomorrow/i)).toBeVisible();
+    await expect(page.getByText(/today's pack\. next pack/i)).toBeVisible();
   });
 
   test("re-reads the same pack after a reload rather than dealing again", async ({

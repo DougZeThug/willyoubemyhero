@@ -16,7 +16,7 @@ import { MotionConfig } from "motion/react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { Toaster } from "@/components/ui/sonner";
+import { AppToaster } from "@/components/app-toaster";
 import { SiteNav } from "@/components/site-nav";
 import { PresentationProvider } from "@/components/presentation-mode";
 import { OfflineBanner } from "@/components/offline-banner";
@@ -312,14 +312,7 @@ function ShellFeedback() {
       {!online && <OfflineBanner />}
       {/* bottom-center, not top: a phone is held by its bottom half, and a toast
           that reports a trade belongs next to the thumb that just made it. */}
-      <Toaster
-        position="bottom-center"
-        richColors
-        closeButton
-        theme="dark"
-        offset={offset}
-        mobileOffset={offset}
-      />
+      <AppToaster offset={offset} />
     </>
   );
 }

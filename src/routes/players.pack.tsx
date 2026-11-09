@@ -115,6 +115,8 @@ const COMPLETION_BEAT_MS = 900;
  * back on the retry rather than dealing a second one.
  */
 const OPEN_TIMEOUT_MS = 8_000;
+/** How long the dealing slot stays wordless before it says the signal is slow. */
+const SLOW_SIGNAL_MS = 3_000;
 /** Full ceremony for the first few duplicate secrets; after that it is a tax. */
 const DUPE_CEREMONY_LIMIT = 3;
 /** How often to notice the date changed under a tab nobody closed. */
@@ -148,6 +150,28 @@ type OpenRequest = {
   /** Bumped by the retry button, so an identical request still re-runs the effect. */
   nonce: number;
 };
+
+/**
+ * Words for the dealing slot once it has been bare too long.
+ *
+ * Mounted only while the slot is, so its clock starts with the wait and a retry
+ * (which swaps the slot out for the retry card and back) starts it over. It
+ * never touches the request or its timeout: it only says the wait is not a
+ * lost pack.
+ */
+function SlowSignal() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_SIGNAL_MS);
+    return () => clearTimeout(t);
+  }, []);
+  if (!slow) return null;
+  return (
+    <p role="status" className="px-4 text-center text-meta font-semibold text-muted-foreground">
+      Slow signal — it&apos;s yours either way
+    </p>
+  );
+}
 
 /** The one slot ref the row stores per card, from a dealt slot. */
 function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
@@ -1326,7 +1350,7 @@ function PackPage() {
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
             the ceremony itself — only while the pack is still sealed. */}
-        {stage === "sealed" && <CollectorSignupGate className="mb-3" />}
+        {stage === "sealed" && <CollectorSignupGate className="mb-3" compact />}
         {/* Only while the pack is still sealed. A phone screen is short, and this
             row is 90px of running total above a card whose whole job is to be the
             biggest thing on it. The summary owns the counter once the pack is
@@ -1422,7 +1446,10 @@ function PackPage() {
               animate={{ opacity: stage === "opening" ? 0 : 1 }}
               transition={{ duration: 0.2 }}
             >
-              Drag across the tear · or press Enter
+              Drag across the tear
+              {/* Hidden, not removed: "press Enter" means nothing on a touch
+                  screen, but keyboard users on a fine pointer still need it. */}
+              <span className="pointer-coarse:hidden"> · or press Enter</span>
             </motion.div>
           </div>
         ) : dealing ? (
@@ -1432,12 +1459,14 @@ function PackPage() {
           <div className="mx-auto flex max-w-[320px] flex-col items-center gap-3 py-6 text-center">
             {openState === "failed" ? (
               <button
+                type="button"
                 onClick={() => {
                   setOpenState("pending");
                   setOpenRequest((r) => ({ kind: r?.kind ?? "tear", nonce: (r?.nonce ?? 0) + 1 }));
                 }}
                 data-testid="pack-retry"
-                className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
+                // Not dimmed: it is the only way out of this state, read outdoors.
+                className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
               >
                 <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
                   No signal
@@ -1464,7 +1493,9 @@ function PackPage() {
               <div
                 data-testid="pack-dealing"
                 className="wax-foil pack-seal-wait relative flex aspect-[5/7] w-full items-center justify-center overflow-hidden rounded-xl border border-white/15"
-              />
+              >
+                <SlowSignal />
+              </div>
             )}
           </div>
         ) : stage === "revealing" ? (
@@ -1524,6 +1555,7 @@ function PackPage() {
             total={total}
             eventYear={event?.year ?? null}
             streak={streak}
+            resetsAt={status.data?.resetsAt}
             claimable={claimable}
             canClaim={streak?.canClaim ?? false}
             claiming={claiming}

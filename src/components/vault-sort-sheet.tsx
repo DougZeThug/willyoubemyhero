@@ -65,7 +65,7 @@ export function VaultSortSheet({
             Sort &amp; filter
           </DrawerTitle>
           <DrawerDescription className="text-meta">
-            How the roster reads. Kept on this phone.
+            How your binder reads. Kept on this phone.
           </DrawerDescription>
         </DrawerHeader>
 
@@ -163,7 +163,20 @@ function Choice({
 }
 
 /** The one control the sheet is behind, on the Roster shelf's header. */
-export function VaultSortChip({ onOpen, active }: { onOpen: () => void; active: boolean }) {
+export function VaultSortChip({
+  onOpen,
+  active,
+  compact = false,
+}: {
+  onOpen: () => void;
+  active: boolean;
+  /**
+   * Icon only. While shelves are being rearranged the arrows share the header
+   * row, and at 320px the full label squeezes the title to nothing. The chip
+   * itself must stay: it is the only way back to the sheet's "Done rearranging".
+   */
+  compact?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -179,7 +192,7 @@ export function VaultSortChip({ onOpen, active }: { onOpen: () => void; active: 
       )}
     >
       <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
-      Sort &amp; filter
+      <span className={compact ? "sr-only" : undefined}>Sort &amp; filter</span>
     </button>
   );
 }

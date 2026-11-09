@@ -30,8 +30,8 @@ more, all medium, for **49 in total**: 7 high, 38 medium, 4 low.
 Four of those turned out to be already fixed in code — the doc was read at
 `b46f330` and seventy-seven commits had landed since. The other thirty-four
 `fix` entries, and the two product calls the league took (B-14, B-27), are fixed
-here. **Five entries remain open**, all product calls: B-07, B-23, B-32, B-33 and
-B-38. The deliberately-false "Pack Complete" heading inside B-30 was a sixth; it
+here. **Four entries remain open**, all product calls: B-23, B-32, B-33 and B-38.
+B-07 was settled as carry-across, and the code already did it (see B-07). The deliberately-false "Pack Complete" heading inside B-30 was a sixth; it
 is closed, not decided — the reveal stand was rebuilt for an unrelated reason and
 the heading went with it.
 
@@ -62,7 +62,7 @@ in the screen rather than in the handler that cascades.
 | B-04 | The account screen is unreachable the moment its link settles               | high     | accounts      | fixed               |
 | B-05 | An official run with no time sorts to the top on three screens              | high     | combine       | fixed               |
 | B-06 | Reordering the running order reports a success it did not have              | high     | admin         | fixed upstream      |
-| B-07 | A guest who claims mid-day is re-dealt today's pack                         | high     | accounts      | product call — open |
+| B-07 | A guest who claims mid-day is re-dealt today's pack                         | high     | accounts      | fixed               |
 | B-08 | A shared head-to-head link does not open the comparison                     | medium   | cards         | fixed               |
 | B-09 | Analytics has no loading, error or degraded state                           | medium   | combine       | fixed               |
 | B-10 | The trade screen's set-complete ceremony leaves the nav reachable           | medium   | trading       | fixed               |
@@ -264,16 +264,31 @@ in the screen rather than in the handler that cascades.
   pack records which one it was dealt to. The mismatch is detected on purpose —
   it is how a phone changing hands is caught — and a claim looks identical to it.
 - **Severity:** `high`. Two packs a day on the path most new players take.
-- **Still open — `product call`.** Carrying the guest's pack across is the
+- **Fixed — decision: carry the pack across.** The league chose the generous
+  reading, and the code already does it: `carryPackToIdentity` in
+  `src/lib/card-collection.ts` rewrites the stored pack's identity from
+  `d:<thisDevice>` to `m:<participantId>` at claim time (same device, same league
+  day, after adoption), called from `src/routes/claim.tsx` and
+  `src/hooks/use-account.ts`. Every other identity change (member to member,
+  member to guest, another device, yesterday's row) still re-seals. Cards the
+  adoption already filed are skipped by the record loop (`carriedAdopted`), so
+  nothing is minted twice. Pinned by `src/lib/card-collection.test.ts`,
+  `src/routes/claim.test.tsx`, `e2e/journeys.spec.ts` ("carries a guest's pack
+  across a claim") and `tests/db/open-pack.test.ts`. This entry read "open"
+  after the fix had landed.
+
+  Original note, kept for the reasoning: carrying the guest's pack across is the
   generous reading; leaving it is defensible if a second pack on claim day is
   considered a welcome gift. Either way it should be deliberate, and it is
   currently a side effect.
+
   > Worth noting alongside B-13, which was fixed: the trophy for a set a guest
   > finished now survives the claim, because the device primes its ceremony
   > watcher while it is still a guest. The pack is the same shape of problem and
   > the same fix is available — key the stored pack on the league day and the
   > device as well as the identity — but which answer is right is the league's
   > call, not a defect.
+
 - **Raised by:** [keeping your cards](accounts/keeping-your-cards.md#open-questions-and-verification),
   [the sealed pack](cards/the-sealed-pack.md#open-questions-and-verification).
 

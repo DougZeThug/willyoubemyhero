@@ -660,13 +660,17 @@
   }
 
   /* Every spend button in this app can be refused — offline, or short of dust —
-     and the shape has to survive that without the glow insisting otherwise. */
+     and the shape has to survive that without the glow insisting otherwise.
+     0.55 rather than 0.45: a disabled button whose label cannot be read in
+     daylight is a dead end rather than an explanation, and 0.55 is the step the
+     "Reveal all" fix settled on (docs/ux-audit-mobile.md F4). The lost glow and
+     the not-allowed cursor, not the fade, are what say "disabled". */
   .neon-btn:disabled,
   .neon-btn-sm:disabled,
   .neon-btn-lg:disabled,
   .neon-btn-quiet:disabled,
   .neon-btn-hero:disabled {
-    opacity: 0.45;
+    opacity: 0.55;
     box-shadow: none;
     cursor: not-allowed;
   }

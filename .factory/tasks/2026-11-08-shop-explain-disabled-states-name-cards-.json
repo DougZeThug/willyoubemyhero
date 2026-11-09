@@ -1,0 +1,63 @@
+{
+  "id": "2026-11-08-shop-explain-disabled-states-name-cards-",
+  "title": "Shop: explain disabled states, name cards in toasts, steadier disabled look",
+  "kind": "polish",
+  "status": "ready",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-08T14:23:07.873Z",
+  "acceptance": [
+    "Re-roll section shows 'N more to re-roll' when there are rows but the balance is below the re-roll price (mirrors the bonus-pull 'N more to go'); absent otherwise",
+    "The can't-afford market Buy button reads 'Need N' (not '120 dust'); e2e/dust.spec.ts assertion updated; no other copy",
+    "Burn, sell and re-roll toasts name the card (still showing the dust amount)",
+    "Disabled neon buttons use opacity 0.55 instead of 0.45 globally; several other screens looked at before/after",
+    "Sticky balance chip on the shop kept ONLY if the render shows it clears the site header cleanly and covers no content at 320x568; otherwise reverted and reported",
+    "No confirm added to Burn; no change to prices, dust amounts, the ladder, listing/buy rules or any server function",
+    "Before/after screenshots committed and described from the images"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T14:35:28.021Z",
+      "head": "46f4bdd541f06e97f13cde7c9ccac6c2a18f32b5",
+      "fp": "170a50114fcf1701c26c71af0bb38adc5a17cbf8",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-08T14:43:56.728Z",
+      "head": "0e9dcff102917ecf90721e450c3737f532918cde",
+      "fp": "e5efab5137009e72a63cfe41604ffda3725d8796",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review of shots/review; sticky chip is faint-banded; button opacity overrides listed in report",
+  "notes": [],
+  "updatedAt": "2026-11-08T14:46:46.222Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "9a319d46dcaccbe4ae0692d4e2ffc27d42c25de1",
+    "fp": "e5efab5137009e72a63cfe41604ffda3725d8796",
+    "at": "2026-11-08T14:46:46.127Z"
+  }
+}

@@ -216,7 +216,7 @@ The wordmark no longer wraps: the header is 65 px at every width, where it was 9
 
 - Bottom tab bar is thumb-sized (≈ 54 px + safe-area spacer, `src/components/site-nav.tsx:122-173`) and always present.
 - Cards keep a 5:7 box before the art lands, so the grid never jumps (`src/components/holo-card.tsx:635`).
-- The reveal stand sizes the card off viewport _height_ (`max-w-[min(320px,calc((100svh-19rem)*5/7))]`, `src/components/pack-stand.tsx:788`) so the name and dots stay on screen.
+- The reveal stand sizes the card off viewport _height_ (`max-w-[min(320px,max(10rem,calc((100svh-21rem)*5/7)))]`, `src/components/pack-stand.tsx:788`) so the name and dots stay on screen.
 - `100dvh`-based page heights on the eleven card routes.
 
 **Problems**

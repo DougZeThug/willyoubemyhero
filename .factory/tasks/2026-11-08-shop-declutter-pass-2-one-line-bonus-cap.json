@@ -1,0 +1,44 @@
+{
+  "id": "2026-11-08-shop-declutter-pass-2-one-line-bonus-cap",
+  "title": "Shop declutter pass 2: one-line bonus caption, tighter empty states, set chip on its own line",
+  "kind": "polish",
+  "status": "ready",
+  "branch": null,
+  "createdAt": "2026-11-08T16:31:28.308Z",
+  "acceptance": [
+    "Bonus pull shows one caption line under Buy combining the more-to-go hint and the does-not-touch-tomorrow note",
+    "Market and Stall empty states each take one line; stall rule that a roster card always leaves you one stays visible somewhere a lister sees it; unit tests updated together with strings",
+    "Secret row set chip never clips at 320: it sits on its own line, full text visible or gracefully truncated with an ellipsis",
+    "No price, rule, server-call or section-structure change; heading names and sticky chip unchanged"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T16:35:51.389Z",
+      "head": "89da1c49f7e80a16831f846ae4bc4b7e7680f7d8",
+      "fp": "b3ca98168cc546dd7634ff5e3fdbc849b3bf9d0e",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review of shots/review; set chip still ellipsizes at 320 (CORNHOLE COLL...); page only ~40px shorter",
+  "notes": [],
+  "updatedAt": "2026-11-08T16:41:17.440Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "89da1c49f7e80a16831f846ae4bc4b7e7680f7d8",
+    "fp": "b3ca98168cc546dd7634ff5e3fdbc849b3bf9d0e",
+    "at": "2026-11-08T16:41:17.338Z"
+  }
+}

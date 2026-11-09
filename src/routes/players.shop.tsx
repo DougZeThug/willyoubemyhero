@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMemberSession } from "@/lib/member-token";
 import { useSecretActor } from "@/hooks/use-daily-secret";
@@ -143,20 +142,19 @@ function ShopPage() {
           with no signal is the exact failure the health states exist for. */}
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
-          <div className="flex items-center gap-2 text-primary">
-            <Sparkles className="h-5 w-5" />
-            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
-              Economy
-            </span>
-          </div>
-          <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Dust</h1>
-          <p className="mt-2 text-meta text-muted-foreground">
-            {!dustOn
-              ? "The commissioner has not switched dust on yet."
-              : dust.data?.balance == null
-                ? "Counting…"
-                : `You have ${dust.data.balance.toLocaleString()}.`}
-          </p>
+          <h1 className="font-display text-3xl font-black uppercase leading-none">Dust</h1>
+          {/* Nothing for somebody with no claimed player: there is no balance to
+              count, and "Counting…" would sit there forever above the paragraph
+              that says what they need. */}
+          {(!dustOn || participantId) && (
+            <p className="mt-2 text-meta text-muted-foreground">
+              {!dustOn
+                ? "The commissioner has not switched dust on yet."
+                : dust.data?.balance == null
+                  ? "Counting…"
+                  : `You have ${dust.data.balance.toLocaleString()}.`}
+            </p>
+          )}
         </div>
 
         {/* The tab disappears when dust is off, but a bookmark does not — and a
@@ -200,7 +198,13 @@ function ShopPage() {
         ) : !participantId ? (
           <p className="text-sm text-muted-foreground">
             Dust is banked against your name rather than this phone, so it needs a claimed player.{" "}
-            <Link to="/claim" className="font-bold text-primary hover:underline">
+            {/* A pseudo-element hit area rather than min-h-11: padding or flex on an
+                inline link inflates the paragraph's line gap. The ::before reaches
+                about 44px to a thumb and leaves the text where it was. */}
+            <Link
+              to="/claim"
+              className="relative font-bold text-primary before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] hover:underline"
+            >
               Claim yours
             </Link>
           </p>
@@ -228,7 +232,12 @@ function ShopPage() {
                 Four sections spend against that number and it was off screen by
                 the time you reached any of them; saying "You have N." twice would
                 resolve the suite's /you have 120/i to two nodes. */}
-            <div className="flex items-center gap-3">
+            {/* Sticky under the site header (sticky top-0 z-30, 4rem + 1px + the
+                notch — the sum --page-min-h subtracts) so the balance stays in view
+                while the Burn, Sell and Re-roll lists, the longest part of the
+                page, scroll under it. z-20: below the header and the bottom bar,
+                above the cards' own stacking. */}
+            <div className="sticky top-[calc(4rem+1px+env(safe-area-inset-top))] z-20 flex items-center gap-3 bg-background py-2">
               <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Spend &amp; earn
               </span>

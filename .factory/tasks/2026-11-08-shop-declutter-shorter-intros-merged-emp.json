@@ -1,0 +1,45 @@
+{
+  "id": "2026-11-08-shop-declutter-shorter-intros-merged-emp",
+  "title": "Shop: declutter - shorter intros, merged empty states, price table behind a disclosure",
+  "kind": "polish",
+  "status": "ready",
+  "branch": null,
+  "createdAt": "2026-11-08T16:10:49.977Z",
+  "acceptance": [
+    "At 320x568 the full Shop page is meaningfully shorter than the baseline, measured by the factory capture. TARGET NOT MET: the plan said under ~3000px; the capture went 3842 -> 3190 image px (about 17%). Follow-up tasks (declutter pass 2 and pass 3) continued the work.",
+    "Rules stay visible with no tap: you always keep one (Burn), including your only one (Sell, Settle), it can go down (Settle)",
+    "Where dust comes from rung labels visible after one tap on a native details summary of at least 44px; dust.spec updated to open it first",
+    "Nothing up at the moment. and Nothing for sale right now. strings unchanged; headings dust/the market/your stall unchanged; no extra section wrapper",
+    "No price, rule, odds or server-call change; sticky chip structure unchanged; you-have-N still resolves to one node"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T16:16:35.717Z",
+      "head": "aa697f0cbc975b37843e02f1a92fb8d011c93471",
+      "fp": "cc55e945e9168bba10db08748c1675cbb35e6a71",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review of shots/review; the height target was not met (17% shorter); follow-up passes 2 and 3 continued the declutter",
+  "notes": [],
+  "updatedAt": "2026-11-08T16:22:29.923Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "aa697f0cbc975b37843e02f1a92fb8d011c93471",
+    "fp": "cc55e945e9168bba10db08748c1675cbb35e6a71",
+    "at": "2026-11-08T16:22:29.797Z"
+  }
+}

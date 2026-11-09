@@ -1,0 +1,59 @@
+{
+  "id": "2026-11-08-shop-declutter-pass-3-full-width-set-chi",
+  "title": "Shop declutter pass 3: full-width set chip, Settle list capped with Show all",
+  "kind": "polish",
+  "status": "ready",
+  "branch": null,
+  "createdAt": "2026-11-08T17:02:06.380Z",
+  "acceptance": [
+    "Secret row set chip spans the row under the Sell button and shows its full text at 320 and 390",
+    "Settle a finish shows the first 3 cards with a Show all N button (44px target) when there are more than 3; Show less collapses; count badge still shows the total; all re-roll behaviour unchanged",
+    "No price, rule, server-call change; other sections, headings and sticky chip unchanged"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T17:07:31.499Z",
+      "head": "a23e433034d96f268ad47b5a10d7171e8bbc9e42",
+      "fp": "57ff03296902aa128526687f9d4b414958495e06",
+      "partial": false,
+      "passed": false,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-08T17:10:30.764Z",
+      "head": "88fc6ebb910d20d08a01aa5352dc4eccd97ded9c",
+      "fp": "6d98f3ae42395a891cbfe0e545f8f184d2948142",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review of shots/review; with 3 cards the page is slightly taller (chip line); the cap pays off at 4+ cards",
+  "notes": [],
+  "updatedAt": "2026-11-08T17:15:55.695Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "88fc6ebb910d20d08a01aa5352dc4eccd97ded9c",
+    "fp": "6d98f3ae42395a891cbfe0e545f8f184d2948142",
+    "at": "2026-11-08T17:15:55.577Z"
+  }
+}

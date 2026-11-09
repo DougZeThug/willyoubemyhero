@@ -1,0 +1,67 @@
+{
+  "id": "2026-11-06-vault-feedback-toast-when-a-card-is-pinn",
+  "title": "Vault: feedback toast when a card is pinned",
+  "kind": "polish",
+  "status": "ready",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T20:47:06.898Z",
+  "acceptance": [
+    "Pinning a card (roster tile or secret tile) shows a toast 'Pinned to Favourites' with an Undo action; unpinning shows none (tests in players.index.test.tsx)",
+    "Undo from the toast unpins that same card and the card returns to its shelf (test)",
+    "Existing pin behaviour is unchanged: the card still moves to Favourites, storage keys unchanged, star stays 44px, roles/labels used by e2e/favourites.spec.ts unchanged",
+    "Toast copy is generic: no names, counts or set information",
+    "A vault-pinned scene exists in e2e/factory-shots.spec.ts so the before/after shows the toast",
+    "Before/after screenshots committed under shots/review/ and described from the images themselves"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T20:50:20.196Z",
+      "head": "e2ff246e4f2b91d90596c88cc6a2fd9305c8ab11",
+      "fp": "eb1c78b55539037427c954653102ba0c9d7ac4e7",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-06T20:53:10.532Z",
+      "head": "767214fd6c607c0e47b6e6fba5fce0d62d26871a",
+      "fp": "eacdfa9ee052f4717bef010c2467e9523405062b",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review: toast screenshots in shots/review; decide on toast theming",
+  "notes": [
+    {
+      "at": "2026-11-06T20:58:53.465Z",
+      "text": "Final review of 9faefd8..HEAD: APPROVE. Screenshots viewed (390 before/after, 320 after). Control vault-390 shows 0.78% diff confined to the floating HERO badge's own animation box; 320/430/desktop controls identical."
+    }
+  ],
+  "updatedAt": "2026-11-06T20:58:53.611Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "767214fd6c607c0e47b6e6fba5fce0d62d26871a",
+    "fp": "eacdfa9ee052f4717bef010c2467e9523405062b",
+    "at": "2026-11-06T20:58:53.517Z"
+  }
+}

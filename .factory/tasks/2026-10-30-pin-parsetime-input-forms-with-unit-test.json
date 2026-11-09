@@ -2,7 +2,7 @@
   "id": "2026-10-30-pin-parsetime-input-forms-with-unit-test",
   "title": "Pin parseTime input forms with unit tests",
   "kind": "build",
-  "status": "ready",
+  "status": "done",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-10-30T19:37:33.152Z",
   "acceptance": [
@@ -90,7 +90,7 @@
     }
   ],
   "interventions": 0,
-  "nextAction": "your review & merge of PR #208",
+  "nextAction": "none — merged",
   "notes": [
     {
       "at": "2026-10-30T19:49:13.557Z",
@@ -103,14 +103,19 @@
     {
       "at": "2026-11-06T19:14:21.246Z",
       "text": "Review of d542f88: APPROVE. Minor: path-scoped-only configs now fail on a diff matching no gate (documented behaviour change); not yet in README."
+    },
+    {
+      "at": "2026-11-06T19:49:45.498Z",
+      "text": "Closed by Director after merge of PR #208; --force used because the branch code has legitimately moved on since the gated commit."
     }
   ],
-  "updatedAt": "2026-11-06T19:14:21.447Z",
+  "updatedAt": "2026-11-06T19:49:45.498Z",
   "review": {
     "verdict": "approve",
     "reviewer": "factory-reviewer",
     "head": "d542f88aa820ec21f76255f16702520729895cee",
     "fp": "3e4fe938990970f55995aec0e34aefe1357f5dfe",
     "at": "2026-11-06T19:14:21.334Z"
-  }
+  },
+  "pr": "#208 (merged)"
 }

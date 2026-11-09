@@ -1,0 +1,65 @@
+{
+  "id": "2026-11-07-shop-page-mobile-polish",
+  "title": "Shop page mobile polish",
+  "kind": "polish",
+  "status": "ready",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-07T14:37:09.983Z",
+  "acceptance": [
+    "Capture spec has shop scenes (dust-on member with spares and a market, unclaimed visitor, spares-query failing, list-a-card drawer with a staged tile) at 390, 320 and 320x568, each verified by looking at its PNG",
+    "Fix set chosen from the rendered frames, not code alone (decided after step 1)",
+    "No change to prices, dust amounts, the burn/sell/re-roll ladder, listing/buy rules, server functions or marketplace/ownership logic",
+    "Before/after screenshots committed under shots/review and described from the images"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-07T15:01:22.476Z",
+      "head": "807a4f31730554123205fa3eacf11abb90abdade",
+      "fp": "e6c98c42d23087ab3b754b6e5e3da7555e86d94b",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-07T15:10:10.418Z",
+      "head": "3ecd6ae7bca82cedc70093e7e52fc3f2327bcb1a",
+      "fp": "f2e78ff2c5250cff4b7f6802e64ad226f5cbf8e6",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review of shots/review; decisions on re-roll hint, Need-120 label, toast naming, global disabled opacity, sticky balance, burn confirm",
+  "notes": [
+    {
+      "at": "2026-11-07T15:12:53.764Z",
+      "text": "Review of 807a4f3 and the review-set tooling tweak: APPROVE. Screenshots viewed: shop full before/after 320x568, spares-error full before/after, list-drawer before/after, unclaimed before/after. Control: shop-dust-off identical (byte-identical). Known: market/stall/drawer error branches only jsdom-tested; Try again/smooth scroll/44px hit area not exercised in a browser; ladder gets a different column split below 380px (design call, builder went beyond a gap); hit area strip can overlap the tail of the preceding text line."
+    }
+  ],
+  "updatedAt": "2026-11-07T15:12:53.930Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "3ecd6ae7bca82cedc70093e7e52fc3f2327bcb1a",
+    "fp": "f2e78ff2c5250cff4b7f6802e64ad226f5cbf8e6",
+    "at": "2026-11-07T15:12:53.820Z"
+  }
+}

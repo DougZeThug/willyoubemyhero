@@ -4,10 +4,23 @@
   "maxActiveTasks": 1,
   "maxRepairAttempts": 3,
   "gates": [
-    { "name": "lint", "cmd": "bun run lint" },
-    { "name": "typecheck", "cmd": "bun run typecheck" },
-    { "name": "unit", "cmd": "bun run test" },
-    { "name": "db", "cmd": "bun run test:db", "paths": ["^supabase/", "^tests/db/"] },
+    {
+      "name": "lint",
+      "cmd": "bun run lint"
+    },
+    {
+      "name": "typecheck",
+      "cmd": "bun run typecheck"
+    },
+    {
+      "name": "unit",
+      "cmd": "bun run test"
+    },
+    {
+      "name": "db",
+      "cmd": "bun run test:db",
+      "paths": ["^supabase/", "^tests/db/"]
+    },
     {
       "name": "build",
       "cmd": "bun run build",
@@ -38,6 +51,10 @@
     "screens (Vault/Pack/Trade/League/You)": "product-mobile-ux"
   },
   "visual": {
-    "note": "e2e is CI-only here. Screenshots come from CI artifacts or a phone; factory-qa reports visual checks as PARTIAL unless it has real evidence."
+    "note": "The full e2e suite is CI-only. Before/after screenshots come from `node .claude/factory/shots.mjs <task-id>` (e2e/factory-shots.spec.ts, same Supabase-neutered config). Anything no scene covers is 'unverified visually'."
+  },
+  "shots": {
+    "spec": "e2e/factory-shots.spec.ts",
+    "project": "desktop"
   }
 }

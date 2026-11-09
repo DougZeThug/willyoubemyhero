@@ -1,0 +1,34 @@
+{
+  "id": "2026-11-08-docs-mark-b-07-fixed-guest-pack-carry-ac",
+  "title": "Docs: mark B-07 fixed (guest pack carry-across already shipped)",
+  "kind": "maintain",
+  "status": "ready",
+  "branch": null,
+  "createdAt": "2026-11-08T17:50:03.482Z",
+  "acceptance": [
+    "bug-triage.md B-07 row, section and open-count summary reflect that the pack carry-across is shipped and pinned by tests; no code change"
+  ],
+  "repairs": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-08T17:50:03.560Z",
+      "head": "2c4e1180f2b68f1b22086ed12e8d739b0f974421",
+      "fp": "f005617a41be412f3a50cf6e38e3b6a6ce7bf850",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
+  "interventions": 0,
+  "nextAction": "your review; docs-only",
+  "notes": [],
+  "updatedAt": "2026-11-08T17:52:31.719Z"
+}

@@ -10,7 +10,7 @@
 // is no last-copy rule in SQL — any secret sells, which is the feature — so that
 // dialog is the only thing between a thumb and a vanished mythic.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
@@ -58,14 +58,16 @@ vi.mock("@tanstack/react-start", async (importOriginal) => ({
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
 
-function renderShop() {
+// null, not undefined, for "still loading": undefined would pick up the default.
+function renderShop(given: number | null = DUST_PRICES.bonusPull) {
+  const balance = given ?? undefined;
   const { wrapper, client } = createQueryWrapper();
   const invalidate = vi.spyOn(client, "invalidateQueries") as unknown as Invalidate;
   const Wrapper = wrapper;
   render(
     <Wrapper>
       <DustShopPanel
-        balance={DUST_PRICES.bonusPull}
+        balance={balance}
         participantId={ME}
         actor={ACTOR}
         eventId={EVENT}
@@ -447,5 +449,462 @@ describe("an older server's same-day refusal", () => {
     await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));
 
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Today's pull can be dusted from tomorrow")); // prettier-ignore
+  });
+});
+
+describe("a failed spares read", () => {
+  it("says so in all three lists instead of reading as empty, and Try again asks once more", async () => {
+    // spares runs retry:false, so one rejection is the whole outage. Before this
+    // the three lists fell through to "No spares yet." and friends.
+    sparesFn.mockRejectedValue(new Error("boom"));
+    renderShop();
+
+    expect(await screen.findByText("Couldn't read your spares just now.")).toBeTruthy();
+    expect(screen.getByText("Couldn't read your secrets just now.")).toBeTruthy();
+    expect(screen.getByText("Couldn't read your cards just now.")).toBeTruthy();
+    expect(screen.queryByText("No spares yet.")).toBeNull();
+    expect(screen.queryByText("No secrets yet.")).toBeNull();
+
+    sparesFn.mockClear();
+    await userEvent.click(screen.getAllByRole("button", { name: "Try again" })[0]);
+    await waitFor(() => expect(sparesFn).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the plain empty lines for a read that succeeded with nothing", async () => {
+    renderShop();
+    expect(await screen.findByText("No spares yet.")).toBeTruthy();
+    expect(screen.queryByText(/Couldn't read/)).toBeNull();
+  });
+});
+
+describe("sell a secret: duplicates grouped by name", () => {
+  const copy = (
+    pullId: string,
+    name: string,
+    tier: string,
+    over: Record<string, unknown> = {},
+  ) => ({
+    pullId,
+    name,
+    artUrl: null,
+    tier,
+    collection: null,
+    lastCopy: false,
+    viewerOwns: true,
+    ...over, // prettier-ignore
+  });
+  const hold = (secrets: unknown[]) =>
+    sparesFn.mockResolvedValue({ participantId: ME, ownedRoster: [], roster: [], secrets, blocked: [] }); // prettier-ignore
+  const sellSection = async () => {
+    const heading = await screen.findByRole("heading", { name: /sell a secret/i });
+    return heading.closest("section") as HTMLElement;
+  };
+
+  it("orders groups by their best copy and copies inside a group by value", async () => {
+    // Interleaved on purpose: a flat sort by value would put Loose Leaf's rare
+    // between two Gary copies.
+    hold([
+      copy("p1", "Gary The Grill", "common"),
+      copy("p2", "Loose Leaf", "rare"),
+      copy("p3", "Gary The Grill", "legendary"),
+      copy("p4", "Sir Barks A Lot", "epic"),
+      copy("p5", "Gary The Grill", "rare"),
+      copy("p6", "Sir Barks A Lot", "common"),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    const text = (el: Element) => el.textContent ?? "";
+    const names = within(section)
+      .getAllByText(/^(Gary The Grill|Loose Leaf|Sir Barks A Lot)$/)
+      .map(text);
+    expect(names).toEqual(["Gary The Grill", "Sir Barks A Lot", "Loose Leaf"]);
+    const prices = within(section)
+      .getAllByRole("button", { name: /sell \+/i })
+      .map((b) => Number(/\d+/.exec(text(b))?.[0]));
+    const v = SELL_BY_SECRET_TIER;
+    expect(prices).toEqual([v.legendary, v.rare, v.common, v.epic, v.common, v.rare]);
+  });
+
+  it("keeps a single copy as a plain row with no count", async () => {
+    hold([copy("p1", "Loose Leaf", "rare")]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findByRole("button", { name: /sell \+/i });
+    expect(within(section).queryByText(/×/)).toBeNull();
+    expect(within(section).getByText("Loose Leaf").closest("li")?.className).toMatch(/flex-wrap/);
+  });
+
+  it("shows a duplicate's name once with ×N and a Sell at each copy's own price", async () => {
+    hold([copy("p1", "Gary The Grill", "legendary"), copy("p2", "Gary The Grill", "common")]);
+    renderShop();
+    const section = await sellSection();
+    const buttons = await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getAllByText("Gary The Grill")).toHaveLength(1);
+    expect(within(section).getByText("×2")).toBeTruthy();
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      `Sell +${SELL_BY_SECRET_TIER.legendary}`,
+      `Sell +${SELL_BY_SECRET_TIER.common}`,
+    ]);
+    sellFn.mockResolvedValue({
+      ok: true,
+      awarded: 1,
+      tier: "common",
+      secretCardId: "x",
+      balance: 1,
+    });
+    await userEvent.click(buttons[1]);
+    await waitFor(() => expect(sellFn).toHaveBeenCalledWith({ data: { secretPullId: "p2" } }));
+  });
+
+  it("still confirms before selling a last copy inside a group", async () => {
+    hold([copy("p1", "Gary The Grill", "legendary", { lastCopy: true }), copy("p2", "Gary The Grill", "common")]); // prettier-ignore
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      renderShop();
+      const section = await sellSection();
+      const [first] = await within(section).findAllByRole("button", { name: /sell \+/i });
+      await userEvent.click(first);
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(sellFn).not.toHaveBeenCalled();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("counts copies, not names, in the badge", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary"),
+      copy("p2", "Gary The Grill", "common"),
+      copy("p3", "Loose Leaf", "rare"),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(screen.getByRole("heading", { name: /sell a secret/i }).parentElement?.textContent).toMatch(/3/); // prettier-ignore
+  });
+
+  it("describes each grouped Sell by the card's name and its own level, singles not at all", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary"),
+      copy("p2", "Gary The Grill", "common"),
+      copy("p3", "Loose Leaf", "rare"),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    const [legendary, common, single] = await within(section).findAllByRole("button", { name: /sell \+/i }); // prettier-ignore
+    const describe = (b: HTMLElement) =>
+      (b.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? "")
+        .join(" ");
+    expect(describe(legendary)).toBe("Gary The Grill Legendary");
+    expect(describe(common)).toBe("Gary The Grill Common");
+    expect(single.hasAttribute("aria-describedby")).toBe(false);
+    // The visible label stays the accessible name the tests and e2e look up.
+    expect(legendary.textContent).toBe(`Sell +${SELL_BY_SECRET_TIER.legendary}`);
+  });
+
+  it("groups by card id, so two different cards that share a name stay apart", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary", { cardId: "card-a" }),
+      copy("p2", "Gary The Grill", "common", { cardId: "card-b" }),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getAllByText("Gary The Grill")).toHaveLength(2);
+    expect(within(section).queryByText(/×/)).toBeNull();
+  });
+
+  it("groups copies of one card id even when the name text differs", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary", { cardId: "card-a" }),
+      copy("p2", "Gary the Grill", "common", { cardId: "card-a" }),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getByText("×2")).toBeTruthy();
+  });
+
+  it("shows a shared set once under the name, differing sets per copy", async () => {
+    hold([
+      copy("p1", "Gary The Grill", "legendary", { collection: "cornhole" }),
+      copy("p2", "Gary The Grill", "common", { collection: "cornhole" }),
+      copy("p3", "Sir Barks A Lot", "epic", { collection: "cornhole" }),
+      copy("p4", "Sir Barks A Lot", "common", { collection: "pets" }),
+    ]);
+    renderShop();
+    const section = await sellSection();
+    await within(section).findAllByRole("button", { name: /sell \+/i });
+    expect(within(section).getAllByText("Cornhole Collection")).toHaveLength(2);
+  });
+});
+
+describe("narrow-phone layout", () => {
+  it("puts the set chip on its own full-width line under the whole row, Sell included", async () => {
+    // jsdom has no layout, so the class strings are the honest assertion: beside
+    // the Sell button the chip was ~190px wide at 320 and ellipsised.
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [],
+      secrets: [
+        { pullId: "p1", name: "Gary The Grill", artUrl: null, tier: "legendary", collection: "cornhole", lastCopy: true, viewerOwns: true }, // prettier-ignore
+      ],
+      blocked: [],
+    });
+    renderShop();
+    const last = await screen.findByText("last copy");
+    expect(last.parentElement?.className).toMatch(/\bflex-wrap\b/);
+    const chip = screen.getByText("Cornhole Collection");
+    const row = chip.closest("li") as HTMLElement;
+    const sell = screen.getByRole("button", { name: /sell \+/i });
+    // The row wraps, and the chip's wrapper is a direct child of the row (a
+    // sibling of the Sell button, not inside the name column) taking a full line.
+    expect(row.className).toMatch(/\bflex-wrap\b/);
+    const wrapper = chip.parentElement as HTMLElement;
+    expect(wrapper.parentElement).toBe(row);
+    expect(wrapper.className).toMatch(/\bbasis-full\b/);
+    expect(wrapper.contains(sell)).toBe(false);
+    expect(last.parentElement?.contains(chip)).toBe(false);
+    // Block + max-w-full + truncate stay as the safety net for a very long name.
+    expect(chip.className).toMatch(/\bblock\b/);
+    expect(chip.className).not.toMatch(/\binline-flex\b/);
+    expect(chip.className).toMatch(/\bmax-w-full\b/);
+    expect(chip.className).toMatch(/\btruncate\b/);
+    expect(chip.className).not.toMatch(/\bshrink-0\b/);
+  });
+
+  it("leaves no empty chip line under a secret that is not filed in a set", async () => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [],
+      secrets: [
+        { pullId: "p2", name: "Loose Leaf", artUrl: null, tier: "rare", collection: null, lastCopy: false, viewerOwns: true }, // prettier-ignore
+      ],
+      blocked: [],
+    });
+    renderShop();
+    const row = (await screen.findByRole("button", { name: /sell \+/i })).closest("li") as HTMLElement; // prettier-ignore
+    expect(row.querySelector(".basis-full")).toBeNull();
+  });
+
+  it("keeps a gap between each ladder label and its number", () => {
+    renderShop();
+    const row = screen.getByText("Platinum").closest("li");
+    expect(row?.className).toMatch(/\bgap-2\b/);
+    // And the table gives the wider level column its room on a narrow phone.
+    expect(row?.parentElement?.parentElement?.className).toMatch(
+      /grid-cols-\[auto_minmax\(0,1fr\)\]/,
+    );
+    const secretRow = screen.getByText("Legendary").closest("li");
+    expect(secretRow?.className).toMatch(/\bgap-2\b/);
+  });
+});
+
+describe("the settle list cap", () => {
+  function withCards(n: number) {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: Array.from({ length: n }, (_, i) => ({
+        copyId: `copy-${i}`,
+        eventParticipantId: "ep-1",
+        edition: "gold",
+        assertedBy: "server",
+      })),
+      roster: [],
+      secrets: [],
+      blocked: [],
+    });
+  }
+
+  it("shows no button at 3 cards or fewer", async () => {
+    withCards(3);
+    renderShop();
+    expect(await screen.findAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /show (all|less)/i })).toBeNull();
+  });
+
+  it("shows 3 rows and Show all N past 3, with the total in the badge", async () => {
+    withCards(5);
+    renderShop();
+    expect(await screen.findAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+    const btn = screen.getByRole("button", { name: "Show all 5" });
+    expect(btn).toHaveAttribute("aria-expanded", "false");
+    const heading = screen.getByRole("heading", { name: /settle a finish/i });
+    expect(heading.parentElement?.textContent).toMatch(/5/);
+  });
+
+  it("reveals every row, flips to Show less, and folds back", async () => {
+    withCards(5);
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: "Show all 5" }));
+    expect(screen.getAllByRole("button", { name: /re-roll/i })).toHaveLength(5);
+    const less = screen.getByRole("button", { name: "Show less" });
+    expect(less).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(less.getAttribute("aria-controls") ?? "")).toBeTruthy();
+    await userEvent.click(less);
+    expect(screen.getAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+  });
+
+  it("drops the button when a refetch leaves 3 or fewer", async () => {
+    withCards(4);
+    const { client } = renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: "Show all 4" }));
+    withCards(3);
+    await client.invalidateQueries({ queryKey: ["dust-spares", ME] });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /show (all|less)/i })).toBeNull(),
+    );
+    expect(screen.getAllByRole("button", { name: /re-roll/i })).toHaveLength(3);
+  });
+});
+
+describe("saying why the re-roll buttons are dead", () => {
+  const ROLL = "99999999-9999-4999-8999-999999999999";
+
+  function withCards(rows: number) {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: Array.from({ length: rows }, (_, i) => ({
+        copyId: i === 0 ? ROLL : `copy-${i}`,
+        eventParticipantId: "ep-1",
+        edition: "gold",
+        assertedBy: "server",
+      })),
+      roster: [],
+      secrets: [],
+      blocked: [],
+    });
+  }
+
+  it("counts the shortfall when the balance is under the price and there are rows", async () => {
+    withCards(1);
+    renderShop(DUST_PRICES.reroll - 7);
+    expect(await screen.findByText("7 more to re-roll")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /re-roll/i })).toBeDisabled();
+  });
+
+  it("is absent once the price is covered", async () => {
+    withCards(1);
+    renderShop(DUST_PRICES.reroll);
+    await screen.findByRole("button", { name: /re-roll/i });
+    expect(screen.queryByText(/more to re-roll/)).toBeNull();
+  });
+
+  it("is absent when there is nothing to re-roll", async () => {
+    withCards(0);
+    renderShop(0);
+    await screen.findByText("No cards yet.");
+    expect(screen.queryByText(/more to re-roll/)).toBeNull();
+  });
+
+  it("is absent while the balance is still unknown", async () => {
+    withCards(1);
+    renderShop(null);
+    await screen.findByRole("button", { name: /re-roll/i });
+    expect(screen.queryByText(/more to re-roll/)).toBeNull();
+  });
+});
+
+describe("toasts name the card", () => {
+  const COPY = "77777777-7777-4777-8777-777777777777";
+  const PULL = "88888888-8888-4888-8888-888888888888";
+
+  beforeEach(() => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [
+        { copyId: COPY, eventParticipantId: "ep-1", edition: "gold", assertedBy: "server" },
+      ],
+      roster: [{ copyId: COPY, eventParticipantId: "ep-1", edition: "gold", assertedBy: "server" }],
+      secrets: [
+        {
+          pullId: PULL,
+          name: "Gary The Grill",
+          artUrl: null,
+          tier: "rare",
+          lastCopy: false,
+          viewerOwns: true,
+        },
+      ],
+      blocked: [],
+    });
+  });
+
+  it("burn: who and how much", async () => {
+    millFn.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: /burn \+/i }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Burned Alice Ace · +40 dust"));
+    // The name is for the toast only. What reaches the server is the copy id and
+    // nothing else: it is the client's word for who, and the server never needs it.
+    expect(millFn).toHaveBeenCalledWith({ data: { cardCopyId: COPY } });
+  });
+
+  it("sell: the secret's name and how much", async () => {
+    sellFn.mockResolvedValue({ ok: true, awarded: 120, balance: 200 });
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Sold Gary The Grill · +120 dust"));
+    expect(sellFn).toHaveBeenCalledWith({ data: { secretPullId: PULL } });
+  });
+
+  it("re-roll: who, and both finishes", async () => {
+    rerollFn.mockResolvedValue({ ok: true, from: "gold", to: "platinum", balance: 10 });
+    renderShop();
+    await userEvent.click(await screen.findByRole("button", { name: /re-roll/i }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Alice Ace: Gold → Platinum"));
+  });
+});
+
+describe("the price table", () => {
+  it("is closed by default, with its rungs still in the DOM", () => {
+    renderShop();
+    const summary = screen.getByText(/where dust comes from/i);
+    const details = summary.closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    // Closed content stays in the DOM (that is what a native disclosure is).
+    expect(details.textContent).toContain("Mythic");
+    expect(details.textContent).toContain("Common");
+    // And it is still reachable as a heading.
+    expect(screen.getByRole("heading", { name: /where dust comes from/i })).toBeTruthy();
+  });
+
+  it("opens on click", async () => {
+    renderShop();
+    const details = screen
+      .getByText(/where dust comes from/i)
+      .closest("details") as HTMLDetailsElement;
+    await userEvent.click(screen.getByText(/where dust comes from/i));
+    expect(details.open).toBe(true);
+  });
+});
+
+describe("the bonus pull caption", () => {
+  it("is one line: the shortfall and the free-pull fact together when short", () => {
+    renderShop(DUST_PRICES.bonusPull - 30);
+    expect(screen.getByText("30 more to go · doesn't touch tomorrow's free one")).toBeTruthy();
+    expect(screen.queryByText("Doesn't touch tomorrow's free one.")).toBeNull();
+  });
+
+  it("drops the shortfall once affordable", () => {
+    renderShop();
+    expect(screen.getByText("Doesn't touch tomorrow's free one.")).toBeTruthy();
+    expect(screen.queryByText(/more to go/)).toBeNull();
+  });
+});
+
+describe("the intros", () => {
+  it("keeps the facts that must be seen without a tap", () => {
+    renderShop();
+    expect(screen.getByText(/you always keep one/i)).toBeTruthy();
+    expect(screen.getByText(/includes your only copy/i)).toBeTruthy();
+    expect(screen.getByText(/it can go down/i)).toBeTruthy();
+    expect(screen.getByText(/doesn't touch tomorrow's free one/i)).toBeTruthy();
   });
 });

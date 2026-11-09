@@ -280,8 +280,13 @@ describe("buying", () => {
     // Being told the number you cannot meet is more use than a toast that says no,
     // and the RPC would refuse it anyway.
     renderPanel(10);
-    const button = await screen.findByRole("button", { name: /120/ });
+    const button = await screen.findByRole("button", { name: "Need 120" });
     expect(button).toBeDisabled();
+  });
+
+  it("keeps Buy · N for a price you can meet", async () => {
+    renderPanel(500);
+    expect(await screen.findByRole("button", { name: "Buy · 120" })).toBeEnabled();
   });
 });
 
@@ -462,6 +467,27 @@ describe("while the commissioner has dust switched off", () => {
     expect(screen.getByText("Nothing up at the moment.")).toBeInTheDocument();
   });
 
+  it("with dust on and nothing up, the stall's empty state is one line that carries the rule", async () => {
+    renderPanel();
+    const line = await screen.findByText(
+      "Nothing up. Spares only; a roster card always leaves you one.",
+    );
+    // The two-line intro is gone, not stacked above it.
+    expect(screen.queryByText(/Sales are between you and the buyer/)).toBeNull();
+    expect(screen.queryByText("Nothing up at the moment.")).toBeNull();
+    expect(line.previousElementSibling?.textContent).toBe("Your stall");
+  });
+
+  it("keeps the intro when listings are up", async () => {
+    stallFn.mockResolvedValue({
+      active: [{ ...rosterListing, sellerId: ME, status: "active", buyerId: null, resolvedAt: null }], // prettier-ignore
+      recent: [],
+    });
+    renderPanel();
+    await screen.findByRole("button", { name: /take down/i });
+    expect(screen.getByText(/Sales are between you and the buyer/)).toBeInTheDocument();
+  });
+
   it("says it is counting rather than going blank while the stall loads", async () => {
     // This path exists so a seller can always take a listing back down, so a
     // blank frame here — then a pop-in — reads as "my cards are gone".
@@ -535,5 +561,79 @@ describe("provenance on the shelf", () => {
     });
     renderPanel();
     expect(await screen.findByText("Gold · unsettled")).toBeInTheDocument();
+  });
+});
+
+describe("failed reads", () => {
+  it("says the market failed rather than that nothing is for sale, and Try again refetches", async () => {
+    browseFn.mockRejectedValue(new Error("boom"));
+    renderPanel();
+    expect(await screen.findByText("Couldn't read the market just now.")).toBeTruthy();
+    expect(screen.queryByText("Nothing for sale right now.")).toBeNull();
+
+    browseFn.mockClear();
+    browseFn.mockResolvedValue({ listings: [], nudgeTopic: null });
+    const section = screen.getByText("Couldn't read the market just now.").closest("div");
+    await userEvent.click(
+      within(section as HTMLElement).getByRole("button", { name: "Try again" }),
+    );
+    await waitFor(() => expect(browseFn).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Nothing for sale right now.")).toBeTruthy();
+  });
+
+  it("says the stall failed rather than that nothing is up", async () => {
+    stallFn.mockRejectedValue(new Error("boom"));
+    renderPanel();
+    expect(await screen.findByText("Couldn't read your stall just now.")).toBeTruthy();
+    expect(screen.queryByText(/^Nothing up/)).toBeNull();
+    stallFn.mockClear();
+    const box = screen.getByText("Couldn't read your stall just now.").closest("div");
+    await userEvent.click(within(box as HTMLElement).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(stallFn).toHaveBeenCalledTimes(1));
+  });
+
+  it("with dust off, still shows the stall error and retry, and does not claim it is empty", async () => {
+    stallFn.mockRejectedValue(new Error("boom"));
+    renderPanel(500, false);
+    expect(await screen.findByText("Couldn't read your stall just now.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText(/Nothing of yours is on it/)).toBeNull();
+  });
+
+  it("says the spares failed inside the List drawer", async () => {
+    // The List button is disabled while spares load and enabled once it settles —
+    // an error included — so the drawer is reachable with nothing to pick from.
+    sparesFn.mockRejectedValue(new Error("boom"));
+    renderPanel();
+    await userEvent.click(await screen.findByRole("button", { name: /list a card/i }));
+    expect(await screen.findByText("Couldn't read your spares just now.")).toBeTruthy();
+    expect(screen.queryByText(/nothing spare to sell yet/i)).toBeNull();
+    sparesFn.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(sparesFn).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("staging a card", () => {
+  it("scrolls the price form into view, nearest, without focusing it", async () => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [
+        { copyId: COPY, eventParticipantId: "ep-1", edition: "gold", viewerOwns: true, assertedBy: "server" }, // prettier-ignore
+      ],
+      secrets: [],
+      blocked: [],
+    });
+    renderPanel();
+    await userEvent.click(await screen.findByRole("button", { name: /list a card/i }));
+    const scroll = HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    scroll.mockClear();
+    await userEvent.click(await screen.findByRole("button", { name: /alice ace/i }));
+    const input = await screen.findByLabelText(/your price/i);
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.calls[0][0]).toMatchObject({ block: "nearest" });
+    expect(scroll.mock.instances[0]).toBe(input.parentElement);
+    expect(document.activeElement).not.toBe(input);
   });
 });

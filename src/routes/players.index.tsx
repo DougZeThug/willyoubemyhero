@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layers, Check, Medal } from "lucide-react";
+import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -58,7 +59,12 @@ import {
   TROPHY_RARITY,
   type CollectionTrophy,
 } from "@/lib/collection-trophies";
-import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
+import {
+  rosterFavouriteId,
+  secretFavouriteId,
+  setVaultFavourites,
+  useVaultFavourites,
+} from "@/lib/vault-favourites";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
@@ -488,6 +494,45 @@ function PlayersPage() {
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
   const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
+
+  // The Undo outlives the render that made it, so it must read the pins as they
+  // are when it is tapped, not as they were when the toast went up.
+  const favouriteIdsRef = useRef(favouriteIds);
+  favouriteIdsRef.current = favouriteIds;
+
+  /**
+   * Pin or unpin from a tile's star, telling you where a pinned card went.
+   *
+   * Pinning lifts the card off its shelf to Favourites at the top of the page, so
+   * without a word the card you were looking at just vanishes. Unpinning sends it
+   * home to a shelf you can see, so it stays silent.
+   *
+   * Copy is generic on purpose: no name, count or set, which would leak how many
+   * secrets exist. A fixed toast id means pinning several in a row replaces the
+   * toast instead of stacking a column of them; Undo then refers to the latest pin.
+   */
+  const togglePin = useCallback(
+    (favourite: string) => {
+      if (isFavourite(favourite)) {
+        toggleFavourite(favourite);
+        return;
+      }
+      toggleFavourite(favourite);
+      toast("Pinned to Favourites", {
+        id: "vault-pinned",
+        action: {
+          label: "Undo",
+          onClick: () => {
+            // Only ever unpins: if it was already unpinned by hand, toggling would
+            // pin it again.
+            const now = favouriteIdsRef.current;
+            if (now.includes(favourite)) setVaultFavourites(now.filter((x) => x !== favourite));
+          },
+        },
+      });
+    },
+    [isFavourite, toggleFavourite],
+  );
 
   /**
    * The pinned shelf, in the order things were pinned.
@@ -966,7 +1011,7 @@ function PlayersPage() {
           <FavouriteButton
             name={s.name}
             on={isFavourite(favourite)}
-            onToggle={() => toggleFavourite(favourite)}
+            onToggle={() => togglePin(favourite)}
             className="absolute right-0 top-0"
           />
         </div>
@@ -1028,12 +1073,7 @@ function PlayersPage() {
             stats page it used to land on. Still a real Link: it is a shareable
             address, it right-clicks, and Back off the viewer returns to this
             shelf scrolled where it was left. */}
-        <Link
-          to="/players/$id"
-          params={{ id: p.id }}
-          search={{ view: 1 }}
-          className="group block focus:outline-none"
-        >
+        <Link to="/players/$id" params={{ id: p.id }} search={{ view: 1 }} className="group block">
           {/* Its own positioned box, so the pip below sits on the CARD rather
               than at the bottom of the caption under it. */}
           <div className="relative">
@@ -1131,7 +1171,7 @@ function PlayersPage() {
           <FavouriteButton
             name={name}
             on={isFavourite(favourite)}
-            onToggle={() => toggleFavourite(favourite)}
+            onToggle={() => togglePin(favourite)}
             className="absolute right-0 top-0"
           />
         )}
@@ -1355,6 +1395,27 @@ function PlayersPage() {
           onRearranging={setRearranging}
         />
 
+        {/* A failed secrets read renders no shelves, which reads as "my secrets
+            are gone". Say it failed instead. Deliberately silent on how many
+            cards or sets exist: that count is withheld. Only when there is
+            nothing to show: a background refetch that fails keeps the last good
+            data on screen, and a "couldn't read" banner over visible shelves
+            would contradict them. */}
+        {secrets.isError && !secrets.data && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <p>Couldn&apos;t read your secrets just now.</p>
+            <button
+              type="button"
+              className="neon-btn-sm"
+              onClick={() => {
+                void secrets.refetch();
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         {/* Secrets keep shelves of their own rather than being interleaved into
             the roster: every roster sort reads a field a secret does not have,
             and editorially a secret is not a roster card. Now that the shelves
@@ -1373,7 +1434,10 @@ function PlayersPage() {
                 shelfRefs.current.set(id, el);
               }}
               className={cn(
-                "scroll-mt-4 rounded-xl transition-shadow",
+                // Clears the sticky site header (4rem + its safe-area inset) plus
+                // a little air: scrollIntoView({block:"start"}) otherwise lands the
+                // shelf's title underneath it.
+                "scroll-mt-[calc(4rem+env(safe-area-inset-top)+1rem)] rounded-xl transition-shadow",
                 flashed === id && "ring-2 ring-primary/60",
               )}
             >
@@ -1390,10 +1454,15 @@ function PlayersPage() {
                 // The one control the sort sheet is behind, on the shelf it
                 // sorts. In the page header it would sit above a shelf that can
                 // be rolled up, controlling nothing you can see.
+                // Icon-only while rearranging: the arrows take the row's width and
+                // at 320px the full label truncates the title to nothing. Not
+                // removed, because "Done rearranging" lives in the sheet this
+                // chip opens and the mode would have no exit.
                 action={
                   section.kind === "roster" ? (
                     <VaultSortChip
                       onOpen={() => setSortSheetOpen(true)}
+                      compact={rearranging}
                       active={sort !== "name" || filter !== "all" || density !== 2}
                     />
                   ) : undefined
