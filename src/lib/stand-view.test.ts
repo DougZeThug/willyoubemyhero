@@ -85,33 +85,33 @@ describe("flipMsFor", () => {
 
 describe("resolveStand", () => {
   it("answers for an empty pack without throwing", () => {
-    const r = resolveStand(undefined);
-    expect(r.onSecret).toBe(false);
-    expect(r.ep).toBeNull();
-    expect(r.secret).toBeNull();
-    expect(r.rarity).toEqual(rarityStyle("base"));
-    expect(r.edition).toBeNull();
-    expect(r.name).toBe("—");
+    const view = resolveStand();
+    expect(view.onSecret).toBe(false);
+    expect(view.ep).toBeNull();
+    expect(view.secret).toBeNull();
+    expect(view.rarity).toEqual(rarityStyle("base"));
+    expect(view.edition).toBeNull();
+    expect(view.name).toBe("—");
     // Unknown is quiet: a duplicate prints nothing on the ribbon.
-    expect(r.outcome).toBe("duplicate");
-    expect(r.isDupe).toBe(true);
-    expect(r.standCopies).toBeNull();
-    expect(r.climbed).toBeNull();
+    expect(view.outcome).toBe("duplicate");
+    expect(view.isDupe).toBe(true);
+    expect(view.standCopies).toBeNull();
+    expect(view.climbed).toBeNull();
   });
 
   it("reads a roster slot off the roster row", () => {
     const slot = roster();
-    const r = resolveStand(slot);
-    expect(r.onSecret).toBe(false);
-    expect(r.ep).toBe(EP);
-    expect(r.secret).toBeNull();
-    expect(r.rarity).toBe(slot.rarity);
-    expect(r.edition).toBe("gold");
-    expect(r.name).toBe("Alice Ace");
-    expect(r.outcome).toBe("new");
-    expect(r.isDupe).toBe(false);
-    expect(r.standCopies).toBe(1);
-    expect(r.climbed).toBeNull();
+    const view = resolveStand(slot);
+    expect(view.onSecret).toBe(false);
+    expect(view.ep).toBe(EP);
+    expect(view.secret).toBeNull();
+    expect(view.rarity).toBe(slot.rarity);
+    expect(view.edition).toBe("gold");
+    expect(view.name).toBe("Alice Ace");
+    expect(view.outcome).toBe("new");
+    expect(view.isDupe).toBe(false);
+    expect(view.standCopies).toBe(1);
+    expect(view.climbed).toBeNull();
   });
 
   it("keeps a finish that is not decided as null rather than standard", () => {
@@ -126,12 +126,12 @@ describe("resolveStand", () => {
 
   it("reads a secret off the card and never wears an edition frame", () => {
     const slot = secret();
-    const r = resolveStand(slot);
-    expect(r.onSecret).toBe(true);
-    expect(r.ep).toBeNull();
-    expect(r.secret).toBe((slot.slot as PackSecretSlot).card);
-    expect(r.edition).toBeNull();
-    expect(r.name).toBe("Pickles");
+    const view = resolveStand(slot);
+    expect(view.onSecret).toBe(true);
+    expect(view.ep).toBeNull();
+    expect(view.secret).toBe((slot.slot as PackSecretSlot).card);
+    expect(view.edition).toBeNull();
+    expect(view.name).toBe("Pickles");
   });
 
   it("says a plain duplicate is a duplicate and a first is not", () => {

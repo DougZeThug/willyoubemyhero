@@ -61,7 +61,7 @@ export function flipMsFor(onSecret: boolean): number {
  * `current` is undefined only for an empty pack, which still has to render a
  * stand rather than throw.
  */
-export function resolveStand(current: StandSlot | undefined) {
+export function resolveStand(current?: StandSlot) {
   const onSecret = current?.slot.kind === "secret";
   const ep = current?.ep ?? null;
   const secret = current?.slot.kind === "secret" ? current.slot.card : null;

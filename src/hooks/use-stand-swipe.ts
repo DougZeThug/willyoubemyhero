@@ -89,12 +89,12 @@ export function useStandSwipe({
     dragX.jump(dx < 0 ? dx * 0.9 : dx * 0.25);
   }
   function handleSwipeUp(e: React.PointerEvent) {
-    const d = swipeRef.current;
+    const start = swipeRef.current;
     swipeRef.current = null;
-    if (!d || d.id !== e.pointerId) return;
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
-    const ms = Date.now() - d.at;
+    if (!start || start.id !== e.pointerId) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const ms = Date.now() - start.at;
     let dir = swipeDirection(dx, dy, ms);
     // A short, fast flick is a throw too: half the distance, if it is quick.
     const flick =
