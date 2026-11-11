@@ -87,8 +87,38 @@ export function HudTimer({
           stroke="oklch(1 0 0 / 0.06)"
           strokeWidth={strokeW}
         />
+        {/* Glow halos: wider, translucent strokes sharing the arc's geometry. A CSS
+            drop-shadow filter on the arc re-rasterised a blur every animation frame;
+            plain strokes only change their dash length. */}
+        {!paused && (
+          <>
+            <circle
+              cx={c}
+              cy={c}
+              r={r}
+              fill="none"
+              stroke="var(--color-primary)"
+              strokeWidth={strokeW + 16}
+              strokeOpacity={0.12}
+              strokeLinecap="round"
+              strokeDasharray={`${progress} ${circ}`}
+            />
+            <circle
+              cx={c}
+              cy={c}
+              r={r}
+              fill="none"
+              stroke="var(--color-primary)"
+              strokeWidth={strokeW + 8}
+              strokeOpacity={0.25}
+              strokeLinecap="round"
+              strokeDasharray={`${progress} ${circ}`}
+            />
+          </>
+        )}
         {/* progress arc */}
         <circle
+          data-testid="hud-arc"
           cx={c}
           cy={c}
           r={r}
@@ -97,11 +127,6 @@ export function HudTimer({
           strokeWidth={strokeW}
           strokeLinecap="round"
           strokeDasharray={`${progress} ${circ}`}
-          style={{
-            filter: paused
-              ? "none"
-              : "drop-shadow(0 0 8px var(--color-primary)) drop-shadow(0 0 16px oklch(0.82 0.14 210 / 0.6))",
-          }}
         />
         {/* cardinal tick marks */}
         {[0, 90, 180, 270].map((deg) => {

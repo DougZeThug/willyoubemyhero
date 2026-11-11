@@ -7,25 +7,25 @@ values, boundaries and a feel check.
 
 ## Plans
 
-| #   | Title                                                      | Severity | Status                                      |
-| --- | ---------------------------------------------------------- | -------- | ------------------------------------------- |
-| 001 | Replace `transition-all` on step dots and picker tiles     | LOW      | DONE (feel check pending)                   |
-| 002 | Stop the foil recoil tween when the pack is grabbed again  | MEDIUM   | DONE (feel check pending)                   |
-| 003 | Cut per-frame paint cost of the live HUD timer             | MEDIUM   | TODO (profile first; may be WONTFIX)        |
-| 004 | Soften the reaction chip's press scale                     | LOW      | DONE (feel check pending)                   |
-| 005 | Gate the two `animate-pulse` icons behind `motion-safe:`   | LOW      | DONE (feel check pending)                   |
-| 006 | Let a re-grabbed card catch up instead of snapping         | MEDIUM   | DONE (feel check required; revert if laggy) |
-| 007 | Shorten the field-comparison bar transition                | LOW      | DONE (feel check pending)                   |
-| 008 | Make the skeleton shimmer constant-speed                   | LOW      | DONE (feel check pending)                   |
-| 009 | Make the shelf-tile press scale perceptible                | LOW      | DONE (feel check pending)                   |
-| 010 | Make nav route-state changes instant                       | LOW      | DONE (feel check pending)                   |
-| 011 | Write card tilt as a direct `transform`, not CSS variables | MEDIUM   | DONE, UNPROFILED (win unmeasured)           |
-| 012 | Introduce one shared ease-out and swap the weak curves     | LOW      | DONE (feel check pending)                   |
-| 013 | Make the finish celebration leave quickly, arrive no pop   | LOW      | DONE (feel check pending)                   |
-| 014 | Make the pack-stand swipe follow the finger (spike)        | MEDIUM   | TODO (spike; keep only if it feels better)  |
-| 015 | Animate leaderboard rows when a finish reorders them       | LOW      | DONE (feel check pending)                   |
-| 016 | Give staged trade cards a short enter                      | LOW      | DONE (feel check pending)                   |
-| 017 | Add press feedback to vote and draft tiles                 | LOW      | DONE (feel check pending)                   |
+| #   | Title                                                      | Severity | Status                                            |
+| --- | ---------------------------------------------------------- | -------- | ------------------------------------------------- |
+| 001 | Replace `transition-all` on step dots and picker tiles     | LOW      | DONE (feel check pending)                         |
+| 002 | Stop the foil recoil tween when the pack is grabbed again  | MEDIUM   | DONE (feel check pending)                         |
+| 003 | Cut per-frame paint cost of the live HUD timer             | MEDIUM   | DONE, UNPROFILED (win unmeasured; check the look) |
+| 004 | Soften the reaction chip's press scale                     | LOW      | DONE (feel check pending)                         |
+| 005 | Gate the two `animate-pulse` icons behind `motion-safe:`   | LOW      | DONE (feel check pending)                         |
+| 006 | Let a re-grabbed card catch up instead of snapping         | MEDIUM   | DONE (feel check required; revert if laggy)       |
+| 007 | Shorten the field-comparison bar transition                | LOW      | DONE (feel check pending)                         |
+| 008 | Make the skeleton shimmer constant-speed                   | LOW      | DONE (feel check pending)                         |
+| 009 | Make the shelf-tile press scale perceptible                | LOW      | DONE (feel check pending)                         |
+| 010 | Make nav route-state changes instant                       | LOW      | DONE (feel check pending)                         |
+| 011 | Write card tilt as a direct `transform`, not CSS variables | MEDIUM   | DONE, UNPROFILED (win unmeasured)                 |
+| 012 | Introduce one shared ease-out and swap the weak curves     | LOW      | DONE (feel check pending)                         |
+| 013 | Make the finish celebration leave quickly, arrive no pop   | LOW      | DONE (feel check pending)                         |
+| 014 | Make the pack-stand swipe follow the finger (spike)        | MEDIUM   | TODO (spike; keep only if it feels better)        |
+| 015 | Animate leaderboard rows when a finish reorders them       | LOW      | DONE (feel check pending)                         |
+| 016 | Give staged trade cards a short enter                      | LOW      | DONE (feel check pending)                         |
+| 017 | Add press feedback to vote and draft tiles                 | LOW      | DONE (feel check pending)                         |
 
 015–017 and 014 are missed opportunities (additive); the rest correct existing motion.
 

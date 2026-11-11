@@ -81,8 +81,8 @@ describe("HudTimer", () => {
     const { container } = render(
       <HudTimer runningSinceMs={120_000} paused status="Standby" targetMs={60_000} />,
     );
-    const arc = container.querySelectorAll("circle")[1];
-    expect(arc.getAttribute("stroke-dasharray")).toMatch(/^0 /);
+    const arc = container.querySelector('[data-testid="hud-arc"]');
+    expect(arc?.getAttribute("stroke-dasharray")).toMatch(/^0 /);
   });
 
   it("stops animating once paused", () => {
