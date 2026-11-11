@@ -1,6 +1,6 @@
 # 011 — Write the card tilt as a direct `transform`, not via CSS variables
 
-- **Status**: TODO (profile first — see Step 1; may end as WONTFIX)
+- **Status**: DONE, UNPROFILED (Steps 2 and 4 applied; the Step 1 profile gate was skipped, so the perf win is unmeasured. Profile on a phone; revert if no gain or the settle looks different)
 - **Commit**: 4df05ee
 - **Severity**: MEDIUM
 - **Category**: Performance
