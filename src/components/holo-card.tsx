@@ -288,6 +288,7 @@ function HoloCardImpl({
   const tiltRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
+  const catchTimer = useRef<number | null>(null);
   const perspRef = useRef(0);
   const pendingRef = useRef<{ px: number; py: number } | null>(null);
   const dragRef = useRef<{ id: number; px: number; py: number; at: number } | null>(null);
@@ -394,7 +395,19 @@ function HoloCardImpl({
       // while every tracking frame stays instant — the card never lags the finger.
       // Keying it on `active` rather than clearing it on pointerdown is what keeps
       // the mouse path right too: hover re-entry never fires a pointerdown.
+      const wasSettling = layer.classList.contains("holo-settle");
       layer.classList.toggle("holo-settle", active === 0);
+      // Re-grabbing mid-settle drops holo-settle, which cancels the in-flight ease
+      // and snaps the card to the finger. A 100ms one-shot catch closes that gap;
+      // it is gone before tracking proper, which has to stay 1:1.
+      if (active === 0) {
+        layer.classList.remove("holo-catch");
+        if (catchTimer.current) window.clearTimeout(catchTimer.current);
+      } else if (wasSettling) {
+        layer.classList.add("holo-catch");
+        if (catchTimer.current) window.clearTimeout(catchTimer.current);
+        catchTimer.current = window.setTimeout(() => layer.classList.remove("holo-catch"), 100);
+      }
       scene.style.setProperty("--holo-rx", `${rx.toFixed(2)}deg`);
       scene.style.setProperty("--holo-ry", `${ry.toFixed(2)}deg`);
       scene.style.setProperty("--holo-lift", `${(active * t.lift).toFixed(1)}px`);
@@ -442,6 +455,7 @@ function HoloCardImpl({
   useEffect(() => {
     return () => {
       if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+      if (catchTimer.current) window.clearTimeout(catchTimer.current);
     };
   }, []);
 

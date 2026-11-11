@@ -6,7 +6,7 @@
 // not a round number. Get it wrong and the wrong face shows, mirrored, for a
 // couple of frames — on WebKit only, which the Chromium-only e2e suite will never
 // catch.
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { playFlip } from "@/lib/card-sfx";
@@ -100,6 +100,58 @@ describe("the card", () => {
     expect(container.querySelector(".holo-turning")).toBeNull();
     expect(container.querySelector(".holo-punch")).toBeNull();
     expect(screen.getByRole("button")).toBeInTheDocument();
+  });
+});
+
+describe("re-grabbing a settling card", () => {
+  it("catches for 100ms instead of snapping, then tracks 1:1", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(
+        <HoloCard
+          frontUrl={null}
+          backUrl={null}
+          name="Alice Ace"
+          rarity={rarityStyle("base")}
+          backContent={<div />}
+        />,
+      );
+      const scene = container.querySelector<HTMLElement>(".holo-scene")!;
+      const layer = scene.firstElementChild as HTMLElement;
+      scene.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 140 }) as DOMRect;
+      const move = (x: number) => {
+        fireEvent.pointerMove(scene, { pointerType: "mouse", clientX: x, clientY: 70 });
+        act(() => {
+          vi.advanceTimersByTime(20);
+        });
+      };
+
+      move(20);
+      expect(layer).not.toHaveClass("holo-settle");
+      expect(layer).not.toHaveClass("holo-catch");
+
+      fireEvent.pointerLeave(scene, { pointerType: "mouse" });
+      expect(layer).toHaveClass("holo-settle");
+
+      move(80);
+      expect(layer).not.toHaveClass("holo-settle");
+      expect(layer).toHaveClass("holo-catch");
+
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(layer).not.toHaveClass("holo-catch");
+
+      // Released again inside the catch window: the catch must not outlive it.
+      fireEvent.pointerLeave(scene, { pointerType: "mouse" });
+      move(30);
+      expect(layer).toHaveClass("holo-catch");
+      fireEvent.pointerLeave(scene, { pointerType: "mouse" });
+      expect(layer).toHaveClass("holo-settle");
+      expect(layer).not.toHaveClass("holo-catch");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

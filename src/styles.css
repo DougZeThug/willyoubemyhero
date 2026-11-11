@@ -775,8 +775,19 @@
   transition: transform 460ms var(--ease-out);
 }
 
+/* One-shot, on the first tracked frame that interrupts a settle. Without it the
+   class swap cancels the in-flight ease and the card jumps to the finger; with
+   it the card closes the gap in 100ms. holo-card.tsx removes it again, so every
+   later tracking frame is still instant. Plain rule, same reason as above. */
+.holo-catch {
+  transition: transform 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .holo-settle {
+    transition: none;
+  }
+  .holo-catch {
     transition: none;
   }
   /* The flip is instant under reduced motion, so a half-flip delay on the face
