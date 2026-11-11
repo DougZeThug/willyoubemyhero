@@ -116,7 +116,8 @@ describe("re-grabbing a settling card", () => {
           backContent={<div />}
         />,
       );
-      const scene = container.querySelector<HTMLElement>(".holo-scene")!;
+      const scene = container.querySelector<HTMLElement>(".holo-scene");
+      if (!scene) throw new Error("expected the card scene to render");
       const layer = scene.firstElementChild as HTMLElement;
       scene.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 140 }) as DOMRect;
       const move = (x: number) => {

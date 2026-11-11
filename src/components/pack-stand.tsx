@@ -531,10 +531,10 @@ export function PackStand({
     // Reduced motion and a card that cannot step stay exactly as they were: the
     // throw is read on release and nothing slides.
     if (!TRACK_SWIPE || reduced || !canAdvance) return;
-    const d = swipeRef.current;
-    if (!d || d.id !== e.pointerId) return;
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
+    const start = swipeRef.current;
+    if (!start || start.id !== e.pointerId) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
     // Tracked only while it is reading as a swipe, so a vertical scroll that
     // starts on the card does not drag it sideways.
     if (Math.abs(dx) < Math.abs(dy) * SWIPE.bias) return;
