@@ -1,6 +1,6 @@
 # 015 — Animate leaderboard rows when a new finish reorders them
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW (missed opportunity)
 - **Category**: Missed opportunity
