@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, animate, useMotionValue } from "motion/react";
 import { HoloCard } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardBadge, editionEarnsTheBeat, type Edition } from "@/lib/card-edition";
-import { swipeDirection } from "@/lib/zoom";
+import { SWIPE, swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
 import { LevelPips } from "@/components/level-pips";
@@ -23,6 +23,16 @@ import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
+
+/**
+ * The card follows the finger through a swipe, instead of waiting for the lift.
+ *
+ * A spike: whether it feels right can only be judged on a phone. One line turns
+ * it off, and with it off the stand is back to reading the throw on pointerup.
+ */
+const TRACK_SWIPE = true;
+/** Where the card leaves to when nothing dragged it anywhere. */
+const EXIT_X = -64;
 
 /** A roster card turns over at the house speed. */
 export const FLIP_MS = 500;
@@ -487,20 +497,87 @@ export function PackStand({
   // eat the next genuine tap.
   const swallowClickRef = useRef(false);
 
+  // Following the finger. `dragX` is the keyed wrapper's own x, so the entrance
+  // and exit springs animate the very value the finger writes to.
+  const dragX = useMotionValue(0);
+  // The spring-back, held so the next touch can stop it rather than fight it.
+  const settleRef = useRef<ReturnType<typeof animate> | null>(null);
+  // Whether this gesture moved the card. A tap must not spring back a card that
+  // is still arriving on its entrance, which is also `dragX`.
+  const draggedRef = useRef(false);
+  // Where the card on its way out is headed. A swipe sets it to wherever the
+  // finger left the card, so the exit carries on from there rather than gliding
+  // back to the default while it fades; the arrow key leaves it alone.
+  const [exitX, setExitX] = useState(EXIT_X);
+  // Not on the card's key in a layout effect: that would run while the old card
+  // is still exiting on this same value and snap it to 0. The incoming card
+  // resets `dragX` itself — motion sets a style motion value to the element's
+  // `initial` when it mounts.
+  useEffect(() => {
+    setExitX(EXIT_X);
+  }, [shownKey]);
+
+  function settle() {
+    settleRef.current = animate(dragX, 0, { type: "spring", duration: 0.4, bounce: 0.2 });
+  }
+
   function handleSwipeDown(e: React.PointerEvent) {
     swallowClickRef.current = false;
+    settleRef.current?.stop();
+    draggedRef.current = false;
     swipeRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at: Date.now() };
+  }
+  function handleSwipeMove(e: React.PointerEvent) {
+    // Reduced motion and a card that cannot step stay exactly as they were: the
+    // throw is read on release and nothing slides.
+    if (!TRACK_SWIPE || reduced || !canAdvance) return;
+    const d = swipeRef.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    // Tracked only while it is reading as a swipe, so a vertical scroll that
+    // starts on the card does not drag it sideways.
+    if (Math.abs(dx) < Math.abs(dy) * SWIPE.bias) return;
+    draggedRef.current = true;
+    // Away from the next card it resists, so it reads as the wrong way.
+    // `jump`, not `set`: it also stops an animation still running on the value.
+    dragX.jump(dx < 0 ? dx * 0.9 : dx * 0.25);
   }
   function handleSwipeUp(e: React.PointerEvent) {
     const d = swipeRef.current;
     swipeRef.current = null;
     if (!d || d.id !== e.pointerId) return;
-    const dir = swipeDirection(e.clientX - d.x, e.clientY - d.y, Date.now() - d.at);
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    const ms = Date.now() - d.at;
+    let dir = swipeDirection(dx, dy, ms);
+    // A short, fast flick is a throw too: half the distance, if it is quick.
+    const flick =
+      TRACK_SWIPE &&
+      !reduced &&
+      dir === 0 &&
+      dx < -SWIPE.dist / 2 &&
+      Math.abs(dx) >= Math.abs(dy) * SWIPE.bias &&
+      Math.abs(dx) / Math.max(ms, 1) > 0.11;
+    if (flick) dir = 1;
+    const committed = dir === 1 && canAdvance;
+    if (committed) {
+      // Batched with the advance below, so the exit sees it as its `custom`.
+      if (TRACK_SWIPE && !reduced) setExitX(Math.min(dragX.get(), EXIT_X));
+    } else if (TRACK_SWIPE && draggedRef.current) {
+      settle();
+    }
+    draggedRef.current = false;
     if (dir === 0) return;
     // Swallowed for either direction, advanced or not: a throw across a
     // face-down card must not fall through and run the reveal ceremony.
     swallowClickRef.current = true;
-    if (dir === 1 && canAdvance) onAdvance();
+    if (committed) onAdvance();
+  }
+  function handleSwipeCancel() {
+    swipeRef.current = null;
+    if (TRACK_SWIPE && draggedRef.current) settle();
+    draggedRef.current = false;
   }
   function handleSwipeClickCapture(e: React.MouseEvent) {
     if (!swallowClickRef.current) return;
@@ -642,10 +719,9 @@ export function PackStand({
         // player stuck on the card.
         className="relative z-10 flex w-full touch-pan-y flex-col items-center gap-3"
         onPointerDown={handleSwipeDown}
+        onPointerMove={handleSwipeMove}
         onPointerUp={handleSwipeUp}
-        onPointerCancel={() => {
-          swipeRef.current = null;
-        }}
+        onPointerCancel={handleSwipeCancel}
         onClickCapture={handleSwipeClickCapture}
       >
         <div className="text-center">
@@ -729,10 +805,11 @@ export function PackStand({
 
           {/* `mode="wait"` serialises the two mounts, so the card leaving and the
               card arriving never share the mark. */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" custom={exitX}>
             {current && (
               <motion.div
                 key={shownKey}
+                style={{ x: dragX }}
                 // A fact about the card on the stand, for the suite that has to
                 // catch the ~300ms beat where it sits face-down before it turns.
                 // That used to be read off the "tap the card to turn it" helper
@@ -752,7 +829,11 @@ export function PackStand({
                       : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
                 }
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
+                // A variant, so the exit can read where the finger left the card.
+                exit="out"
+                variants={{
+                  out: (x: number) => ({ opacity: 0, x: reduced ? 0 : x, scale: 0.94 }),
+                }}
                 transition={{ type: "spring", stiffness: 240, damping: 26 }}
                 className="absolute inset-0"
               >

@@ -1,6 +1,6 @@
 # 014 — Make the pack-stand swipe follow the finger (spike)
 
-- **Status**: TODO (SPIKE — time-box; keep only if it feels better on a phone)
+- **Status**: DONE (spike; code applied behind TRACK_SWIPE in pack-stand.tsx. MUST be feel-checked on a phone: set TRACK_SWIPE = false, or revert, if it feels worse. Design deviated from this file: see the notes at the end)
 - **Commit**: 4df05ee
 - **Severity**: MEDIUM (missed opportunity, not a defect)
 - **Category**: Missed opportunity / Interruptibility
@@ -99,3 +99,15 @@ Design (the spike's hypothesis; validate before committing):
 - **Feel check (real phone)**: during a pack reveal, slowly drag a revealed card left: it follows the finger; release short: it springs back; flick quickly with a short distance: it advances; drag right or when it cannot advance: it resists (rubber-band). Tap to flip still works every time; a vertical scroll started on the card still scrolls the page. Spam swipes: no stuck offset after the next card arrives.
 - Reduced motion on: swipe still advances by throw, no tracking.
 - **Done when**: all of the above behave and `shownKey` changes always start at x = 0, or the plan is closed WONTFIX.
+
+## Implementation notes (added after execution)
+
+Exploration before execution corrected parts of the design above; the shipped code differs as follows.
+
+- HoloCard already captures the pointer on touch and tilts on its own `onPointerMove`; its events bubble to the stand's column, so `onPointerMove` on the column works. The card tilts while it slides (unverified on a device).
+- Tracking writes use `dragX.jump()` (stops an in-flight animation), not `.set()`.
+- The exit is a variant (`exit="out"`) fed by `AnimatePresence custom={exitX}` so a committed swipe exits from where the finger left the card (`Math.min(dragX, -64)`); keyboard and Next-button advances still exit to -64. Motion keeps the `custom` it had when `isPresent` flipped, verified in `PresenceChild`.
+- The planned `useLayoutEffect(() => dragX.jump(0), [shownKey])` was deliberately NOT added: in `mode="wait"` it would run while the old card is still exiting on the same value and snap it to 0. The incoming card resets `dragX` itself because Motion sets a style motion value to the element's `initial` on mount.
+- A short, fast flick also commits (more than half of `SWIPE.dist` and faster than 0.11 px/ms, horizontal-dominant). Thresholds in `src/lib/zoom.ts` are unchanged.
+- Known rough edges: no dead zone, so a tap with 1-2px of horizontal jitter nudges the card and springs back; an advance from the keyboard mid-drag leaves the gesture attached to the new card. `layoutId` projection under a moving `x` parent is unverified.
+- Adds one lint warning (`react-hooks/set-state-in-effect` on the `setExitX` effect, same pattern as the existing `setSettled(false)` effect); `onExitComplete={() => setExitX(EXIT_X)}` would avoid it.
