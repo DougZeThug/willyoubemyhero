@@ -10,7 +10,7 @@ values, boundaries and a feel check.
 | #   | Title                                                      | Severity | Status                                     |
 | --- | ---------------------------------------------------------- | -------- | ------------------------------------------ |
 | 001 | Replace `transition-all` on step dots and picker tiles     | LOW      | DONE (feel check pending)                  |
-| 002 | Stop the foil recoil tween when the pack is grabbed again  | MEDIUM   | TODO                                       |
+| 002 | Stop the foil recoil tween when the pack is grabbed again  | MEDIUM   | DONE (feel check pending)                  |
 | 003 | Cut per-frame paint cost of the live HUD timer             | MEDIUM   | TODO (profile first; may be WONTFIX)       |
 | 004 | Soften the reaction chip's press scale                     | LOW      | DONE (feel check pending)                  |
 | 005 | Gate the two `animate-pulse` icons behind `motion-safe:`   | LOW      | DONE (feel check pending)                  |
@@ -24,8 +24,8 @@ values, boundaries and a feel check.
 | 013 | Make the finish celebration leave quickly, arrive no pop   | LOW      | DONE (feel check pending)                  |
 | 014 | Make the pack-stand swipe follow the finger (spike)        | MEDIUM   | TODO (spike; keep only if it feels better) |
 | 015 | Animate leaderboard rows when a finish reorders them       | LOW      | TODO                                       |
-| 016 | Give staged trade cards a short enter                      | LOW      | TODO                                       |
-| 017 | Add press feedback to vote and draft tiles                 | LOW      | TODO                                       |
+| 016 | Give staged trade cards a short enter                      | LOW      | DONE (feel check pending)                  |
+| 017 | Add press feedback to vote and draft tiles                 | LOW      | DONE (feel check pending)                  |
 
 015–017 and 014 are missed opportunities (additive); the rest correct existing motion.
 

@@ -1,6 +1,6 @@
 # 002 — Stop the foil recoil tween when the pack is grabbed again
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: MEDIUM
 - **Category**: Interruptibility

@@ -228,7 +228,7 @@ function DraftPage() {
                   onClick={() => isAdmin && !isTaken && currentPicker && pick(pos)}
                   disabled={isTaken || !isAdmin || !currentPicker || busy}
                   className={cn(
-                    "aspect-square rounded-lg border p-2 text-left transition",
+                    "aspect-square rounded-lg border p-2 text-left transition duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] enabled:active:scale-[0.97]",
                     isTaken
                       ? "border-primary/60 bg-primary/15 hud-glow"
                       : isAdmin && currentPicker

@@ -1,6 +1,6 @@
 # 017 — Add press feedback to vote and draft tiles
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW (missed opportunity)
 - **Category**: Missed opportunity / Press feedback

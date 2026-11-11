@@ -224,7 +224,7 @@ function AwardsPage() {
                           onClick={() => vote(cat.id, pid)}
                           disabled={!me || pending === key}
                           className={cn(
-                            "flex min-h-11 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:opacity-50",
+                            "flex min-h-11 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-[color,background-color,border-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] enabled:active:scale-[0.97] disabled:opacity-50",
                             chosen
                               ? "border-primary bg-primary/15"
                               : "border-border-strong bg-white/[0.02] hover:border-primary",
