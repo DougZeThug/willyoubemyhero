@@ -288,6 +288,7 @@ function HoloCardImpl({
   const tiltRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
+  const catchTimer = useRef<number | null>(null);
   const perspRef = useRef(0);
   const pendingRef = useRef<{ px: number; py: number } | null>(null);
   const dragRef = useRef<{ id: number; px: number; py: number; at: number } | null>(null);
@@ -394,10 +395,23 @@ function HoloCardImpl({
       // while every tracking frame stays instant — the card never lags the finger.
       // Keying it on `active` rather than clearing it on pointerdown is what keeps
       // the mouse path right too: hover re-entry never fires a pointerdown.
+      const wasSettling = layer.classList.contains("holo-settle");
       layer.classList.toggle("holo-settle", active === 0);
-      scene.style.setProperty("--holo-rx", `${rx.toFixed(2)}deg`);
-      scene.style.setProperty("--holo-ry", `${ry.toFixed(2)}deg`);
-      scene.style.setProperty("--holo-lift", `${(active * t.lift).toFixed(1)}px`);
+      // Re-grabbing mid-settle drops holo-settle, which cancels the in-flight ease
+      // and snaps the card to the finger. A 100ms one-shot catch closes that gap;
+      // it is gone before tracking proper, which has to stay 1:1.
+      if (active === 0) {
+        layer.classList.remove("holo-catch");
+        if (catchTimer.current) window.clearTimeout(catchTimer.current);
+      } else if (wasSettling) {
+        layer.classList.add("holo-catch");
+        if (catchTimer.current) window.clearTimeout(catchTimer.current);
+        catchTimer.current = window.setTimeout(() => layer.classList.remove("holo-catch"), 100);
+      }
+      // Written straight onto the layer rather than through scene variables: a
+      // var() on the scene re-resolves for every descendant on each change, and
+      // only this one element reads the angle.
+      layer.style.transform = `translateZ(${(active * t.lift).toFixed(1)}px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
       card.style.setProperty("--holo-active", `${active}`);
       card.style.setProperty("--holo-gx", `${(px * 100).toFixed(1)}%`);
       card.style.setProperty("--holo-gy", `${(py * 100).toFixed(1)}%`);
@@ -442,6 +456,7 @@ function HoloCardImpl({
   useEffect(() => {
     return () => {
       if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+      if (catchTimer.current) window.clearTimeout(catchTimer.current);
     };
   }, []);
 
@@ -788,8 +803,9 @@ function HoloCardImpl({
           // the same transform the settle transition eases, so it costs nothing
           // extra — and it must not live on the flip layer below, whose 500ms
           // duration would smear the lift out and make the card feel gluey.
-          transform:
-            "translateZ(var(--holo-lift,0px)) rotateX(var(--holo-rx,0deg)) rotateY(var(--holo-ry,0deg))",
+          // Same function list, in the same order, as applyTilt writes, so the
+          // settle transition interpolates function by function.
+          transform: "translateZ(0px) rotateX(0deg) rotateY(0deg)",
           // Gated to the hero card: thirty promoted layers is the exact cost the
           // rest of this file is written to avoid.
           willChange: tilt === "hero" ? "transform" : undefined,

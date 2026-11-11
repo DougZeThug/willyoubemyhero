@@ -1,6 +1,6 @@
 # 003 — Cut the per-frame paint cost of the live HUD timer
 
-- **Status**: TODO (profile first — see Step 1; may end as WONTFIX)
+- **Status**: DONE, UNPROFILED (Steps 2, 3, 5 applied; the Step 1 profile gate was skipped, so the perf win is unmeasured. The halos are hard-edged bands, not a soft blur: eyeball the glow on a phone and revert if it looks worse)
 - **Commit**: 4df05ee
 - **Severity**: MEDIUM
 - **Category**: Performance

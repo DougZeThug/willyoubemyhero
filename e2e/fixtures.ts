@@ -382,11 +382,12 @@ async function throwCardLeft(page: Page) {
   await page.mouse.move(box.x + box.width * 0.85, y);
   await page.mouse.down();
   // One move, not four. Only the pointerdown and pointerup coordinates decide
-  // the swipe — the stand binds down/up/cancel and never reads pointermove
-  // (pack-stand.tsx:598-614) — so interpolated steps change `dx` not at all and
-  // `ms` a great deal. Each one is a round trip, and each one also runs
-  // holo-card's pointermove (holo-card.tsx:531-546), forcing a layout read and
-  // a rAF tilt write, all of it inside the 700ms being measured.
+  // the swipe — the stand's pointermove handler only slides the card to follow
+  // the finger and the release reads the throw off down/up alone — so
+  // interpolated steps change `dx` not at all and `ms` a great deal. Each one
+  // is a round trip, and each one also runs holo-card's pointermove
+  // (holo-card.tsx), forcing a layout read and a rAF tilt write, all of it
+  // inside the 700ms being measured.
   await page.mouse.move(box.x + box.width * 0.15, y);
   await page.mouse.up();
 }

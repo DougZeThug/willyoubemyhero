@@ -7,9 +7,9 @@
 // route waiting for a landing that can never come. And, now that a secret can
 // sit in any slot, that the stand treats it as a step like any other while
 // still giving it the room it is owed.
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PackStand, type StandSlot } from "./pack-stand";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
@@ -693,5 +693,75 @@ describe("the stand slot's height budget", () => {
     const slot = container.querySelector('[class*="calc((100svh-"]')!;
     expect(slot.className).toContain("max(10rem,calc((100svh-21rem)*5/7))");
     expect(slot.className).not.toContain("19rem");
+  });
+});
+
+describe("swiping the card away", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** The column that reads the throw — the card's pointer events bubble to it. */
+  const column = () => screen.getByTestId("stand-step").closest("div.touch-pan-y") as HTMLElement;
+
+  /**
+   * One drag across the stand from (100, 100). jsdom lays nothing out, so the
+   * coordinates are spelled out and the clock is faked: the stand reads the
+   * throw off `Date.now()`, and a real test run would measure ~0ms every time.
+   */
+  function drag(to: { dx: number; dy?: number }, ms: number) {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const at = (dx: number, dy: number) => ({
+      pointerId: 1,
+      clientX: 100 + dx,
+      clientY: 100 + dy,
+    });
+    fireEvent.pointerDown(column(), at(0, 0));
+    now += ms / 2;
+    fireEvent.pointerMove(column(), at(to.dx / 2, (to.dy ?? 0) / 2));
+    now += ms / 2;
+    fireEvent.pointerMove(column(), at(to.dx, to.dy ?? 0));
+    fireEvent.pointerUp(column(), at(to.dx, to.dy ?? 0));
+  }
+
+  it("steps on once for a committed throw to the left", () => {
+    const onAdvance = vi.fn();
+    renderStand({ revealed: [0], onAdvance });
+    drag({ dx: -120 }, 150);
+    expect(onAdvance).toHaveBeenCalledTimes(1);
+  });
+
+  it("steps on for a short flick that is fast enough", () => {
+    const onAdvance = vi.fn();
+    renderStand({ revealed: [0], onAdvance });
+    drag({ dx: -30 }, 100);
+    expect(onAdvance).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not step on for a short, slow drag", () => {
+    const onAdvance = vi.fn();
+    renderStand({ revealed: [0], onAdvance });
+    drag({ dx: -30 }, 600);
+    expect(onAdvance).not.toHaveBeenCalled();
+  });
+
+  it("does not step on for a drag that is mostly vertical", () => {
+    const onAdvance = vi.fn();
+    renderStand({ revealed: [0], onAdvance });
+    drag({ dx: -80, dy: 120 }, 150);
+    expect(onAdvance).not.toHaveBeenCalled();
+  });
+
+  it("does not step on for a drag to the right", () => {
+    const onAdvance = vi.fn();
+    renderStand({ revealed: [0], onAdvance });
+    drag({ dx: 120 }, 150);
+    expect(onAdvance).not.toHaveBeenCalled();
+  });
+
+  it("does not step on while the card cannot step", () => {
+    const onAdvance = vi.fn();
+    renderStand({ revealed: [0], busy: true, onAdvance });
+    drag({ dx: -120 }, 150);
+    expect(onAdvance).not.toHaveBeenCalled();
   });
 });

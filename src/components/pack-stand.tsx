@@ -1,68 +1,39 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { HoloCard } from "@/components/holo-card";
-import { SealedBack } from "@/components/pack-card-back";
-import { CardBackPanel } from "@/components/card-back-panel";
-import { SecretBackPanel } from "@/components/secret-back-panel";
+import { StandCardFace } from "@/components/stand-card-face";
+import { StandHeader } from "@/components/stand-header";
+import { StandCaption } from "@/components/stand-caption";
+import { DeckBehind, SecretScrim, SlamFlash, StandCardOverlays } from "@/components/stand-overlays";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { cardBadge, editionEarnsTheBeat, type Edition } from "@/lib/card-edition";
-import { swipeDirection } from "@/lib/zoom";
-import { StandDeck, StandEntrance } from "@/components/stand-entrance";
+import { editionEarnsTheBeat, type Edition } from "@/lib/card-edition";
 import { RevealAmbience } from "@/components/reveal-ambience";
-import { LevelPips } from "@/components/level-pips";
-import { PullRibbon } from "@/components/pull-ribbon";
 import { ambienceStrength } from "@/lib/reveal-ambience";
 import { burst } from "@/lib/card-confetti";
 import { cue, playEditionShine } from "@/lib/card-sfx";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
-import { secretTierCaption, secretTierEarnsTheBeat, secretTierStyle } from "@/lib/secret-rarity";
+import { secretTierEarnsTheBeat } from "@/lib/secret-rarity";
 import type { PackSlot } from "@/lib/pack";
-import { upgradeLabel, type PackOutcome } from "@/lib/pack-outcome";
-import { packedByLabel } from "@/lib/card-pulls";
+import type { PackOutcome } from "@/lib/pack-outcome";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { useStandSwipe } from "@/hooks/use-stand-swipe";
+import {
+  BEAT_MS,
+  FACE_LANDS_AT,
+  SLAM_MS,
+  type StandBeat,
+  exitVariants,
+  flipMsFor,
+  gatheredInitial,
+  resolveStand,
+  steppedInitial,
+} from "@/lib/stand-view";
 import { cn } from "@/lib/utils";
 
-/** A roster card turns over at the house speed. */
-export const FLIP_MS = 500;
-/**
- * A secret takes more than twice as long.
- *
- * It is the one card on the screen nobody has seen before, and the only one
- * whose turn is the payoff rather than a way of getting at the stats on the back.
- */
-export const SECRET_FLIP_MS = 1100;
-
-/**
- * How long a secret's impact lasts.
- *
- * Short. A flash and a shake are punctuation, and anything long enough to watch
- * stops being an impact and becomes an effect — the confetti afterwards is what
- * carries the celebration.
- */
-const SLAM_MS = 460;
-
-/**
- * How far into the turn the face has actually arrived.
- *
- * Not a new number: it is the fraction the landing burst has always used, named
- * here because the second beat has to be measured from the same instant. A card
- * is front-on well before the rotation stops, and a beat measured from the flip's
- * full length would begin a quarter-second after the moment it is punctuating.
- */
-const FACE_LANDS_AT = 0.86;
-
-/**
- * The beat a special pull is held on before its metal comes up.
- *
- * Long enough to read as two events — the card, and then what it turned out to
- * be — and short enough that nobody standing in a garden thinks it has stalled.
- */
-const BEAT_MS = 250;
-
-/** How long the held light takes to let go. */
-const BLOOM_MS = 280;
+// Exported from here as they always have been; the numbers themselves live in
+// stand-view.ts, beside the helpers that share them.
+export { FLIP_MS, SECRET_FLIP_MS } from "@/lib/stand-view";
 
 export type StandParticipant = {
   id: string;
@@ -107,29 +78,6 @@ export type StandSlot = {
   /** The roster row behind a roster slot. Null on a secret. */
   ep: StandParticipant | null;
 };
-
-/**
- * The glow the card on the stand is wearing.
- *
- * `--seal-edge` is read by the `.secret-seal` keyframes in styles.css, which is
- * why this leaves the type system's beaten path — a custom property cannot be
- * expressed in CSSProperties.
- */
-function standStyle(args: {
-  peeking: boolean;
-  onSecret: boolean;
-  isRevealed: boolean;
-  rarity: Rarity;
-}): React.CSSProperties {
-  const { peeking, onSecret, isRevealed, rarity } = args;
-  const style: Record<string, string> = { "--seal-edge": rarity.border };
-  if (peeking && !onSecret) {
-    style.boxShadow = `inset 0 0 0 6px ${rarity.border}, 0 0 40px ${rarity.border}`;
-  } else if (onSecret && isRevealed) {
-    style.boxShadow = `0 0 60px -10px ${rarity.border}`;
-  }
-  return style as React.CSSProperties;
-}
 
 /**
  * Whether what is on the stand has earned a second beat.
@@ -259,9 +207,8 @@ export function PackStand({
   /** Which slot is on the stand. Clamped, because the cursor may be past it. */
   const shownIndex = Math.min(cursor, slots.length - 1);
   const current = slots[shownIndex];
-  const onSecret = current?.slot.kind === "secret";
-  const ep = current?.ep ?? null;
-  const secret = current?.slot.kind === "secret" ? current.slot.card : null;
+  const { onSecret, ep, secret, rarity, edition, name, outcome, isDupe, standCopies, climbed } =
+    resolveStand(current);
   const isRevealed = revealed.includes(shownIndex);
   /**
    * This card is face-down and its tap would go nowhere.
@@ -291,7 +238,7 @@ export function PackStand({
   const [settled, setSettled] = useState(false);
   const [flipped, setFlipped] = useState(false);
   /** Beat one holds the face at 60%; beat two lets it go. See the effect below. */
-  const [beat, setBeat] = useState<"none" | "held" | "bloomed">("none");
+  const [beat, setBeat] = useState<StandBeat>("none");
   // Latched on the first render, so only the card the ceremony handed over gets
   // the gather entrance. Every card after it is a step, and a step slides.
   const firstMountRef = useRef(true);
@@ -365,7 +312,7 @@ export function PackStand({
       setSettled(true);
       return;
     }
-    const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
+    const ms = flipMsFor(onSecret);
     const t = setTimeout(() => setSettled(true), ms + 40);
     return () => clearTimeout(t);
   }, [isRevealed, onSecret, reduced]);
@@ -404,7 +351,7 @@ export function PackStand({
     if (reduced || !isRevealed) return;
     // Once per card. `settled` flips back and forth across a step.
     if (burstFiredRef.current === shownKey) return;
-    const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
+    const ms = flipMsFor(onSecret);
     const t = setTimeout(() => {
       burstFiredRef.current = shownKey;
       void burst(
@@ -465,7 +412,7 @@ export function PackStand({
       return;
     }
     setBeat("held");
-    const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
+    const ms = flipMsFor(onSecret);
     const t = setTimeout(fire, ms * FACE_LANDS_AT + BEAT_MS);
     return () => clearTimeout(t);
     // Deliberately the same deps as the burst above, and `beat` is not among them:
@@ -477,37 +424,8 @@ export function PackStand({
   // The card is mid-ceremony: turned over already in everything but appearance.
   const canAdvance = isRevealed && !busy && !peeking;
 
-  // The step gesture. Swiping the card away is how you move on — there is no
-  // Next button — so the whole stand reads the throw, not just the card.
-  const swipeRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
-  // A swipe can end in a click the browser synthesises over whatever the finger
-  // lifted on, and the card underneath must not also treat that as a tap —
-  // same trap useCardZoom swallows. Cleared again on the next pointerdown,
-  // because a touch drag produces no click at all and a stale flag here would
-  // eat the next genuine tap.
-  const swallowClickRef = useRef(false);
-
-  function handleSwipeDown(e: React.PointerEvent) {
-    swallowClickRef.current = false;
-    swipeRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at: Date.now() };
-  }
-  function handleSwipeUp(e: React.PointerEvent) {
-    const d = swipeRef.current;
-    swipeRef.current = null;
-    if (!d || d.id !== e.pointerId) return;
-    const dir = swipeDirection(e.clientX - d.x, e.clientY - d.y, Date.now() - d.at);
-    if (dir === 0) return;
-    // Swallowed for either direction, advanced or not: a throw across a
-    // face-down card must not fall through and run the reveal ceremony.
-    swallowClickRef.current = true;
-    if (dir === 1 && canAdvance) onAdvance();
-  }
-  function handleSwipeClickCapture(e: React.MouseEvent) {
-    if (!swallowClickRef.current) return;
-    swallowClickRef.current = false;
-    e.preventDefault();
-    e.stopPropagation();
-  }
+  // The step gesture, and the card following the finger through it.
+  const { dragX, exitX, handlers } = useStandSwipe({ reduced, canAdvance, onAdvance, shownKey });
 
   // Desktop has no natural swipe; the arrow key is the same step.
   useEffect(() => {
@@ -519,10 +437,6 @@ export function PackStand({
     return () => window.removeEventListener("keydown", onKey);
   }, [canAdvance, onAdvance]);
 
-  const rarity = current?.rarity ?? rarityStyle("base");
-  // A secret wears the prism ring and never an edition frame; a roster card
-  // wears whatever Postgres minted, and standard until that is known.
-  const edition: Edition | null = onSecret ? null : (current?.edition ?? null);
   editionRef.current = edition ?? "standard";
   rarityRef.current = rarity;
   twoBeatRef.current = earnsTheBeat({
@@ -531,25 +445,12 @@ export function PackStand({
     edition,
     secretTier: secret?.tier,
   });
-  const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
-  const outcome = current?.outcome ?? "duplicate";
-  const isDupe = outcome === "duplicate";
 
   // A position, not a title: the card is the interface, and "CARD 1 OF 3" above
   // it is a web page explaining itself. A secret keeps the same position — that
   // it is a secret is the card's news to break, not the heading's.
   const heading = `${shownIndex + 1} / ${slots.length}`;
-
-  /**
-   * The number the ribbon prints for whatever is on the mark.
-   *
-   * Null rather than 1 when the route has not answered: a stand that assumed
-   * would stamp NEW on a card it knows nothing about, which is the one mistake
-   * this ribbon must never make.
-   */
-  const standCopies = current?.copies ?? null;
-  const climbed = current && outcome === "upgrade" ? upgradeLabel(current.slot) : null;
 
   return (
     // The camera shakes when a secret lands, and the *scene* is what shakes —
@@ -558,55 +459,9 @@ export function PackStand({
     // is plenty; past about five it stops being an impact and becomes an
     // earthquake, on a phone somebody is holding at arm's length.
     <div className="relative flex flex-col items-center gap-3">
-      {/* Everything else on the page steps back for a secret. The room going
-          dark *is* the tell — and it is the only one: the pack gave nothing
-          away, so this is the first the person hears of it. */}
-      <AnimatePresence>
-        {onSecret && (
-          <motion.div
-            aria-hidden
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduced ? 0 : 0.5 }}
-            className={cn("fixed inset-0 z-0 bg-background/85", !reduced && "backdrop-blur-sm")}
-          />
-        )}
-      </AnimatePresence>
+      <SecretScrim onSecret={onSecret} reduced={reduced} />
 
-      {/* The secret landing.
-          Blackout first, so the flash has something to be brighter than, then
-          white through the secret's own colour. This is the frame the whole
-          sequence has been building to and it is allowed to be the loudest thing
-          the app does. */}
-      <AnimatePresence>
-        {slam && !reduced && (
-          <motion.div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 z-20"
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: SLAM_MS / 1000, ease: "easeOut" }}
-          >
-            <motion.div
-              className="absolute inset-0 bg-black"
-              initial={{ opacity: 0.85 }}
-              animate={{ opacity: 0 }}
-              transition={{ duration: 0.14, ease: "easeOut" }}
-            />
-            <motion.div
-              className="absolute inset-0"
-              style={{
-                background: `radial-gradient(70% 50% at 50% 44%, oklch(1 0 0 / 92%) 0%, ${rarity.accent} 42%, transparent 78%)`,
-              }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 0.95, 0] }}
-              transition={{ duration: 0.34, times: [0, 0.18, 1], ease: "easeOut" }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <SlamFlash slam={slam} reduced={reduced} accent={rarity.accent} />
 
       {/* The room reacting to whatever is on the stand. Behind the card, never on
           it: the card already carries a bezel, a foil and an edge light, and a
@@ -641,62 +496,21 @@ export function PackStand({
         // pointercancel, the swipe dies, and with no Next button that is a
         // player stuck on the card.
         className="relative z-10 flex w-full touch-pan-y flex-col items-center gap-3"
-        onPointerDown={handleSwipeDown}
-        onPointerUp={handleSwipeUp}
-        onPointerCancel={() => {
-          swipeRef.current = null;
-        }}
-        onClickCapture={handleSwipeClickCapture}
+        onPointerDown={handlers.onPointerDown}
+        onPointerMove={handlers.onPointerMove}
+        onPointerUp={handlers.onPointerUp}
+        onPointerCancel={handlers.onPointerCancel}
+        onClickCapture={handlers.onClickCapture}
       >
-        <div className="text-center">
-          {/* Carries a test id because the e2e suite reads it to know the stand
-              has the screen and which step it is on. It used to match the prose
-              ("Card 1 of 3") out of the whole document body, which made a copy
-              change a five-spec failure with no obvious cause. */}
-          <div
-            data-testid="stand-step"
-            className={cn(
-              "font-display text-label font-black uppercase tracking-[0.08em]",
-              !onSecret && "text-muted-foreground/70",
-            )}
-            style={{ color: onSecret ? rarity.accent : undefined }}
-          >
-            {heading}
-          </div>
-          {/* Kept in the tree at every step — it is what a screen reader and the
-              e2e suite both read to know what the card wants — but dimmed to the
-              edge of legibility once there is a card to look at instead. */}
-          <p className="mt-1 h-5 text-meta leading-snug text-muted-foreground/70">
-            {peeking
-              ? ""
-              : onSecret
-                ? isRevealed
-                  ? "Swipe for the next card · tap for the back"
-                  : "Not on the roster. Yours for good."
-                : isRevealed
-                  ? "Swipe for the next card · tap for the back"
-                  : // Only the invitation goes quiet when the tap would be
-                    // refused. The secret's line above is a statement about the
-                    // card, not an offer, so it has nothing to take back.
-                    tapRefused
-                    ? ""
-                    : "Tap the card to turn it"}
-          </p>
-          {peeking && (
-            <p
-              className="mt-1 text-label font-bold uppercase tracking-[0.08em]"
-              style={{ color: rarity.accent }}
-            >
-              {/* The hold is only ever spent on a card worth it — see peekMs —
-                  so the line under it can say why. */}
-              {onSecret
-                ? "Something else…"
-                : outcome === "upgrade"
-                  ? "Better than yours…"
-                  : "New card…"}
-            </p>
-          )}
-        </div>
+        <StandHeader
+          heading={heading}
+          accent={rarity.accent}
+          peeking={peeking}
+          onSecret={onSecret}
+          isRevealed={isRevealed}
+          tapRefused={tapRefused}
+          outcome={outcome}
+        />
 
         {/* The slot, not the card.
             It carries the size, so it has one on the commit *before* there is a
@@ -724,15 +538,15 @@ export function PackStand({
           ref={slotRef}
           className="relative aspect-[5/7] w-full max-w-[min(320px,max(10rem,calc((100svh-21rem)*5/7)))]"
         >
-          {/* What is left of the pack, waiting behind this card. */}
-          {!reduced && <StandDeck count={behind} art={universalBack} width={slot?.width ?? 0} />}
+          <DeckBehind reduced={reduced} count={behind} art={universalBack} slot={slot} />
 
           {/* `mode="wait"` serialises the two mounts, so the card leaving and the
               card arriving never share the mark. */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" custom={exitX}>
             {current && (
               <motion.div
                 key={shownKey}
+                style={{ x: dragX }}
                 // A fact about the card on the stand, for the suite that has to
                 // catch the ~300ms beat where it sits face-down before it turns.
                 // That used to be read off the "tap the card to turn it" helper
@@ -745,260 +559,71 @@ export function PackStand({
                 // zeroed initial, so nothing here animates at all and there is no
                 // second transition to fight the flight.
                 initial={
-                  landing
-                    ? false
-                    : gathered
-                      ? { opacity: 0, x: 0, scale: reduced ? 1 : 0.94 }
-                      : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
+                  landing ? false : gathered ? gatheredInitial(reduced) : steppedInitial(reduced)
                 }
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
+                // A variant, so the exit can read where the finger left the card.
+                exit="out"
+                variants={exitVariants(reduced)}
                 transition={{ type: "spring", stiffness: 240, damping: 26 }}
                 className="absolute inset-0"
               >
-                <motion.div
-                  // The layout id is what carries this card into its column when the
-                  // sequence ends. On a wrapper, never on HoloCard itself, whose
-                  // subtree is preserve-3d and projects badly.
-                  layoutId={`pack-card-${current.slot.id}`}
-                  animate={onSecret && peeking && !reduced ? { scale: 1.06 } : { scale: 1 }}
-                  transition={{ duration: 0.9 }}
-                  className={cn(
-                    "relative rounded-xl",
-                    // Mounted from the first frame so the front art decodes while
-                    // the deck is still in the air, and held behind `invisible`
-                    // rather than unmounted so the flip is warm the instant it
-                    // lands. `visibility: hidden` is not only paint: the card is
-                    // out of the accessibility tree, out of the tab order and not
-                    // hit-tested, so neither a thumb nor Playwright can reach a
-                    // card that is still travelling.
-                    landing && "invisible",
-                    // Only while sealed: a breathing ring on a card you are already
-                    // looking at is a notification badge, not anticipation. This
-                    // ring is the first thing that says "secret" — the pack's own
-                    // backs are identical, so the room going dark and the edge
-                    // starting to breathe are the whole reveal that one is here.
-                    onSecret && !isRevealed && "secret-seal",
-                    // A wink, not a parade. An upgraded copy is not a plain
-                    // duplicate and does not shimmer like one.
-                    onSecret && isRevealed && isDupe && "secret-dupe-shimmer",
-                    peeking && !onSecret && !reduced && "animate-pulse",
-                  )}
-                  style={standStyle({ peeking, onSecret, isRevealed, rarity })}
-                >
-                  <HoloCard
-                    edition={edition ?? "standard"}
-                    // Mounted while the card is still face-down, so the art is
-                    // decoded before the turn rather than during it. The front face
-                    // is backface-hidden and explicitly `invisible` until the flip
-                    // passes edge-on, so nothing shows through early.
-                    frontUrl={onSecret ? (secret?.artUrl ?? null) : (cards?.[ep?.id ?? ""]?.front ?? null)} // prettier-ignore
-                    backUrl={
-                      showStats
-                        ? onSecret
-                          ? universalBack
-                          : (cards?.[ep?.id ?? ""]?.back ?? null)
-                        : universalBack
-                    }
-                    name={name}
-                    rarity={rarity}
-                    tilt="hero"
-                    flipMs={onSecret ? SECRET_FLIP_MS : FLIP_MS}
-                    // A held pull sweeps when it blooms rather than when it
-                    // lands: fired under the scrim, the sweep would be spent on
-                    // a card nobody can see.
-                    shineDelayMs={
-                      beat === "none"
-                        ? undefined
-                        : Math.round((onSecret ? SECRET_FLIP_MS : FLIP_MS) * FACE_LANDS_AT) +
-                          BEAT_MS
-                    }
-                    faceDown={!isRevealed}
-                    flipped={isRevealed ? flipped : false}
-                    onFlippedChange={isRevealed ? setFlipped : undefined}
-                    backContent={
-                      showStats ? (
-                        onSecret && secret ? (
-                          <SecretBackPanel card={secret} rarity={rarity} />
-                        ) : ep ? (
-                          <CardBackPanel
-                            ep={ep}
-                            bundle={bundle}
-                            rarity={rarity}
-                            edition={edition ?? "standard"}
-                          />
-                        ) : (
-                          <SealedBack />
-                        )
-                      ) : (
-                        <SealedBack />
-                      )
-                    }
-                    // A card still face-down owns its tap: turning it has to run the
-                    // ceremony, not just rotate quietly. Handing the tap back once
-                    // revealed is what re-arms HoloCard's own flip, so examining the
-                    // back needs no code here.
-                    //
-                    // Dropped during the hold, while the automatic run owns the
-                    // sequence, and while the card before this one is still being
-                    // revealed. A card holds face-down for 900ms (1600ms for a
-                    // secret) before it turns, and every tap in that window used to
-                    // start another ceremony over the same card.
-                    onClick={isRevealed || tapRefused ? undefined : () => onReveal(shownIndex)}
-                    // And refused rather than merely unhandled. Without this a tap
-                    // in those windows falls through to HoloCard's own flip and
-                    // turns a face-down card to its sealed back — the card would
-                    // answer, just not with the thing it offered.
-                    tapDisabled={tapRefused}
-                    // A horizontal throw is the stand's own gesture now — it means
-                    // "next card", read by the wrapper above — so the card must not
-                    // also answer to it. Same split as the player detail page.
-                    flickToFlip={false}
-                  />
-                </motion.div>
+                <StandCardFace
+                  slotId={current.slot.id}
+                  shownIndex={shownIndex}
+                  onSecret={onSecret}
+                  peeking={peeking}
+                  reduced={reduced}
+                  landing={landing}
+                  isRevealed={isRevealed}
+                  isDupe={isDupe}
+                  tapRefused={tapRefused}
+                  showStats={showStats}
+                  beat={beat}
+                  flipped={flipped}
+                  setFlipped={setFlipped}
+                  rarity={rarity}
+                  edition={edition}
+                  secret={secret}
+                  ep={ep}
+                  name={name}
+                  cards={cards}
+                  universalBack={universalBack}
+                  bundle={bundle}
+                  onReveal={onReveal}
+                />
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* The beat between "it's Bob" and "…in Gold".
-
-              A sibling of the card and never a child, for the reason the ribbon
-              below is one: the card carries a layoutId and a projected subtree
-              drags its children through the same distortion.
-
-              A black scrim rather than a brightness filter, and not an opacity on
-              anything above the card either. `filter` is a grouping property — an
-              element carrying one is flattened out of its 3D context and the flip
-              stops being a rotation and becomes a squash (see .holo-turning in
-              styles.css) — and `opacity` groups the same way on the very element
-              motion is projecting. This composites the face at 60% and touches
-              nothing the card is made of.
-
-              `initial` at zero is load-bearing rather than taste:
-              usePrefersReducedMotion answers false on the first client commit by
-              design, so a stand mounting on an already-revealed card holds for one
-              frame before the reduced pass cancels it. Ramping from nothing means
-              that frame is invisible.
-
-              pointer-events-none because the card underneath is tappable the
-              instant it lands — its back is one tap away — and a hit test would
-              otherwise find this instead. */}
-          <AnimatePresence>
-            {beat === "held" && (
-              <motion.div
-                aria-hidden
-                data-testid="reveal-beat"
-                className="pointer-events-none absolute inset-0 rounded-xl bg-black"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.4 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: BLOOM_MS / 1000, ease: "easeOut" }}
-              />
-            )}
-          </AnimatePresence>
-
-          {/* Whether this one is new, better than yours, or another one — stamped
-              on the frame rather than added to the four lines of caption below.
-
-              A sibling of the card, never a child: the card carries a layoutId
-              and flies to its column on the summary, and a projected subtree
-              drags its children through the same distortion. Only once the card
-              is actually face up — a ribbon on a back is the answer before the
-              question. `settled` and not just `isRevealed`, which goes true on
-              the tap: without it the stamp lands on a card still edge-on and
-              answers halfway through its own turn. */}
-          {isRevealed && settled && standCopies != null && (
-            <PullRibbon copies={standCopies} upgrade={climbed} />
-          )}
-
-          {/* The deck arriving, over the top of the card it is becoming. */}
-          {entry && landing && (
-            <StandEntrance
-              from={entry.from}
-              slot={entry.slot}
-              art={universalBack}
-              onLanded={land}
-            />
-          )}
+          <StandCardOverlays
+            beat={beat}
+            isRevealed={isRevealed}
+            settled={settled}
+            standCopies={standCopies}
+            climbed={climbed}
+            entry={entry}
+            landing={landing}
+            universalBack={universalBack}
+            onLanded={land}
+          />
         </div>
 
         {/* Reserved height, so turning a card never shunts the dots below it. */}
         <div className="flex min-h-12 flex-col items-center justify-start gap-0.5 text-center">
           <AnimatePresence>
             {isRevealed && current && (
-              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                <div className="font-display text-sm font-black uppercase leading-tight tracking-wide">
-                  {name}
-                </div>
-                {onSecret ? (
-                  <>
-                    {/* The pips ride even on a duplicate: the copy in front of
-                        you still rolled a level, and hiding it here would make
-                        the one moment the level is decided the one place it is
-                        not shown.
-
-                        `namesLevel` follows the caption below, which is the only
-                        other thing here that says the level out loud — and on a
-                        plain duplicate it is replaced by a line that never names
-                        it. Without this the pips would announce "Level 5 of 5"
-                        and a screen reader would never hear "Mythic" at all. */}
-                    <LevelPips tier={secret?.tier} namesLevel={isDupe} className="mt-0.5" />
-                    <div
-                      className="text-label font-bold uppercase tracking-[0.08em]"
-                      style={{ color: isDupe ? undefined : secretTierStyle(secret?.tier).accent }}
-                    >
-                      {/* An upgrade keeps the level line: the level is the news. */}
-                      {isDupe
-                        ? "Already yours — this one's just showing off"
-                        : secretTierCaption(secret?.tier)}
-                    </div>
-                    {/* The point of the dupe economy, said at the only moment it
-                        lands: the sting is now something worth selling. WORTH,
-                        not paid — nothing is credited on a pull any more, so
-                        "+N dust" here would be a lie. */}
-                    {current.sellValue ? (
-                      <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
-                        Sell for {current.sellValue}
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    {/* A special finish takes this line in its own metal and the
-                        tier drops to the muted one beneath — see cardBadge.
-                        Nothing extra on a standard finish, which is seven pulls
-                        in ten. */}
-                    {(() => {
-                      const badge = cardBadge(
-                        { label: rarity.label, reason: "", accent: rarity.accent },
-                        edition,
-                      );
-                      return (
-                        <div
-                          className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
-                          style={{ color: badge.color }}
-                        >
-                          {badge.headline}
-                        </div>
-                      );
-                    })()}
-                    {ep && packedByLabel(pullCounts?.[ep.id]) && (
-                      <div className="text-meta font-semibold text-muted-foreground">
-                        {packedByLabel(pullCounts?.[ep.id])}
-                      </div>
-                    )}
-                    {/* The same offer a duplicate secret gets, in the same words,
-                        because it is the same ledger. The route only prices a
-                        card when it is a spare and dust is on, so reaching it at
-                        all is the decision. */}
-                    {current.sellValue ? (
-                      <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
-                        Sell for {current.sellValue}
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </motion.div>
+              <StandCaption
+                name={name}
+                onSecret={onSecret}
+                secret={secret}
+                isDupe={isDupe}
+                rarity={rarity}
+                edition={edition}
+                ep={ep}
+                pullCounts={pullCounts}
+                sellValue={current.sellValue}
+              />
             )}
           </AnimatePresence>
         </div>

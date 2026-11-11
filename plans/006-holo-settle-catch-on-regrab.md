@@ -1,6 +1,6 @@
 # 006 — Let a re-grabbed card catch up instead of snapping
 
-- **Status**: TODO (feel-dependent — do the Feel check on a phone before keeping it)
+- **Status**: DONE (code applied; MUST be feel-checked on a phone, revert if the catch reads as lag)
 - **Commit**: 4df05ee
 - **Severity**: MEDIUM
 - **Category**: Interruptibility
