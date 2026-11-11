@@ -20,7 +20,7 @@ values, boundaries and a feel check.
 | 009 | Make the shelf-tile press scale perceptible                | LOW      | DONE (feel check pending)                  |
 | 010 | Make nav route-state changes instant                       | LOW      | DONE (feel check pending)                  |
 | 011 | Write card tilt as a direct `transform`, not CSS variables | MEDIUM   | TODO (profile first; may be WONTFIX)       |
-| 012 | Introduce one shared ease-out and swap the weak curves     | LOW      | TODO (run last)                            |
+| 012 | Introduce one shared ease-out and swap the weak curves     | LOW      | DONE (feel check pending)                  |
 | 013 | Make the finish celebration leave quickly, arrive no pop   | LOW      | DONE (feel check pending)                  |
 | 014 | Make the pack-stand swipe follow the finger (spike)        | MEDIUM   | TODO (spike; keep only if it feels better) |
 | 015 | Animate leaderboard rows when a finish reorders them       | LOW      | DONE (feel check pending)                  |

@@ -9,6 +9,7 @@ import { usePackStatus } from "@/hooks/use-pack-status";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { packWaiting as packStillSealed } from "@/lib/pack";
 import { activeTab, navTabs, type NavRowId } from "@/lib/nav";
+import { EASE_OUT } from "@/lib/motion";
 import { useActiveEvent } from "@/hooks/use-active-event";
 import { useNavShape } from "@/lib/nav-shape";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,7 @@ export function SiteNav() {
   // Fading *out* is part of the ceremony taking the screen. Coming back is not:
   // `inert` lifts the moment the flag clears, so a 300ms fade-in would leave the
   // nav tappable and focusable while it was still invisible.
-  const step = { duration: reduced || !presenting ? 0 : 0.3, ease: "easeOut" } as const;
+  const step = { duration: reduced || !presenting ? 0 : 0.3, ease: EASE_OUT } as const;
   const active = activeTab(
     path,
     links.map((l) => l.to),

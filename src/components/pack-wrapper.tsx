@@ -3,6 +3,7 @@ import { animate, motion, useMotionValue, useTransform, type MotionValue } from 
 import { Sparkles } from "lucide-react";
 import { playTearTick } from "@/lib/card-sfx";
 import { seededRng } from "@/lib/format";
+import { EASE_OUT } from "@/lib/motion";
 import { TEAR, tearProgress } from "@/lib/pack";
 import { CEREMONY, ceremonyReached, type CeremonyPhase } from "@/lib/pack-ceremony";
 import {
@@ -736,7 +737,7 @@ export function PackWrapper({
             }}
             initial={false}
             animate={{ opacity: bracing ? [0, 0.34] : 0 }}
-            transition={{ duration: 0.42, ease: "easeIn" }}
+            transition={{ duration: 0.42, ease: EASE_OUT }}
           />
         )}
 

@@ -10,6 +10,7 @@ import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { celebrateSecret } from "@/lib/card-confetti";
 import { cue, playReveal, playSecretRiser } from "@/lib/card-sfx";
 import { SECRET_CHIME, SECRET_DUPE_CHIME, secretFoil } from "@/lib/secret-cards";
+import { EASE_OUT } from "@/lib/motion";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTierFloorLabel, secretTierStyle, type SecretTier } from "@/lib/secret-rarity";
 import type { ImageUrlSet } from "@/lib/media";
@@ -186,7 +187,7 @@ export function MilestoneReveal({
           className="relative z-10 w-full max-w-[280px]"
           initial={reduced ? false : { opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.35 }}
+          transition={{ duration: 0.35, ease: EASE_OUT }}
         >
           <HoloCard
             frontUrl={card.artUrl}

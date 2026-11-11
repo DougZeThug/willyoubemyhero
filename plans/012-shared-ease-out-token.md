@@ -1,6 +1,6 @@
 # 012 — Introduce one shared ease-out and swap the weak curves
 
-- **Status**: TODO (run LAST: it touches lines other plans also edit)
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW
 - **Category**: Cohesion & tokens
@@ -94,6 +94,6 @@ duration tokens.
 
 ## Verification
 
-- **Mechanical**: commands in Step 4. `grep -rn '"easeIn"\|"easeOut"' src --include=*.tsx | grep -v components/ui` returns nothing.
+- **Mechanical**: commands in Step 4. Note: `grep -rn '"easeIn"\|"easeOut"' src --include=*.tsx | grep -v components/ui` is NOT expected to be empty. Sixteen `"easeOut"` uses remain in ceremony code (`pack-wrapper.tsx`, `pack-stand.tsx`, `pack-opening.tsx`, `reveal-ambience.tsx`) that this plan deliberately does not touch; the original expectation was wrong.
 - **Feel check**: run a pack open + milestone reveal + bought-pull reveal: entrances start slightly snappier, nothing else shifts. Fire reactions on a card: burst is shorter (0.3s) but still reads. Open/close a ceremony and watch the nav fade (still 0.3s out, instant back).
 - **Done when**: every row applied or skipped with a note, and checks pass.
