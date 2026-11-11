@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowLeftRight, Plus, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import {
   Drawer,
@@ -555,25 +556,33 @@ function Tray({
 
       {staged.length > 0 && (
         <ul className="mb-3 grid grid-cols-2 gap-2">
-          {staged.map((s) => (
-            <li key={s.key} className="flex flex-col items-center">
-              <TradeItemTile
-                item={s.item}
-                lookup={lookup}
-                size="lg"
-                concealed={conceal && s.item.viewerOwns === false}
-                backUrl={backUrl}
-              />
-              <button
-                type="button"
-                onClick={() => onRemove(s)}
-                aria-label={`Remove ${s.item.kind === "secret" ? s.item.name : lookup(s.item.eventParticipantId).name}`}
-                className="mt-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-destructive"
+          <AnimatePresence initial={false}>
+            {staged.map((s) => (
+              <motion.li
+                key={s.key}
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+                className="flex flex-col items-center"
               >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </li>
-          ))}
+                <TradeItemTile
+                  item={s.item}
+                  lookup={lookup}
+                  size="lg"
+                  concealed={conceal && s.item.viewerOwns === false}
+                  backUrl={backUrl}
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(s)}
+                  aria-label={`Remove ${s.item.kind === "secret" ? s.item.name : lookup(s.item.eventParticipantId).name}`}
+                  className="mt-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-destructive"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       )}
 

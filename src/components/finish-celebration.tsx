@@ -89,13 +89,17 @@ export function FinishCelebration({
           aria-label={`${name} finished in ${formatTime(timeMs ?? 0)}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          exit={{ opacity: 0, transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] } }}
           className="fixed inset-0 z-50 grid place-items-center bg-background/85 pt-safe pb-safe backdrop-blur"
         >
           <motion.div
-            initial={{ scale: 0.85, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0 }}
+            initial={{ opacity: 0, scale: 0.85, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{
+              opacity: 0,
+              scale: 0.9,
+              transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
+            }}
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             className="hud-bezel hud-glow mx-4 max-w-lg rounded-3xl border border-primary/40 p-8 text-center"
           >

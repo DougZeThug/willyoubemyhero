@@ -3,6 +3,7 @@ import { animate, motion, useMotionValue, useTransform, type MotionValue } from 
 import { Sparkles } from "lucide-react";
 import { playTearTick } from "@/lib/card-sfx";
 import { seededRng } from "@/lib/format";
+import { EASE_OUT } from "@/lib/motion";
 import { TEAR, tearProgress } from "@/lib/pack";
 import { CEREMONY, ceremonyReached, type CeremonyPhase } from "@/lib/pack-ceremony";
 import {
@@ -329,6 +330,9 @@ export function PackWrapper({
   const packRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: number; x: number } | null>(null);
   const tickRef = useRef(0);
+  // Kept so a re-grab inside the recoil can stop it: otherwise the old tween and
+  // the new pointermove both write `front`.
+  const recoilRef = useRef<ReturnType<typeof animate> | null>(null);
   const reduced = usePrefersReducedMotion();
 
   /**
@@ -433,6 +437,8 @@ export function PackWrapper({
     if (shed) front.set(1);
   }, [shed, front]);
 
+  useEffect(() => () => recoilRef.current?.stop(), []);
+
   function end(e: React.PointerEvent<HTMLDivElement>) {
     if (dragRef.current?.id === e.pointerId && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -441,7 +447,7 @@ export function PackWrapper({
     // Short of the threshold the foil springs shut. Losing the progress is the
     // point: a rip you did not finish is a pack you did not open. Animated rather
     // than snapped, because the wrapper is elastic now and elastic things recoil.
-    animate(front, 0, { duration: 0.28, ease: [0.22, 1, 0.36, 1] });
+    recoilRef.current = animate(front, 0, { duration: 0.28, ease: [0.23, 1, 0.32, 1] });
   }
 
   /** Where the leading edge of the tear is, as a percentage across the pack. */
@@ -485,6 +491,8 @@ export function PackWrapper({
       onPointerDown={
         sealed
           ? (e) => {
+              recoilRef.current?.stop();
+              recoilRef.current = null;
               e.currentTarget.setPointerCapture(e.pointerId);
               dragRef.current = { id: e.pointerId, x: e.clientX };
               tickRef.current = 0;
@@ -729,7 +737,7 @@ export function PackWrapper({
             }}
             initial={false}
             animate={{ opacity: bracing ? [0, 0.34] : 0 }}
-            transition={{ duration: 0.42, ease: "easeIn" }}
+            transition={{ duration: 0.42, ease: EASE_OUT }}
           />
         )}
 

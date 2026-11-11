@@ -70,7 +70,7 @@ export function FieldComparison({
             <span className="hidden h-2 flex-1 overflow-hidden rounded-full bg-white/5 min-[380px]:block">
               {row.ms != null && (
                 <span
-                  className="block h-full rounded-full transition-[width] duration-700 ease-out"
+                  className="block h-full rounded-full transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
                   style={{
                     width: `${Math.max(4, ((row.ms ?? 0) / worst) * 100)}%`,
                     // A station win reads in the tier colour at full strength;

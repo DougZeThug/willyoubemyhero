@@ -22,7 +22,7 @@
  *
  * `order` survives a redefinition upstream, so `hover` stays ahead of `active`
  * in the cascade and an explicit `active:` utility still outranks the promoted
- * one — which is what keeps players.index.tsx's pressed tile shrinking to 0.99
+ * one — which is what keeps players.index.tsx's pressed tile shrinking to 0.97
  * rather than growing to the 1.02 its hover asks for.
  */
 @custom-variant hover {
@@ -229,6 +229,7 @@
     oklch(0.82 0.14 210 / 22%) 0%,
     transparent 60%
   );
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   /* The floor for anything that floats over the bottom of the screen — the
      toaster and the offline banner. The tab bar is ~58px plus the home
      indicator and both clear it by the same amount, so its height is one number
@@ -771,7 +772,7 @@
    Deliberately a plain rule rather than an `@utility`: it is added via classList,
    and a plain rule can never be dropped by the class scanner. */
 .holo-settle {
-  transition: transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 460ms var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1695,7 +1696,7 @@
       transparent 80%
     );
     background-size: 220% 100%;
-    animation: skeleton-sweep 2.6s ease-in-out infinite;
+    animation: skeleton-sweep 2.6s linear infinite;
   }
 }
 

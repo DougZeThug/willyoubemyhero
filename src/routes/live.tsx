@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { motion } from "motion/react";
 import { User2, Trophy, Radio } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -149,7 +150,7 @@ function LivePage() {
     <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
         <div className="flex items-center justify-center gap-2 text-primary">
-          <Radio className="h-4 w-4 animate-pulse" />
+          <Radio className="h-4 w-4 motion-safe:animate-pulse" />
           {/* The page's only h1, so the sections below aren't orphaned h2s. */}
           <h1 className="font-display text-label font-black uppercase tracking-[0.08em]">
             Live · Spectator
@@ -374,8 +375,10 @@ function LiveTopFive({
             {leaderboard.map((row) => {
               const art = avatarFor(row.ep, cards, photos);
               return (
-                <li
+                <motion.li
                   key={row.run.id}
+                  layout="position"
+                  transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
                   className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-2"
                 >
                   <span
@@ -412,7 +415,7 @@ function LiveTopFive({
                   <span className="timer-digits tabular text-primary text-lg">
                     {formatTime(row.run.official_time_ms)}
                   </span>
-                </li>
+                </motion.li>
               );
             })}
           </ol>

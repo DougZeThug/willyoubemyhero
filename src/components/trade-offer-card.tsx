@@ -187,7 +187,7 @@ export function TradeItemTile({
       aria-pressed={selected}
       className={cn(
         width,
-        "shrink-0 rounded-md p-1 text-left transition-all focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "shrink-0 rounded-md p-1 text-left transition-[background-color,box-shadow] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         selected ? "bg-primary/15 ring-2 ring-primary" : "hover:bg-white/[0.04]",
       )}
     >

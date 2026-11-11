@@ -11,6 +11,7 @@ import { PullRibbon } from "@/components/pull-ribbon";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { cardBadge } from "@/lib/card-edition";
+import { EASE_OUT } from "@/lib/motion";
 import { upgradeLabel } from "@/lib/pack-outcome";
 import { nextMilestoneLine, type Streak } from "@/lib/streaks";
 import { secretTierCaption, secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
@@ -184,7 +185,7 @@ export function PackSummary({
         className="text-center"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
       >
         <h1 className="font-display text-2xl font-black uppercase leading-none">Pack Complete</h1>
         <p className="mt-1 text-meta font-semibold text-muted-foreground">
@@ -292,6 +293,7 @@ export function PackSummary({
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2, ease: EASE_OUT }}
                   className="text-center"
                 >
                   {/* Two lines at most. The column is 140px now rather than 80,

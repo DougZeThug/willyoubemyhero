@@ -7,6 +7,7 @@ import { MessageSquare, Send, Trash2 } from "lucide-react";
 import { deleteComment, postComment, toggleReaction } from "@/lib/social.functions";
 import { buzz } from "@/lib/card-sfx";
 import { useMemberSession } from "@/lib/member-token";
+import { EASE_OUT } from "@/lib/motion";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
 import { cn } from "@/lib/utils";
@@ -353,7 +354,7 @@ export function CardSocial({
                   }
                   title={list.length > 0 ? list.map((r) => labelFor(r)).join(", ") : undefined}
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] disabled:opacity-50",
                     active
                       ? "border-primary bg-primary/15"
                       : "border-border-strong bg-white/[0.02] hover:border-primary",
@@ -384,7 +385,7 @@ export function CardSocial({
                           className="absolute text-sm"
                           initial={{ opacity: 1, x: 0, y: 0, scale: 0.6 }}
                           animate={{ opacity: 0, x: p.x, y: p.y, scale: 1.25 }}
-                          transition={{ duration: 0.55, ease: "easeOut", delay: i * 0.02 }}
+                          transition={{ duration: 0.3, ease: EASE_OUT, delay: i * 0.02 }}
                           onAnimationComplete={
                             i === BURST.length - 1 ? () => setBursting(null) : undefined
                           }

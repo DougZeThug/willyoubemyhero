@@ -9,6 +9,7 @@ import { usePackStatus } from "@/hooks/use-pack-status";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { packWaiting as packStillSealed } from "@/lib/pack";
 import { activeTab, navTabs, type NavRowId } from "@/lib/nav";
+import { EASE_OUT } from "@/lib/motion";
 import { useActiveEvent } from "@/hooks/use-active-event";
 import { useNavShape } from "@/lib/nav-shape";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,7 @@ export function SiteNav() {
   // Fading *out* is part of the ceremony taking the screen. Coming back is not:
   // `inert` lifts the moment the flag clears, so a 300ms fade-in would leave the
   // nav tappable and focusable while it was still invisible.
-  const step = { duration: reduced || !presenting ? 0 : 0.3, ease: "easeOut" } as const;
+  const step = { duration: reduced || !presenting ? 0 : 0.3, ease: EASE_OUT } as const;
   const active = activeTab(
     path,
     links.map((l) => l.to),
@@ -129,7 +130,7 @@ export function SiteNav() {
                     // is 844px wide and still a thumb. 32px was fine while this
                     // was only ever a mouse's row; the pointer rule is what
                     // makes that true.
-                    "relative inline-flex min-h-11 items-center rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide transition-colors pointer-fine:min-h-0",
+                    "relative inline-flex min-h-11 items-center rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide pointer-fine:min-h-0",
                     active === l.to
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
@@ -185,7 +186,7 @@ export function SiteNav() {
                     // below is how this row says "you are here", and a press is
                     // not that. It is the same white/5 the desktop row's hover
                     // wears, which is what that row's press now resolves to.
-                    "relative flex flex-col items-center gap-1 whitespace-nowrap rounded-md py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors active:bg-white/5",
+                    "relative flex flex-col items-center gap-1 whitespace-nowrap rounded-md py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-[background-color] duration-100 ease-[cubic-bezier(0.23,1,0.32,1)] active:bg-white/5",
                     active === l.to ? "text-primary" : "text-muted-foreground",
                   )}
                 >
@@ -269,7 +270,7 @@ function ProfileLink({ current }: { current: boolean }) {
       aria-label="You"
       aria-current={current ? "page" : undefined}
       className={cn(
-        "flex h-11 w-11 items-center justify-center transition-colors hover:text-primary md:w-16 md:justify-end",
+        "flex h-11 w-11 items-center justify-center hover:text-primary md:w-16 md:justify-end",
         current ? "text-primary" : "text-muted-foreground",
       )}
     >

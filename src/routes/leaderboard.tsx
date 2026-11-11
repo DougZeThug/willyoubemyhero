@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
@@ -175,10 +176,12 @@ function LeaderboardPage() {
               // separately for the look, so the marker is suppressed.
               <ol className="list-none divide-y divide-white/5">
                 {rows.map((row) => (
-                  <li
+                  <motion.li
                     key={row.run.id}
+                    layout="position"
+                    transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
                     className={cn(
-                      "flex items-center gap-3 px-4 py-3 transition",
+                      "flex items-center gap-3 px-4 py-3 transition-colors",
                       row.place === 1 &&
                         "bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--color-primary)]",
                     )}
@@ -279,7 +282,7 @@ function LeaderboardPage() {
                     >
                       <Share2 className="h-4 w-4" />
                     </Button>
-                  </li>
+                  </motion.li>
                 ))}
               </ol>
             )}
