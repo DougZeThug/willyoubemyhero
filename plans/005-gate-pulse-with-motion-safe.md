@@ -1,6 +1,6 @@
 # 005 — Gate the two `animate-pulse` icons behind `motion-safe:`
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW
 - **Category**: Accessibility

@@ -1,6 +1,6 @@
 # 008 — Make the skeleton shimmer constant-speed
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW
 - **Category**: Easing & duration

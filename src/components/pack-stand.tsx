@@ -167,7 +167,10 @@ function StepDots({ total, at, accent }: { total: number; at: number; accent: st
       {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
-          className={cn("h-1 rounded-full transition-all", i === at ? "w-4" : "w-1")}
+          className={cn(
+            "h-1 rounded-full transition-[width,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+            i === at ? "w-4" : "w-1",
+          )}
           style={{ background: i <= at ? accent : "oklch(1 0 0 / 18%)" }}
         />
       ))}

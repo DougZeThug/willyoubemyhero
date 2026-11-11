@@ -353,7 +353,7 @@ export function CardSocial({
                   }
                   title={list.length > 0 ? list.map((r) => labelFor(r)).join(", ") : undefined}
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] disabled:opacity-50",
                     active
                       ? "border-primary bg-primary/15"
                       : "border-border-strong bg-white/[0.02] hover:border-primary",

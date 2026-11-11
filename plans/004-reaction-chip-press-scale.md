@@ -1,6 +1,6 @@
 # 004 — Soften the reaction chip's press scale
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW
 - **Category**: Physicality (press feedback)

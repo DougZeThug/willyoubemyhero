@@ -566,7 +566,7 @@ function StartCard({
           <Radio
             className={cn(
               "h-4 w-4 shrink-0",
-              slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground",
+              slot.onClock ? "motion-safe:animate-pulse text-primary" : "text-muted-foreground",
             )}
           />
           <div className="min-w-0 flex-1">

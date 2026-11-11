@@ -22,7 +22,7 @@
  *
  * `order` survives a redefinition upstream, so `hover` stays ahead of `active`
  * in the cascade and an explicit `active:` utility still outranks the promoted
- * one — which is what keeps players.index.tsx's pressed tile shrinking to 0.99
+ * one — which is what keeps players.index.tsx's pressed tile shrinking to 0.97
  * rather than growing to the 1.02 its hover asks for.
  */
 @custom-variant hover {
@@ -1695,7 +1695,7 @@
       transparent 80%
     );
     background-size: 220% 100%;
-    animation: skeleton-sweep 2.6s ease-in-out infinite;
+    animation: skeleton-sweep 2.6s linear infinite;
   }
 }
 

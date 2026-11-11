@@ -1,6 +1,6 @@
 # 013 — Make the finish celebration leave quickly and arrive without a pop
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW
 - **Category**: Physicality / Easing

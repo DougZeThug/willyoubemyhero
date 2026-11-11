@@ -149,7 +149,7 @@ function LivePage() {
     <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
         <div className="flex items-center justify-center gap-2 text-primary">
-          <Radio className="h-4 w-4 animate-pulse" />
+          <Radio className="h-4 w-4 motion-safe:animate-pulse" />
           {/* The page's only h1, so the sections below aren't orphaned h2s. */}
           <h1 className="font-display text-label font-black uppercase tracking-[0.08em]">
             Live · Spectator

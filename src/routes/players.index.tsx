@@ -983,7 +983,10 @@ function PlayersPage() {
         type="button"
         onClick={() => openShelf(shelf)}
         aria-label={`Show your ${t.label} cards`}
-        className={cn(shell, "transition-transform hover:scale-[1.02] active:scale-[0.99]")}
+        className={cn(
+          shell,
+          "transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-[1.02] active:scale-[0.97]",
+        )}
         style={{ borderColor: TROPHY_RARITY.border }}
       >
         {body}

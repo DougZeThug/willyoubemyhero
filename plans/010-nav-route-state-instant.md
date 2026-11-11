@@ -1,6 +1,6 @@
 # 010 — Make nav route-state changes instant
 
-- **Status**: TODO
+- **Status**: DONE (code applied; device feel check still pending)
 - **Commit**: 4df05ee
 - **Severity**: LOW
 - **Category**: Purpose & frequency
