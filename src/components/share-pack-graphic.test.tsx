@@ -51,7 +51,10 @@ describe("SharePack", () => {
   it("clamps a long name to two lines so it cannot push the counter off the canvas", () => {
     draw([roster("Bartholomew-Featherstonehaugh"), secret("Alpha Beta Gamma Delta"), roster("C")]);
     const name = screen.getByText("Bartholomew-Featherstonehaugh");
-    expect(name.style.maxHeight).toBe(`${2 * 28 * 1.05}px`);
+    // Compared as a number: jsdom 31 serialises 58.800000000000004px as 58.8px,
+    // and the float noise was never what this test is about.
+    expect(parseFloat(name.style.maxHeight)).toBeCloseTo(2 * 28 * 1.05, 5);
+    expect(name.style.maxHeight).toMatch(/px$/);
     expect(name.style.overflow).toBe("hidden");
     expect(name.style.overflowWrap).toBe("anywhere");
     expect(screen.getByText("Alpha Beta Gamma Delta").style.maxHeight).toBe(`${2 * 34 * 1.05}px`);
