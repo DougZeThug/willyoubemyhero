@@ -16,6 +16,7 @@ import { TradeBuilder } from "./trade-builder";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { RosterSpare, SecretSpare, TradeSpares } from "@/lib/trades";
 import { createQueryWrapper } from "@/test/query";
+import { finishSheetExit } from "@/test/sheet";
 
 // A provider, because the tiles below now ask for the set list to print the set
 // chip. Nothing in this file asserts on that query — it is the same shared key
@@ -525,4 +526,7 @@ function openPicker(): HTMLElement {
  */
 async function sheetGone() {
   await waitFor(() => expect(document.body.style.pointerEvents).not.toBe("none"));
+  // The sheet's own exit animation, which jsdom never plays: until it ends the
+  // closed sheet keeps the rest of the page aria-hidden.
+  finishSheetExit();
 }

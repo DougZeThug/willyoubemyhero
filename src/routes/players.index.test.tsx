@@ -6,6 +6,7 @@
 // already been finished. Two of those three rules are invisible in the component
 // itself — they live in the condition at the render site — so this is where they
 // have to be held.
+import { finishSheetExit } from "@/test/sheet";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -547,6 +548,9 @@ describe("vault mobile polish", () => {
     expect(chip().querySelector("span")?.className ?? "").not.toContain("sr-only");
     await userEvent.click(chip());
     await userEvent.click(await screen.findByRole("button", { name: "Rearrange shelves" }));
+    // The closed sheet keeps the rest of the page aria-hidden until its exit
+    // animation ends, which jsdom never plays.
+    finishSheetExit();
     expect(chip().querySelector("span")?.className).toContain("sr-only");
   });
 });
