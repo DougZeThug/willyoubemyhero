@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { motion } from "motion/react";
-import { ArrowLeft, PackageOpen } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -71,9 +71,12 @@ import { usePackSell } from "@/hooks/use-pack-sell";
 import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
-import { urlFromSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
+import { universalBack } from "@/lib/collection-view";
+import { PackDealingSlot } from "@/components/pack-dealing-slot";
+import { buildStandSlots, type SoldSlot } from "@/lib/pack-stand-slots";
+import { wait } from "@/lib/wait";
 
 export const Route = createFileRoute("/players/pack")({
   head: () => ({
@@ -93,8 +96,6 @@ export const Route = createFileRoute("/players/pack")({
 
 /** How many cards the wrapper shows flying out. The server deals exactly this many. */
 const PACK_SIZE = 3;
-/** A slot sold from the summary: what it fetched, and the count it left behind. */
-type SoldSlot = { awarded: number; copies: number | null };
 /** Nothing sold from this pack. Shared so the stand memo does not rebuild every render. */
 const EMPTY_SOLD: Record<number, SoldSlot> = {};
 
@@ -115,8 +116,6 @@ const COMPLETION_BEAT_MS = 900;
  * back on the retry rather than dealing a second one.
  */
 const OPEN_TIMEOUT_MS = 8_000;
-/** How long the dealing slot stays wordless before it says the signal is slow. */
-const SLOW_SIGNAL_MS = 3_000;
 /** Full ceremony for the first few duplicate secrets; after that it is a tax. */
 const DUPE_CEREMONY_LIMIT = 3;
 /** How often to notice the date changed under a tab nobody closed. */
@@ -150,28 +149,6 @@ type OpenRequest = {
   /** Bumped by the retry button, so an identical request still re-runs the effect. */
   nonce: number;
 };
-
-/**
- * Words for the dealing slot once it has been bare too long.
- *
- * Mounted only while the slot is, so its clock starts with the wait and a retry
- * (which swaps the slot out for the retry card and back) starts it over. It
- * never touches the request or its timeout: it only says the wait is not a
- * lost pack.
- */
-function SlowSignal() {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setSlow(true), SLOW_SIGNAL_MS);
-    return () => clearTimeout(t);
-  }, []);
-  if (!slow) return null;
-  return (
-    <p role="status" className="px-4 text-center text-meta font-semibold text-muted-foreground">
-      Slow signal — it&apos;s yours either way
-    </p>
-  );
-}
 
 /** The one slot ref the row stores per card, from a dealt slot. */
 function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
@@ -942,103 +919,40 @@ function PackPage() {
     [sold],
   );
 
-  /**
-   * Every slot, resolved for the stand and the summary.
-   *
-   * This is the one place the pack's numbers are decided: the tier from the
-   * bundle, the finish from the deal, the outcome from what was held before,
-   * the count for the ribbon, and what a spare is worth — the last two gated
-   * exactly as they always were: duplicates only, members only, silent while
-   * the commissioner has dust switched off.
-   */
-  const standSlots = useMemo<StandSlot[]>(() => {
-    const all = bundle?.participants ?? [];
-    const pricing = !!me?.participantId && dustLive(event);
-    return (slots ?? []).map((slot, i) => {
-      if (slot.kind === "secret") {
-        const outcome = slotOutcome(slot);
-        // The ribbon's count is about THIS pull, so it never falls below two for a
-        // duplicate — "by definition never your first" — however the vault has
-        // moved since. PullRibbon reads one as NEW, which a sale or a trade later
-        // the same day must not turn a duplicate into. What the vault holds NOW is
-        // `held` below, and it is that, not this, the dialog and the receipt quote.
-        // Sold from this screen: the count as it stood the moment the sale
-        // landed. Not "the server's count minus one" — the sale invalidates
-        // getMySecrets, so the refetch already has the copy gone and the
-        // subtraction would count it twice.
-        const mine = mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0;
-        const copies = sold[i] ? sold[i].copies : !slot.duplicate ? 1 : Math.max(2, mine);
-        // Not while the query is in the air: `getMySecrets` is invalidated by the
-        // deal, so until it lands the cached count may predate it.
-        const held = sold[i]
-          ? null
-          : secretHeldNow({
-              cards: mySecrets.data?.cards,
-              slotId: slot.id,
-              fetching: mySecrets.isFetching,
-              errored: mySecrets.isError,
-            });
-        return {
-          slot,
-          rarity: secretFoil(slot.card.foil, slot.card.borderFx, slot.card.tier),
-          edition: null,
-          outcome,
-          copies,
-          held,
-          sellValue:
-            pricing && slot.duplicate && !(i in sold) ? secretSellValue(slot.card.tier) : null,
-          ep: null,
-        };
-      }
-      const local = localBefore[slot.id];
-      const outcome = slotOutcome(slot, local);
-      // The ribbon's count is the collection as it stood at the deal, and is about
-      // this pull. What the vault holds NOW is `held`, and it is that the dialog
-      // quotes: a trade since the deal (the other phone accepting an offer) moves it.
-      // Sold from this screen, the receipt is the count the sale itself read.
-      const copies = sold[i] ? sold[i].copies : copiesAfter(slot, local);
-      const held = sold[i]
-        ? null
-        : rosterHeldNow({
-            spares: mySpares.data,
-            slotId: slot.id,
-            fetching: mySpares.isFetching,
-            errored: mySpares.isError,
-          });
-      // `MILL_BY_EDITION` rather than `millValue`, and that is safe rather than
-      // optimistic: the finish is the one Postgres minted. A finish it did not
-      // decide is null, and null prices nothing — no number is better than a
-      // number that moves.
-      const sellValue =
-        pricing && !(i in sold) && (copies ?? 1) > 1 && slot.edition != null
-          ? MILL_BY_EDITION[toEdition(slot.edition)]
-          : null;
-      return {
-        slot,
-        rarity: rarities.get(slot.id) ?? rarityStyle("base"),
-        edition: slot.edition,
-        outcome,
-        copies,
-        held,
-        sellValue,
-        ep: all.find((p) => p.id === slot.id) ?? null,
-      };
-    });
-  }, [
-    slots,
-    bundle,
-    rarities,
-    localBefore,
-    mySecrets.data,
-    mySecrets.isFetching,
-    mySecrets.isError,
-    mySpares.data,
-    mySpares.isFetching,
-    mySpares.isError,
-    me?.participantId,
-    event,
-    sold,
-  ]);
+  const pricing = !!me?.participantId && dustLive(event);
+  const mySecretCards = mySecrets.data?.cards;
+  const mySparesData = mySpares.data;
+  const standSlots = useMemo<StandSlot[]>(
+    () =>
+      buildStandSlots({
+        slots,
+        participants: bundle?.participants ?? [],
+        rarities,
+        localBefore,
+        mySecrets: {
+          data: mySecretCards,
+          fetching: mySecrets.isFetching,
+          errored: mySecrets.isError,
+        },
+        mySpares: { data: mySparesData, fetching: mySpares.isFetching, errored: mySpares.isError },
+        sold,
+        pricing,
+      }),
+    [
+      slots,
+      bundle,
+      rarities,
+      localBefore,
+      mySecretCards,
+      mySecrets.isFetching,
+      mySecrets.isError,
+      mySparesData,
+      mySpares.isFetching,
+      mySpares.isError,
+      pricing,
+      sold,
+    ],
+  );
 
   async function revealAt(i: number) {
     // Both guards read refs, not state. A tap during a hold, and a second tap in
@@ -1064,11 +978,11 @@ function PackPage() {
       if (hold) {
         setPeeking(i);
         if (isSecret) {
-          await new Promise((r) => setTimeout(r, SECRET_RISER_AT_MS));
+          await wait(SECRET_RISER_AT_MS);
           playSecretRiser(0.9);
-          await new Promise((r) => setTimeout(r, hold - SECRET_RISER_AT_MS));
+          await wait(hold - SECRET_RISER_AT_MS);
         } else {
-          await new Promise((r) => setTimeout(r, hold));
+          await wait(hold);
         }
         setPeeking(null);
       }
@@ -1137,7 +1051,7 @@ function PackPage() {
       if (isSecret && slot.completedCollection && pendingCompletionsRef.current.includes(i)) {
         const rest = pendingCompletionsRef.current.filter((n) => n !== i);
         pendingCompletionsRef.current = rest;
-        await new Promise((r) => setTimeout(r, COMPLETION_BEAT_MS));
+        await wait(COMPLETION_BEAT_MS);
         setCompletion(slot.completedCollection);
         // And only once it has actually fired does the row let go of it. Cleared
         // with the ref instead, a reload during the beat above would lose the
@@ -1244,9 +1158,9 @@ function PackPage() {
         // the cursor move and the reveal batch into one render, so the stand
         // mounts the next card already face-up and the flip — the thing being
         // animated — is skipped for every card the sequence advances to.
-        await new Promise((r) => setTimeout(r, AUTO_MOUNT_MS));
+        await wait(AUTO_MOUNT_MS);
         await revealAt(i);
-        await new Promise((r) => setTimeout(r, AUTO_STEP_MS));
+        await wait(AUTO_STEP_MS);
       }
       setCursor(slots.length);
     } finally {
@@ -1333,7 +1247,7 @@ function PackPage() {
           card={milestoneReveal.card}
           tierFloor={milestoneReveal.tierFloor}
           duplicate={milestoneReveal.duplicate}
-          universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+          universalBack={universalBack(packBack.data?.urls)}
           onDone={dismissMilestone}
         />
       )}
@@ -1453,51 +1367,13 @@ function PackPage() {
             </motion.div>
           </div>
         ) : dealing ? (
-          // The wrapper is off and the cards are still on their way — or the
-          // server could not deal any. Never a toast: a toast announces the
-          // pack to whoever is glancing at the phone over your shoulder.
-          <div className="mx-auto flex max-w-[320px] flex-col items-center gap-3 py-6 text-center">
-            {openState === "failed" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenState("pending");
-                  setOpenRequest((r) => ({ kind: r?.kind ?? "tear", nonce: (r?.nonce ?? 0) + 1 }));
-                }}
-                data-testid="pack-retry"
-                // Not dimmed: it is the only way out of this state, read outdoors.
-                className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
-              >
-                <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
-                  No signal
-                </span>
-                <span className="text-meta leading-snug text-muted-foreground">
-                  Tap to try again — today&apos;s pack is still yours.
-                </span>
-              </button>
-            ) : openState === "unavailable" ? (
-              <>
-                <div className="wax-foil flex aspect-[5/7] w-full items-center justify-center rounded-xl border border-white/15 opacity-60">
-                  <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
-                    Nothing to deal today
-                  </span>
-                </div>
-                <Link to="/players" className="neon-btn-lg neon-btn-hero w-full">
-                  <PackageOpen className="h-4 w-4" />
-                  View collection
-                </Link>
-              </>
-            ) : (
-              // The same sealed-back sweep the old fourth slot showed while its
-              // pull was in the air.
-              <div
-                data-testid="pack-dealing"
-                className="wax-foil pack-seal-wait relative flex aspect-[5/7] w-full items-center justify-center overflow-hidden rounded-xl border border-white/15"
-              >
-                <SlowSignal />
-              </div>
-            )}
-          </div>
+          <PackDealingSlot
+            state={openState}
+            onRetry={() => {
+              setOpenState("pending");
+              setOpenRequest((r) => ({ kind: r?.kind ?? "tear", nonce: (r?.nonce ?? 0) + 1 }));
+            }}
+          />
         ) : stage === "revealing" ? (
           // No heading. The card is the interface — a title over it is a web page
           // telling you what the thing below it is for, and with the shell gone
@@ -1509,7 +1385,7 @@ function PackPage() {
               cursor={cursor}
               cards={cards.data}
               revealed={revealed}
-              universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+              universalBack={universalBack(packBack.data?.urls)}
               pullCounts={pullCounts.data}
               peeking={peeking === cursor}
               busy={autoRunning}
@@ -1550,7 +1426,7 @@ function PackPage() {
             cards={cards.data}
             revealed={revealed}
             pullCounts={pullCounts.data}
-            universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+            universalBack={universalBack(packBack.data?.urls)}
             collected={collectedCount}
             total={total}
             eventYear={event?.year ?? null}

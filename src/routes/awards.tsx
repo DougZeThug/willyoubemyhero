@@ -12,7 +12,12 @@ import { castAwardVote, getMyAwardVotes } from "@/lib/social.functions";
 import { AWARD_CATEGORIES } from "@/lib/awards";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { cn } from "@/lib/utils";
-import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import {
+  FeedDegradedBanner,
+  FeedError,
+  FeedLoading,
+  readFailedMessage,
+} from "@/components/feed-state";
 
 export const Route = createFileRoute("/awards")({
   head: () => ({
@@ -206,7 +211,7 @@ function AwardsPage() {
                     // penalties read claimed the votes were unreadable.
                     <p className="text-meta text-muted-foreground">
                       {awards.isError
-                        ? "Couldn't read the votes just now — retrying."
+                        ? readFailedMessage("votes")
                         : countingVotes
                           ? "Counting the votes…"
                           : "No votes cast."}

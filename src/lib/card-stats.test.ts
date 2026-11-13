@@ -1,6 +1,6 @@
 // Per-station comparison maths behind the card back and the player breakdown.
 import { beforeEach, describe, expect, it } from "vitest";
-import { bestTimesByParticipant, cardStats, median } from "./card-stats";
+import { bestTimesByParticipant, cardStats, median, stationSplitStats } from "./card-stats";
 import {
   makeBundle,
   makeFieldBundle,
@@ -318,5 +318,46 @@ describe("cardStats", () => {
       expect(row.deltaMs).toBeNull();
       expect(row.best).toBe(false);
     });
+  });
+});
+
+describe("stationSplitStats", () => {
+  it("is empty without a bundle or without any measured split", () => {
+    expect(stationSplitStats(null)).toEqual([]);
+    const st = makeStation();
+    expect(
+      stationSplitStats({
+        stations: [st],
+        splits: [makeSplit({ station_id: st.id, segment_time_ms: null })],
+      }),
+    ).toEqual([]);
+  });
+
+  it("averages and bests each station, skipping unmeasured splits", () => {
+    const a = makeStation({ name: "Sled", station_order: 1 });
+    const b = makeStation({ name: "Carry", station_order: 2 });
+    const stats = stationSplitStats({
+      stations: [a, b],
+      splits: [
+        makeSplit({ station_id: a.id, segment_time_ms: 10_000 }),
+        makeSplit({ station_id: a.id, segment_time_ms: 20_000 }),
+        makeSplit({ station_id: a.id, segment_time_ms: null }),
+      ],
+    });
+    // Carry has no measured split, so it is absent rather than a 0.00s bar.
+    expect(stats).toEqual([{ name: "Sled", avgSec: 15, bestSec: 10 }]);
+  });
+
+  it("keeps two stations that share a name apart", () => {
+    const a = makeStation({ name: "Sled" });
+    const b = makeStation({ name: "Sled" });
+    const stats = stationSplitStats({
+      stations: [a, b],
+      splits: [
+        makeSplit({ station_id: a.id, segment_time_ms: 10_000 }),
+        makeSplit({ station_id: b.id, segment_time_ms: 30_000 }),
+      ],
+    });
+    expect(stats.map((s) => s.bestSec)).toEqual([10, 30]);
   });
 });

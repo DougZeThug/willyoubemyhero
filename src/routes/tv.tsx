@@ -8,11 +8,12 @@
 // not its rule either.
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { feedReadError, readFailedMessage } from "@/components/feed-state";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
-import { standings } from "@/lib/standings";
+import { useStandingsRows } from "@/hooks/use-standings-rows";
 import { currentAthlete } from "@/lib/current-athlete";
 import { cn } from "@/lib/utils";
 
@@ -39,19 +40,12 @@ function TvPage() {
   // put a re-timed athlete on the big screen twice -- pushing a real finisher off
   // the bottom of sixteen -- kept a scratched one at slot 1 in front of the whole
   // party, and numbered a dead heat 1 and 2.
-  const rows = useMemo(() => {
-    const parts = bundle?.participants ?? [];
-    return standings(bundle).map((s) => ({
-      run: s.run,
-      place: s.place,
-      ep: parts.find((p) => p.participant_id === s.participantId),
-    }));
-  }, [bundle]);
+  const rows = useStandingsRows(bundle);
 
   // Same shape as /leaderboard, and the same blind spot it had: `standings`
   // ranks from the runs alone, so a failed roster read leaves the big screen
   // full of correctly-placed em dashes with nothing saying why.
-  const rosterFailed = failedTables.includes("event_participants");
+  const read = feedReadError(failedTables);
 
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
 
@@ -82,7 +76,7 @@ function TvPage() {
           Live feed down — refreshing every few seconds
         </div>
       )}
-      {rosterFailed && (
+      {read.roster && (
         // Its own banner rather than FeedPartialBanner, for the same reason the
         // one above is hand-rolled: this screen is read from across a garden.
         <div
@@ -121,7 +115,7 @@ function TvPage() {
               "flex items-center gap-4 rounded-2xl border p-4",
               row.place === 1
                 ? "hud-bezel border-primary/60 hud-glow"
-                : "border-primary/15 bg-[oklch(0.16_0.02_240)]",
+                : "border-primary/15 bg-panel",
             )}
           >
             {/* place, not the row index: a three-way tie for first is three
@@ -173,13 +167,11 @@ function TvPage() {
           </div>
         ))}
         {rows.length === 0 && (
-          <div className="col-span-2 rounded-2xl border border-primary/20 bg-[oklch(0.16_0.02_240)] p-10 text-center text-muted-foreground">
+          <div className="col-span-2 rounded-2xl border border-primary/20 bg-panel p-10 text-center text-muted-foreground">
             {/* The one read that can empty the board, not any of the seven — a
                 failed splits or stations read cannot, and nor can the roster,
                 which has its own banner above. */}
-            {failedTables.includes("runs")
-              ? "Couldn't read the results just now — retrying."
-              : "No official times yet."}
+            {read.runs ? readFailedMessage("results") : "No official times yet."}
           </div>
         )}
       </div>

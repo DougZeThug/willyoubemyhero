@@ -11,7 +11,16 @@ import { SetChip } from "@/components/set-chip";
 import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
-import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
+import { useMemberSession } from "@/lib/member-token";
+import { useWasMember } from "@/hooks/use-was-member";
+import { useTransientId } from "@/hooks/use-transient-id";
+import {
+  collectionSettled,
+  dustHolder,
+  idOf,
+  summaryLine,
+  universalBack,
+} from "@/lib/collection-view";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { usePackStatus } from "@/hooks/use-pack-status";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
@@ -76,7 +85,6 @@ import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
 import { packResetAt, packWaiting as packStillSealed } from "@/lib/pack";
-import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
   isNewSince,
@@ -85,7 +93,6 @@ import {
 } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -147,46 +154,6 @@ function useVaultStreak(actor: string | null) {
   // a milestone cannot pay twice or show its reveal on two screens at once.
   const milestone = useMilestoneClaim(actor, streak);
   return { streak, streakPending, milestone };
-}
-
-function canClaim(streak: { canClaim?: boolean } | null) {
-  return streak?.canClaim ?? false;
-}
-
-function showFeedBanner(presenting: boolean, realtimeDegraded: boolean, error: unknown) {
-  return !presenting && (realtimeDegraded || Boolean(error));
-}
-
-/** The vault's one-line summary, or null until the roster has answered. */
-function summaryLine(
-  ready: boolean,
-  roster: Parameters<typeof summaryReady>[1],
-  counts: Parameters<typeof vaultSummaryLine>[0],
-) {
-  return summaryReady(ready, roster) ? vaultSummaryLine(counts) : null;
-}
-
-function idOf(event: { id?: string | null } | null | undefined) {
-  return event?.id ?? null;
-}
-
-/** Members only: a guest has no dust balance, so the hook is handed nothing to ask about. */
-function dustHolder(dustOn: boolean, member: { participantId: string } | null | undefined) {
-  return dustOn ? member?.participantId : null;
-}
-
-/** The collection's own flag, held back while an account is still being linked. */
-function collectionSettled(mineReady: boolean, sync: ReturnType<typeof useAccountSyncState>) {
-  return mineReady && sync.status !== "syncing";
-}
-
-function syncErrorOf(sync: ReturnType<typeof useAccountSyncState>) {
-  return sync.status === "error" ? sync.message : null;
-}
-
-/** The deck back to show on a secret, or null when the event has none. */
-function universalBack(urls: ImageUrlSet | null | undefined) {
-  return urlFromSet(urls) ? (urls ?? null) : null;
 }
 
 /**
@@ -312,14 +279,7 @@ function PlayersPage() {
   // for a moment, not a preference — and while it is off a shelf header has one
   // job, which is what stops the arrows being mistapped for the chevron.
   const [rearranging, setRearranging] = useState(false);
-  // Set on claim and never cleared, so a member on a new phone gets told where
-  // their collection went instead of watching it silently vanish. Read in an
-  // effect rather than during render: SSR has no localStorage, and a mismatched
-  // first paint is exactly the bug use-photo-urls.ts is written around.
-  const [wasMember, setWasMember] = useState(false);
-  useEffect(() => {
-    setWasMember(localStorage.getItem(WAS_MEMBER_KEY) === "1");
-  }, []);
+  const wasMember = useWasMember();
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
@@ -689,7 +649,7 @@ function PlayersPage() {
    * the shelf they are actually on.
    */
   const shelfRefs = useRef(new Map<string, HTMLDivElement | null>());
-  const [flashed, setFlashed] = useState<string | null>(null);
+  const [flashed, setFlashed] = useTransientId(1600);
   const reducedMotion = usePrefersReducedMotion();
   const shelfForTrophy = useCallback(
     (collection: string) => {
@@ -712,13 +672,8 @@ function PlayersPage() {
         });
       });
     },
-    [collapsed, toggle, reducedMotion],
+    [collapsed, toggle, reducedMotion, setFlashed],
   );
-  useEffect(() => {
-    if (!flashed) return;
-    const t = setTimeout(() => setFlashed(null), 1600);
-    return () => clearTimeout(t);
-  }, [flashed]);
 
   // The sheet swipes what is on screen, in the order it is on screen. It used to
   // swipe the flat newest-pull-first list while the grid was already grouped, so
@@ -1323,7 +1278,7 @@ function PlayersPage() {
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist
           for. Silent while a reveal has the screen, as on the pack. */}
-        {showFeedBanner(presenting, realtimeDegraded, error) && (
+        {!presenting && (realtimeDegraded || Boolean(error)) && (
           <FeedDegradedBanner className="mb-4" />
         )}
         <PresentationMode active={presenting} />
@@ -1352,7 +1307,7 @@ function PlayersPage() {
           dustBalance={dust.data?.balance}
           isMember={!!member}
           wasMember={wasMember}
-          syncError={syncErrorOf(sync)}
+          syncError={sync.status === "error" ? sync.message : null}
         />
 
         <TodayCard
@@ -1363,7 +1318,7 @@ function PlayersPage() {
           streak={streak}
           streakPending={streakPending}
           claimable={milestone.claimable}
-          canClaim={canClaim(streak)}
+          canClaim={streak?.canClaim ?? false}
           claiming={milestone.claiming}
           claimError={milestone.claimError}
           offline={offline}
