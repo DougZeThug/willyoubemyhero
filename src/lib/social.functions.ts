@@ -24,7 +24,6 @@ import { adminDb } from "./admin-db.server";
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
 const reactionEmoji = z.enum(REACTIONS);
-export const REACTION_EMOJIS: readonly string[] = REACTIONS;
 
 /**
  * Display name a guest typed for themselves. The identity itself is NOT taken

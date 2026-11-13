@@ -1,8 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
-import { signPath } from "./media.functions";
-import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
 import { leagueDay, TRADE_UNDO_WINDOW_SECONDS } from "./trades";
@@ -14,7 +12,7 @@ import type {
   TradeOfferView,
   TradeSpares,
 } from "./trades";
-import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
+import type { SecretPullRow } from "./secret-cards-rows";
 import type {
   AcceptTradeOfferResult,
   CardCopyRow,
@@ -28,6 +26,7 @@ import { uuid as zuuid } from "./zod-uuid";
 import { sqlNull } from "./rpc-null";
 import { adminDb } from "./admin-db.server";
 import { activeEventId } from "./active-event.server";
+import { secretFaces, viewerSecretCardIds } from "./secret-visibility.server";
 import { noStore } from "./no-store.server";
 
 /**
@@ -116,47 +115,36 @@ async function hydrateSecrets(
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
 
-  const sb = await adminDb();
-  // Names are public enough to judge an offer; the art is what stays hidden.
-  // We fetch every card referenced by rows the caller is already entitled to see,
-  // but only sign URLs for the ones they actually hold (or when concealment is
-  // off entirely). That keeps the catalogue enumeration protection intact while
-  // still letting a member read "Dragon, mythic" on a face-down tile.
-  const cardIds = [...new Set(rows.map((r) => r.secret_card_id))];
-  const { data: cards } = cardIds.length
-    ? await sb
-        .from("secret_cards")
-        .select("id, name, art_path, collection")
-        .in("id", cardIds)
-        .returns<Pick<SecretCardRow, "id" | "name" | "art_path" | "collection">[]>()
-    : { data: [] as Pick<SecretCardRow, "id" | "name" | "art_path" | "collection">[] };
-  const byId = new Map((cards ?? []).map((c) => [c.id, c]));
-
-  await Promise.all(
-    rows.map(async (row) => {
-      const owns = viewerCardIds.has(row.secret_card_id);
-      const shown = !concealUnowned || owns;
-      const card = byId.get(row.secret_card_id);
-      out.set(row.id, {
-        pullId: row.id,
-        // Gated on `shown` for the reason on the field: an id attached to a card
-        // whose name is being withheld is a handle for counting the catalogue.
-        cardId: shown ? row.secret_card_id : undefined,
-        // A retired card still trades; it just has no row left to name it.
-        name: card?.name ?? "Secret card",
-        // thumb rather than large: these are tiles in a picker, not the reveal.
-        artUrl: shown ? await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb) : null,
-        // Gated on `shown` for a weaker version of the reason `cardId` is: a set
-        // on a card whose name is being withheld sorts the unknowns into piles,
-        // and a pile of unknowns is a step towards counting them. The name is
-        // public enough to judge an offer by; which shelf it came off is not.
-        collection: shown ? (card?.collection ?? null) : null,
-        tier: toSecretTier(row.tier),
-        lastCopy: lastCopyIds.has(row.id),
-        viewerOwns: owns,
-      });
-    }),
+  // Names are public enough to judge an offer; the art is what stays hidden. Every
+  // card referenced by rows the caller is already entitled to see is named, but
+  // only the ones they actually hold (or all of them, when concealment is off)
+  // get art. That keeps the catalogue enumeration protection intact while still
+  // letting a member read "Dragon, mythic" on a face-down tile.
+  const faces = await secretFaces(
+    rows.map((r) => r.secret_card_id),
+    { shown: (id) => !concealUnowned || viewerCardIds.has(id), nameUnshown: true },
   );
+
+  for (const row of rows) {
+    const face = faces.get(row.secret_card_id)!;
+    const owns = viewerCardIds.has(row.secret_card_id);
+    out.set(row.id, {
+      pullId: row.id,
+      // Gated on being shown for the reason on the field: an id attached to a card
+      // whose name is being withheld is a handle for counting the catalogue.
+      cardId: !concealUnowned || owns ? row.secret_card_id : undefined,
+      name: face.name,
+      artUrl: face.artUrl,
+      // Gated like the art, for a weaker version of the reason `cardId` is: a set
+      // on a card whose name is being withheld sorts the unknowns into piles.
+      // The name is public enough to judge an offer by; which shelf it came off
+      // is not.
+      collection: face.collection,
+      tier: toSecretTier(row.tier),
+      lastCopy: lastCopyIds.has(row.id),
+      viewerOwns: owns,
+    });
+  }
   return out;
 }
 
@@ -172,21 +160,17 @@ async function viewerHoldings(
   me: string,
 ): Promise<{ roster: ReadonlySet<string>; secrets: ReadonlySet<string> }> {
   const sb = await adminDb();
-  const [{ data: copies }, { data: pulls }] = await Promise.all([
+  const [{ data: copies }, secrets] = await Promise.all([
     sb
       .from("card_copies")
       .select("event_participant_id")
       .eq("participant_id", me)
       .returns<Pick<CardCopyRow, "event_participant_id">[]>(),
-    sb
-      .from("secret_card_pulls")
-      .select("secret_card_id")
-      .eq("participant_id", me)
-      .returns<Pick<SecretPullRow, "secret_card_id">[]>(),
+    viewerSecretCardIds(me),
   ]);
   return {
     roster: new Set((copies ?? []).map((r) => r.event_participant_id)),
-    secrets: new Set((pulls ?? []).map((r) => r.secret_card_id)),
+    secrets,
   };
 }
 

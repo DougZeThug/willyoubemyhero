@@ -690,30 +690,12 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     return { runId: run.id };
   });
 
-export const deleteRun = createServerFn({ method: "POST" })
-  .validator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
-  .handler(async ({ data }) => {
-    await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: removed, error } = await supabaseAdmin
-      .from("runs")
-      .delete()
-      .eq("id", data.runId)
-      .eq("event_id", data.eventId)
-      .select("id");
-    if (error) throw error;
-    assertInEvent(removed, "run");
-    return { ok: true };
-  });
-
 /**
  * Delete one result and put the athlete back where they belong.
  *
- * `deleteRun` above drops the row and nothing else, which leaves the
- * participant sitting in `finished` with no time — invisible on the ladder and
- * missing from the queue. This is the version the admin UI uses: it removes the
- * run and, when it was their last one, returns them to `waiting` so they can be
- * timed again.
+ * Removes the run and, when it was their last one, returns the participant to
+ * `waiting` so they can be timed again. Dropping the row alone would leave them
+ * in `finished` with no time — invisible on the ladder and missing from the queue.
  */
 export const deleteRunResult = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))

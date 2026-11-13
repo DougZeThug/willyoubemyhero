@@ -2,16 +2,6 @@
 // give a discriminated union, so the results are written by hand.
 import type { CompletedCollection } from "./collection-trophies";
 
-export type DustLedgerRow = {
-  id: number;
-  participant_id: string;
-  delta: number;
-  reason: string;
-  ref: string | null;
-  detail: Record<string, unknown> | null;
-  created_at: string;
-};
-
 /**
  * Why every one of these fails softly.
  *

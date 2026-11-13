@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
+import { SECRET_PLACEHOLDER_NAME } from "./secret-visibility.server";
 import { adminDb } from "./admin-db.server";
 
 /**
@@ -152,7 +153,9 @@ function buildStranded(
           lastSeen: days[days.length - 1] ?? null,
           signedIn: accountGuests.has(guestId),
           sample: [
-            ...new Set(rows.map((r) => nameOfCard.get(r.secret_card_id) ?? "Secret card")),
+            ...new Set(
+              rows.map((r) => nameOfCard.get(r.secret_card_id) ?? SECRET_PLACEHOLDER_NAME),
+            ),
           ].slice(0, 4),
         };
       })
