@@ -44,11 +44,6 @@ const revealed = new Set<string>();
  */
 const cueKey = (id: string, acquiredAt: string | null) => (acquiredAt ? `${id}@${acquiredAt}` : id);
 
-/** Test seam. Nothing in the app clears this — a page load is the reset. */
-export function resetRevealedForTests() {
-  revealed.clear();
-}
-
 /**
  * Landing on a card is an event: the tier chime, and a burst in the tier's own
  * colour for the two tiers worth celebrating. A cold page load has no user

@@ -208,18 +208,17 @@ export function rarityStyle(tier: RarityTier): Rarity {
 }
 
 /**
- * Rarest first. The index into this IS the rank, same shape as
- * SECRET_TIER_ORDER — it exists so pickers can sort by tier without each of
- * them inventing its own ordering.
+ * Rarest first. A `Record` rather than a list so a tier added to `RarityTier`
+ * cannot compile until it has a rank — a list would silently rank it last.
  */
-export const RARITY_ORDER: readonly RarityTier[] = [
-  "champion",
-  "podium",
-  "stationKing",
-  "penaltyBox",
-  "dnf",
-  "base",
-];
+const RANK: Record<RarityTier, number> = {
+  champion: 0,
+  podium: 1,
+  stationKing: 2,
+  penaltyBox: 3,
+  dnf: 4,
+  base: 5,
+};
 
 /** Whether a card's own tier is a party; the finish and the collection get their say elsewhere. */
 export function tierCelebrates(tier: RarityTier): boolean {
@@ -228,8 +227,9 @@ export function tierCelebrates(tier: RarityTier): boolean {
 
 /** 0 is champion. An unknown tier sorts last. */
 export function rarityRank(tier: string | null | undefined): number {
-  const i = RARITY_ORDER.indexOf(tier as RarityTier);
-  return i === -1 ? RARITY_ORDER.length : i;
+  return tier != null && Object.hasOwn(RANK, tier)
+    ? RANK[tier as RarityTier]
+    : Object.keys(RANK).length;
 }
 
 // The subset of the event bundle this module needs. Kept structural so it accepts
