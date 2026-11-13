@@ -1,21 +1,27 @@
 // The unread dot on offers waiting for you.
 //
-// Stored on the phone, exactly like vault-favourites.ts: a `wwbh:` key, every touch
-// of storage in a try/catch so a locked private-mode browser degrades to "works for
-// this page load", and a custom event because `storage` only fires in *other* tabs.
+// Stored on the phone like every device preference here; see device-store.ts.
 //
 // Deliberately not a table. Unread is per-device, so somebody who reads an offer on
 // their phone still has the dot on the iPad they left indoors — which for thirteen
 // people at a party is not worth a migration, a write path and a cross-device merge
 // rule. If it ever is, this module is the whole job.
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { createDeviceStore, parseIdList } from "@/lib/device-store";
+import { STORAGE_KEYS } from "@/lib/storage-keys";
 import type { TradeOfferView } from "@/lib/trades";
 import { useMemberSession } from "@/lib/member-token";
 import { useTradeOffers } from "./use-trades";
 import { useTradeNudge } from "./use-trade-nudge";
 
-const KEY = "wwbh:trade-seen";
-const CHANGED = "wwbh:trade-seen-changed";
+const seenOffers = createDeviceStore<readonly string[]>({
+  key: STORAGE_KEYS.tradeSeen,
+  empty: [],
+  parse: parseIdList,
+  serialize: (ids) => JSON.stringify({ ids }),
+  // Nothing changed — skip the write and the re-render it would fan out.
+  equals: (a, b) => a.length === b.length && b.every((id) => a.includes(id)),
+});
 
 /**
  * Offers waiting on you that you have not looked at yet.
@@ -32,26 +38,6 @@ export function unreadOfferIds(
   return inbox.map((o) => o.id).filter((id) => !already.has(id));
 }
 
-// Mirrors vault-favourites.ts's `current`: the last value we set, which is all that
-// is left to trust when the write below is refused.
-let current: readonly string[] = [];
-
-function read(): readonly string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    const ids = (parsed as { ids?: unknown } | null)?.ids;
-    if (!Array.isArray(ids)) return [];
-    return ids.filter((v): v is string => typeof v === "string");
-  } catch {
-    // Blocked storage, or something else wrote junk under our key. Everything
-    // unread is a working page.
-    return [];
-  }
-}
-
 /**
  * Mark everything currently in the inbox as read.
  *
@@ -61,52 +47,7 @@ function read(): readonly string[] {
  * back to pending, so it can never come round again and need remembering.
  */
 export function markTradeOffersSeen(inboxIds: readonly string[]) {
-  const next = [...new Set(inboxIds)];
-  // Nothing changed — skip the write and the re-render it would fan out.
-  if (next.length === current.length && next.every((id) => current.includes(id))) return;
-  current = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify({ ids: next }));
-  } catch {
-    /* private mode with storage blocked still clears the dot for this page load */
-  }
-  window.dispatchEvent(new Event(CHANGED));
-}
-
-/** The seen ids, reactive. Same hydration dance as useVaultFavourites. */
-function useSeenOffers(): readonly string[] {
-  const [ids, setIds] = useState<readonly string[]>([]);
-
-  useEffect(() => {
-    // Our own writes trust the module value; re-reading storage would hand a
-    // private-mode browser back the list it just refused to save, and the dot would
-    // come straight back on the screen that just cleared it.
-    const mine = () => setIds(current);
-    const reread = () => {
-      current = read();
-      setIds(current);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to spend a getItem and a JSON.parse on
-    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
-    // in-memory hold above with whatever storage happens to hold, putting a
-    // refused write back under the thumb that made it. A null key is
-    // localStorage.clear(), which does concern us.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener(CHANGED, mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(CHANGED, mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
-
-  return ids;
+  seenOffers.set([...new Set(inboxIds)]);
 }
 
 /**
@@ -123,7 +64,7 @@ export function useTradeBadge(): number {
   // subscription. Calling this hook twice costs nothing: the query dedupes on its
   // key and nudge-channel.ts ref-counts the topic.
   useTradeNudge(offers?.nudgeTopic ?? null, participantId);
-  const seen = useSeenOffers();
+  const seen = seenOffers.useValue();
   const inbox = offers?.inbox;
   return useMemo(() => unreadOfferIds(inbox ?? [], seen).length, [inbox, seen]);
 }

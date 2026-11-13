@@ -1,10 +1,6 @@
 // The shape of the bottom bar, as this device last saw it.
 //
-// Stored the way every other device preference in this app is — see the header of
-// vault-favourites.ts: a `wwbh:` key, every touch of storage in a try/catch so a
-// locked private-mode browser degrades to "works for this page load", a
-// module-level `current` because that is all there is left to trust when a write
-// is refused, and a custom event because `storage` only fires in *other* tabs.
+// Stored on the device like every preference here; see device-store.ts.
 //
 // WHY A DEVICE STORE AND NOT A BETTER FETCH. The bar's rows come off the active
 // event, and useActiveEvent is a plain query with no SSR hydration behind it, so
@@ -19,12 +15,11 @@
 // the real bar — is not available here: the e2e suite stubs server functions in
 // the BROWSER, and a root loader would run in-process on the server, sail past
 // the stubs and render every spec against a dead Supabase.
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { dustLive } from "@/lib/dust";
 import { navHidden } from "@/lib/nav";
-
-const KEY = "wwbh:nav-shape";
-const CHANGED = "wwbh:nav-shape-changed";
+import { createDeviceStore } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
 /** The two answers that decide which rows the bar holds. */
 export type NavShape = { dustOn: boolean; hidden: string[] };
@@ -37,8 +32,6 @@ export type NavShape = { dustOn: boolean; hidden: string[] };
  * a device with nothing stored behaves exactly as it does today.
  */
 export const DEFAULT_NAV_SHAPE: NavShape = { dustOn: false, hidden: [] };
-
-let current: NavShape | null = null;
 
 /** Parse, tolerating anything — junk under our key reads as "never stored". */
 export function parseNavShape(raw: string | null): NavShape | null {
@@ -55,20 +48,6 @@ export function parseNavShape(raw: string | null): NavShape | null {
   }
 }
 
-function read(): NavShape | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return parseNavShape(window.localStorage.getItem(KEY));
-  } catch {
-    return null;
-  }
-}
-
-export function readNavShape(): NavShape | null {
-  current = read();
-  return current;
-}
-
 /** Whether two shapes would build the same bar. */
 export function sameNavShape(a: NavShape | null, b: NavShape | null): boolean {
   if (!a || !b) return a === b;
@@ -81,35 +60,29 @@ export function sameNavShape(a: NavShape | null, b: NavShape | null): boolean {
   return left.length === right.length && left.every((v, i) => v === right[i]);
 }
 
+const store = createDeviceStore<NavShape | null>({
+  key: STORAGE_KEYS.navShape,
+  empty: null,
+  parse: parseNavShape,
+  serialize: JSON.stringify,
+  equals: sameNavShape,
+  // Load-bearing here rather than a preference: a passive effect runs AFTER the
+  // browser has painted, so the bar would still show one frame of the five-row
+  // default before correcting. A layout effect runs after the commit and before
+  // the paint, so the remembered shape is the first thing drawn.
+  layout: true,
+});
+
+export const readNavShape = store.load;
+
 /** Remember a shape the event has actually confirmed. */
-export function writeNavShape(next: NavShape) {
-  if (sameNavShape(current, next)) return;
-  current = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* private mode with storage blocked still holds the shape for this page load */
-  }
-  window.dispatchEvent(new Event(CHANGED));
-}
+export const writeNavShape = store.set;
 
 /** The shape carried by an event, or null while it has not answered. */
 export function shapeOfEvent(event: unknown): NavShape | null {
   if (event === undefined) return null;
   return { dustOn: dustLive(event), hidden: navHidden(event) };
 }
-
-/**
- * A layout effect on the client and a plain one on the server, which React would
- * otherwise warn about during SSR.
- *
- * Load-bearing here rather than a preference: a passive effect runs AFTER the
- * browser has painted, so the bar would still show one frame of the five-row
- * default before correcting. A layout effect runs after the commit and before
- * the paint, so the remembered shape is the first thing drawn.
- */
-const useNavShapeEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * The shape to build the bar from: the event's once it has answered, the
@@ -122,34 +95,7 @@ const useNavShapeEffect = typeof window === "undefined" ? useEffect : useLayoutE
  * a mismatch — which is a louder version of the bug this exists to fix.
  */
 export function useNavShape(event: unknown): NavShape {
-  const [remembered, setRemembered] = useState<NavShape | null>(null);
-
-  useNavShapeEffect(() => {
-    // Our own writes trust the module value; re-reading storage would hand a
-    // private-mode browser back the value it just refused to save.
-    const mine = () => setRemembered(current);
-    const reread = () => {
-      current = read();
-      setRemembered(current);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to spend a getItem and a JSON.parse on
-    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
-    // in-memory hold above with whatever storage happens to hold, putting a
-    // refused write back under the thumb that made it. A null key is
-    // localStorage.clear(), which does concern us.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener(CHANGED, mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(CHANGED, mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
+  const remembered = store.useValue();
 
   // Memoised on the event, which react-query keeps referentially stable while
   // the data has not changed — so this effect runs when the answer changes and
