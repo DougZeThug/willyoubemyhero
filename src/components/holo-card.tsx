@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
 import { playFlip } from "@/lib/card-sfx";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { urlFromSet, srcSetFromSet } from "@/lib/media";
+import { CARD_GRID_SIZES, CARD_SIZES, urlFromSet, srcSetFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import type { Rarity } from "@/lib/card-rarity";
 import { BORDER_FX_CLASS } from "@/lib/card-rarity";
@@ -58,17 +58,6 @@ function restartAnimation(el: HTMLElement | null) {
   void el.offsetHeight;
   el.style.animation = "";
 }
-
-/**
- * How wide a card renders, for the browser's `srcSet` pick.
- *
- * Exported because src/lib/preload.ts has to hand the browser the identical
- * string: the candidate it warms is only the candidate the card requests if both
- * run the selection algorithm on the same inputs.
- */
-export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
-/** Vault tiles sit two-up on a phone, so 90vw would over-fetch by a factor of four. */
-export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";
 
 /**
  * Sizes to try, widest first. A stalled fetch used to leave a broken-image icon

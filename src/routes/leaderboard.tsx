@@ -15,8 +15,8 @@ import {
   FeedPartialBanner,
 } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
-import { ResultCard, type ResultCardData } from "@/components/result-card";
-import { toResultCardData } from "@/lib/result-card-data";
+import { ResultCard } from "@/components/result-card";
+import { toResultCardData, type ResultCardData } from "@/lib/result-card-data";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { toast } from "sonner";
 import { standings } from "@/lib/standings";
