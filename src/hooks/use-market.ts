@@ -1,5 +1,5 @@
+import { useMemberQuery } from "./use-member-query";
 import { marketListingsKey, myStallKey } from "./query-keys";
-import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMarketListings, getMyStall } from "@/lib/market.functions";
 import type { MarketBrowse, MyStall } from "@/lib/market";
@@ -19,13 +19,11 @@ import type { MarketBrowse, MyStall } from "@/lib/market";
  */
 export function useMarketListings(participantId: string | null | undefined) {
   const fn = useServerFn(getMarketListings);
-  return useQuery({
+  return useMemberQuery({
     queryKey: marketListingsKey(participantId),
     queryFn: () => fn() as Promise<MarketBrowse>,
     enabled: !!participantId,
     staleTime: 15_000,
-    refetchOnWindowFocus: true,
-    retry: false,
   });
 }
 
@@ -38,12 +36,10 @@ export function useMarketListings(participantId: string | null | undefined) {
  */
 export function useMyStall(participantId: string | null | undefined) {
   const fn = useServerFn(getMyStall);
-  return useQuery({
+  return useMemberQuery({
     queryKey: myStallKey(participantId),
     queryFn: () => fn() as Promise<MyStall>,
     enabled: !!participantId,
     staleTime: 15_000,
-    refetchOnWindowFocus: true,
-    retry: false,
   });
 }

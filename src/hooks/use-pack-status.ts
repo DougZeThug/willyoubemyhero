@@ -21,6 +21,5 @@ export function usePackStatus(actorId: string | null | undefined) {
     // paints the previous person's state out of the cache.
     enabled: !!actorId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
   });
 }

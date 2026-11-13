@@ -1,7 +1,8 @@
+import { useMemberQuery } from "./use-member-query";
 import { myCardStatsKey } from "./query-keys";
 import { memberIdentity, memberIdentityOrNull } from "@/lib/identity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
@@ -184,15 +185,11 @@ export function useMyCollection(
 
   const fn = useServerFn(getMyCardStats);
   const qc = useQueryClient();
-  const stats = useQuery({
+  const stats = useMemberQuery({
     queryKey: myCardStatsKey(eventId, participantId),
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<MyCardStats>,
     enabled: !!eventId && !!participantId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
-    // A member whose token has just expired should see their local collection, not
-    // a retry storm against a handler that will keep refusing them.
-    retry: false,
   });
 
   // `useMemberSession` starts null and hydrates in an effect, so "no member" and

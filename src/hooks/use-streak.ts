@@ -1,5 +1,5 @@
+import { useMemberQuery } from "./use-member-query";
 import { streakStatusKey } from "./query-keys";
-import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getStreakStatus, type StreakStatus } from "@/lib/streaks.functions";
 
@@ -15,16 +15,12 @@ import { getStreakStatus, type StreakStatus } from "@/lib/streaks.functions";
  */
 export function useStreakStatus(actorId: string | null | undefined) {
   const fn = useServerFn(getStreakStatus);
-  return useQuery({
+  return useMemberQuery({
     queryKey: streakStatusKey(actorId),
     queryFn: () => fn() as Promise<StreakStatus>,
     // Gated on the actor, so a phone changing hands in a garden never paints the
     // previous person's streak out of the cache.
     enabled: !!actorId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
-    // A token that expired mid-party should show a blank pill and let the claim
-    // prompt do its job, not retry three times behind a spinner.
-    retry: false,
   });
 }

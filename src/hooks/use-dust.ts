@@ -1,5 +1,5 @@
+import { useMemberQuery } from "./use-member-query";
 import { dustBalanceKey } from "./query-keys";
-import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getDustBalance } from "@/lib/dust.functions";
 
@@ -17,14 +17,10 @@ import { getDustBalance } from "@/lib/dust.functions";
  */
 export function useDustBalance(participantId: string | null | undefined) {
   const fn = useServerFn(getDustBalance);
-  return useQuery({
+  return useMemberQuery({
     queryKey: dustBalanceKey(participantId),
     queryFn: () => fn() as Promise<{ balance: number }>,
     enabled: !!participantId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    // A token that expired mid-party should show no chip at all rather than
-    // retry three times behind a spinner on a screen somebody is using.
-    retry: false,
   });
 }

@@ -31,7 +31,6 @@ export function useEventBundle() {
     queryFn: () => bundleFn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: 3_000,
-    refetchOnWindowFocus: true,
     // No refetchInterval: the poll that backs realtime up lives in the channel
     // registry, one timer per event rather than one per mounted hook.
   });

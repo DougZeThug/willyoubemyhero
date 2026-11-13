@@ -18,6 +18,5 @@ export function useCardPullCounts(eventId: string | null | undefined) {
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<CardPullCounts>,
     enabled: !!eventId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
   });
 }

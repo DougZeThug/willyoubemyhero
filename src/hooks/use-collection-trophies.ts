@@ -36,7 +36,6 @@ export function useCollectionTrophies() {
     queryKey: collectionTrophiesKey(),
     queryFn: () => fn() as Promise<{ trophies: CollectionTrophy[] }>,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
   });
 }
 

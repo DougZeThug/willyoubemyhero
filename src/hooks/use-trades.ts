@@ -1,3 +1,4 @@
+import { useMemberQuery } from "./use-member-query";
 import { invalidateCardsMoved, tradeFeedKey, tradeOffersKey, tradeSparesKey } from "./query-keys";
 import { memberIdentityOrNull } from "@/lib/identity";
 import { useEffect } from "react";
@@ -38,15 +39,11 @@ export type MyTradeOffers = {
  */
 export function useTradeOffers(participantId: string | null | undefined) {
   const fn = useServerFn(getMyTradeOffers);
-  return useQuery({
+  return useMemberQuery({
     queryKey: tradeOffersKey(participantId),
     queryFn: () => fn() as Promise<MyTradeOffers>,
     enabled: !!participantId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    // A member-guarded read: a token that expired mid-party should surface the
-    // claim prompt, not retry three times on the way to it.
-    retry: false,
   });
 }
 
@@ -64,13 +61,11 @@ export function useTradeSpares(
   viewerId: string | null | undefined,
 ) {
   const fn = useServerFn(getTradeSpares);
-  return useQuery({
+  return useMemberQuery({
     queryKey: tradeSparesKey(viewerId, participantId),
     queryFn: () => fn({ data: { participantId: participantId! } }) as Promise<TradeSpares>,
     enabled: !!participantId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    retry: false,
   });
 }
 
@@ -91,7 +86,6 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<TradeFeedEntry[]>,
     enabled: !!eventId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
