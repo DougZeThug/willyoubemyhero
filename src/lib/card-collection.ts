@@ -5,6 +5,7 @@
 // client state in the app. Card data has no business forcing a version upgrade on it.
 
 import { cachedDb, isBrowser } from "./idb";
+import { STORAGE_KEYS } from "./storage-keys";
 import { bestEdition, type Edition } from "./card-edition";
 import { leagueDay } from "./league-day";
 
@@ -341,13 +342,13 @@ export async function savePackState(state: PackState): Promise<void> {
  * wrapper forever — tearing there dealt the same ids and wrote `revealed: []`
  * over the first tab's progress.
  *
- * localStorage answers both. Same `wwbh:` key and the same try/catch as
- * vault-favourites.ts, and the same no-op guard trophy-seen.ts uses: the value
+ * localStorage answers both. Same try/catch as every device key, and the same
+ * no-op guard device-store.ts offers: the value
  * is constant for the life of one pack, so the whole day writes once and the
  * other tab gets exactly one `storage` event — at the tear, which is the only
  * moment it needs one.
  */
-export const PACK_DEALT_KEY = "wwbh:pack-dealt";
+const PACK_DEALT_KEY = STORAGE_KEYS.packDealt;
 
 /** The last value written, for the no-op guard. See setTrophySeen's `current`. */
 let dealtMirror: string | null = null;
@@ -446,7 +447,7 @@ function announcePackState() {
  * vault in another tab otherwise keeps protecting ids the server has since vouched
  * for, or that were traded away — see `retireUnrecorded` for why that is safe.
  */
-export const PACK_UNRECORDED_KEY = "wwbh:pack-unrecorded";
+const PACK_UNRECORDED_KEY = STORAGE_KEYS.packUnrecorded;
 
 function announceUnrecordedChanged() {
   announcePackState();

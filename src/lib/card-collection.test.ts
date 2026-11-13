@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { leagueDay } from "./league-day";
+import { STORAGE_KEYS } from "./storage-keys";
 
 async function freshModule() {
   vi.resetModules();
@@ -401,14 +402,14 @@ describe("waking a vault in another tab", () => {
 
   it("bumps a storage key on every write that adds protection", async () => {
     const mod = await freshModule();
-    window.localStorage.removeItem(mod.PACK_UNRECORDED_KEY);
+    window.localStorage.removeItem(STORAGE_KEYS.packUnrecorded);
     await mod.addUnrecorded(ROW);
-    const first = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    const first = window.localStorage.getItem(STORAGE_KEYS.packUnrecorded);
     expect(first).not.toBeNull();
 
     await mod.addUnrecorded({ ...ROW, ids: [CARD_B] });
     // A different value, because `storage` only fires on a change.
-    expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).not.toBe(first);
+    expect(window.localStorage.getItem(STORAGE_KEYS.packUnrecorded)).not.toBe(first);
   });
 
   it("wakes other tabs when protection is retired", async () => {
@@ -417,9 +418,9 @@ describe("waking a vault in another tab", () => {
     // Letting go early is safe: the vault asks the server again before it deletes.
     const mod = await freshModule();
     await mod.addUnrecorded(ROW);
-    const before = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    const before = window.localStorage.getItem(STORAGE_KEYS.packUnrecorded);
     await mod.retireUnrecorded([CARD_A]);
-    const after = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    const after = window.localStorage.getItem(STORAGE_KEYS.packUnrecorded);
     expect(after).not.toBeNull();
     expect(after).not.toBe(before);
   });
@@ -429,9 +430,9 @@ describe("waking a vault in another tab", () => {
     // touches no row, so there is nothing for another tab to re-read.
     const mod = await freshModule();
     await mod.addUnrecorded(ROW);
-    const before = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    const before = window.localStorage.getItem(STORAGE_KEYS.packUnrecorded);
     await mod.retireUnrecorded([CARD_A], "m:p-bob");
-    expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBe(before);
+    expect(window.localStorage.getItem(STORAGE_KEYS.packUnrecorded)).toBe(before);
     expect(await mod.loadUnrecorded()).toMatchObject({ ids: [CARD_A] });
   });
 
@@ -444,7 +445,7 @@ describe("waking a vault in another tab", () => {
     try {
       for (let i = 0; i < 5; i++) {
         await mod.addUnrecorded({ ...ROW, ids: [`card-${i}`] });
-        seen.add(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY));
+        seen.add(window.localStorage.getItem(STORAGE_KEYS.packUnrecorded));
       }
     } finally {
       // Restored here because `afterEach` only unstubs globals, and a spy left
@@ -456,9 +457,9 @@ describe("waking a vault in another tab", () => {
 
   it("leaves an ordinary pack save out of it", async () => {
     const mod = await freshModule();
-    window.localStorage.removeItem(mod.PACK_UNRECORDED_KEY);
+    window.localStorage.removeItem(STORAGE_KEYS.packUnrecorded);
     await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
-    expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEYS.packUnrecorded)).toBeNull();
   });
 });
 

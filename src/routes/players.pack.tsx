@@ -37,13 +37,12 @@ import {
   collectCard,
   loadPackState,
   packDealtElsewhere,
-  PACK_STATE_CHANGED,
   retireUnrecorded,
   savePackState,
-  PACK_DEALT_KEY,
   type PackSlotRef,
 } from "@/lib/card-collection";
 import { useMyCollection } from "@/hooks/use-my-collection";
+import { usePackSignals } from "@/hooks/use-pack-signals";
 import { useTradeSpares } from "@/hooks/use-trades";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
@@ -586,26 +585,17 @@ function PackPage() {
   // beside it is the only signal this one gets — and without it a tab left on a
   // sealed wrapper stayed sealed, then asked for the same pack over the other
   // tab's reveal progress when somebody eventually tapped it.
-  useEffect(() => {
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== PACK_DEALT_KEY) return;
-      setResumeNonce((n) => n + 1);
-    };
+  usePackSignals({
+    dealtElsewhere: () => setResumeNonce((n) => n + 1),
     // And a carry in THIS tab, which `storage` never reports — a sign-in runs
     // `useAccountSync` right here, so the pack the hold below is waiting for can
     // arrive without a single cross-tab event. Gated on the hold rather than
     // listened to always: this fires on every write to the pack row, and outside
     // the hold that is our own save on every card turned.
-    const ours = () => {
+    changedHere: () => {
       if (awaitingCarryRef.current) setResumeNonce((n) => n + 1);
-    };
-    window.addEventListener("storage", theirs);
-    window.addEventListener(PACK_STATE_CHANGED, ours);
-    return () => {
-      window.removeEventListener("storage", theirs);
-      window.removeEventListener(PACK_STATE_CHANGED, ours);
-    };
-  }, []);
+    },
+  });
 
   // A tab left open past midnight used to sit on yesterday's pack forever.
   // Polled rather than scheduled, because a phone suspends timers the moment the

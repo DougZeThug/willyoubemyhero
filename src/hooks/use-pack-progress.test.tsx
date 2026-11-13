@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { resetIndexedDB } from "@/test/idb";
 import { leagueDay } from "@/lib/league-day";
-import { PACK_DEALT_KEY, PACK_STATE_CHANGED } from "@/lib/card-collection";
+import { PACK_STATE_CHANGED } from "@/lib/card-collection";
+import { STORAGE_KEYS } from "@/lib/storage-keys";
 
 const DEVICE = "test-device";
 
@@ -214,7 +215,7 @@ describe("usePackProgress", () => {
       identity: `d:${DEVICE}`,
     });
     act(() => {
-      window.dispatchEvent(new StorageEvent("storage", { key: PACK_DEALT_KEY }));
+      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEYS.packDealt }));
     });
     await waitFor(() => expect(result.current.state).toBe("torn"));
   });

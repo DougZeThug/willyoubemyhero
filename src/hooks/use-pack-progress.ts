@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePackIdentity } from "@/lib/device-id";
-import {
-  loadPackState,
-  PACK_DEALT_KEY,
-  PACK_STATE_CHANGED,
-  type PackState,
-} from "@/lib/card-collection";
+import { loadPackState, type PackState } from "@/lib/card-collection";
+import { usePackSignals } from "./use-pack-signals";
 import { leagueDay } from "@/lib/league-day";
 import { todayPackState } from "@/lib/pack";
 
@@ -86,24 +82,9 @@ export function usePackProgress(): PackProgress {
     };
   }, [reread]);
 
-  /**
-   * Both halves of "the pack changed", because neither covers the other.
-   * `PACK_STATE_CHANGED` is this tab's own write, which is what carries a tear
-   * back to a vault left open behind the pack screen; `storage` on the mirror key
-   * is the OTHER tab, which IndexedDB fires nothing for at all. Same pair
-   * players.pack.tsx listens to, and for the same reason.
-   */
-  useEffect(() => {
-    const theirs = (e: StorageEvent) => {
-      if (e.key === PACK_DEALT_KEY) reread();
-    };
-    window.addEventListener(PACK_STATE_CHANGED, reread);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(PACK_STATE_CHANGED, reread);
-      window.removeEventListener("storage", theirs);
-    };
-  }, [reread]);
+  // This tab's own write is what carries a tear back to a vault left open behind
+  // the pack screen; the mirror key is the OTHER tab.
+  usePackSignals({ changedHere: reread, dealtElsewhere: reread });
 
   useEffect(() => {
     // Wait for the browser to say who this pack is for. usePackIdentity is null

@@ -1,4 +1,5 @@
 import { useMemberQuery } from "./use-member-query";
+import { usePackSignals } from "./use-pack-signals";
 import { myCardStatsKey } from "./query-keys";
 import { memberIdentity, memberIdentityOrNull } from "@/lib/identity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,8 +11,6 @@ import {
   forgetCards,
   loadCollection,
   loadUnrecorded,
-  PACK_STATE_CHANGED,
-  PACK_UNRECORDED_KEY,
   type CollectedCard,
   type UnrecordedPulls,
 } from "@/lib/card-collection";
@@ -141,30 +140,27 @@ export function useMyCollection(
   // is not mounted on any of the others.
   const [unrecorded, setUnrecorded] = useState<UnrecordedPulls | null>(null);
   const [unrecordedLoaded, setUnrecordedLoaded] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const read = () =>
+  const mountedRef = useRef(false);
+  const readUnrecorded = useCallback(
+    () =>
       void loadUnrecorded().then((u) => {
-        if (cancelled) return;
+        if (!mountedRef.current) return;
         setUnrecorded((prev) => (sameRow(prev, u) ? prev : u));
         setUnrecordedLoaded(true);
-      });
-    // `PACK_STATE_CHANGED` never leaves its tab. A claim in another tab writes this
-    // row and then hands the profile a member token, and this vault would
-    // reconcile against the row it read at mount — before there was one.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== PACK_UNRECORDED_KEY) return;
-      read();
-    };
-    read();
-    window.addEventListener(PACK_STATE_CHANGED, read);
-    window.addEventListener("storage", theirs);
+      }),
+    [],
+  );
+  useEffect(() => {
+    mountedRef.current = true;
+    readUnrecorded();
     return () => {
-      cancelled = true;
-      window.removeEventListener(PACK_STATE_CHANGED, read);
-      window.removeEventListener("storage", theirs);
+      mountedRef.current = false;
     };
-  }, []);
+  }, [readUnrecorded]);
+  // A claim in another tab writes this row and then hands the profile a member
+  // token, and this vault would reconcile against the row it read at mount —
+  // before there was one.
+  usePackSignals({ changedHere: readUnrecorded, unrecordedElsewhere: readUnrecorded });
 
   const protectedIds = useMemo(() => {
     if (!unrecorded || unrecorded.ids.length === 0) return EMPTY_IDS;
