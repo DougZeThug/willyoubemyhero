@@ -28,9 +28,5 @@ function subscribe(onChange: () => void) {
 export function usePrefersReducedMotion(): boolean {
   // The server snapshot is `false`: the server has no matchMedia, and hydration
   // has to match the server's render. React then re-reads the client snapshot.
-  return useSyncExternalStore(
-    subscribe,
-    prefersReducedMotionNow,
-    () => false,
-  );
+  return useSyncExternalStore(subscribe, prefersReducedMotionNow, () => false);
 }

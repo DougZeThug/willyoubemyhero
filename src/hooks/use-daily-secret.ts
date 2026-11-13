@@ -1,3 +1,4 @@
+import { guestIdentity, memberIdentity } from "@/lib/identity";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMySecrets } from "@/lib/secret-cards.functions";
@@ -34,8 +35,8 @@ export const mySecretsKey = (actorId: string | null | undefined) =>
 export function useSecretActor(): string | null {
   const member = useMemberSession();
   const guest = useGuestSession();
-  if (member) return `m:${member.participantId}`;
-  return guest ? `g:${guest.guestId}` : null;
+  if (member) return memberIdentity(member.participantId);
+  return guest ? guestIdentity(guest.guestId) : null;
 }
 
 /** Everything this person has pulled. Never anything they haven't. */

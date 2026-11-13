@@ -3,6 +3,7 @@
 // Packs are dealt per person now. A claimed member has an identity already; a
 // guest standing in the garden with a borrowed phone does not, and refusing them
 // a pack over it would be a worse answer than giving the handset one of its own.
+import { deviceIdentity, memberIdentity } from "./identity";
 import { useEffect, useState } from "react";
 import { newClientKey } from "./format";
 import { useMemberSession } from "./member-token";
@@ -57,5 +58,5 @@ export function usePackIdentity(): string | null {
   useEffect(() => setDevice(deviceId()), []);
 
   if (!device) return null;
-  return member ? `m:${member.participantId}` : `d:${device}`;
+  return member ? memberIdentity(member.participantId) : deviceIdentity(device);
 }

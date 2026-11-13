@@ -1,3 +1,4 @@
+import { memberIdentityOrNull } from "@/lib/identity";
 import {
   createFileRoute,
   Link,
@@ -272,7 +273,7 @@ function TradePage() {
       // their pre-trade collection for minutes after the trade landed.
       qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
       qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, myId) }),
-      qc.invalidateQueries({ queryKey: mySecretsKey(myId ? `m:${myId}` : null) }),
+      qc.invalidateQueries({ queryKey: mySecretsKey(memberIdentityOrNull(myId)) }),
     ]);
   }
 

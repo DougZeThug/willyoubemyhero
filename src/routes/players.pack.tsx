@@ -1,3 +1,4 @@
+import { deviceIdentity, isMemberIdentity } from "@/lib/identity";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -507,8 +508,8 @@ function PackPage() {
         !!s &&
         s.dayKey === dayKey &&
         !!device &&
-        s.identity === `d:${device}` &&
-        identity.startsWith("m:");
+        s.identity === deviceIdentity(device) &&
+        isMemberIdentity(identity);
       if (carrying) {
         carryDeadlineRef.current ??= Date.now() + CARRY_GRACE_MS;
         const left = carryDeadlineRef.current - Date.now();

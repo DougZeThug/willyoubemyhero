@@ -1,3 +1,4 @@
+import { deviceIdentity, memberIdentity } from "@/lib/identity";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -107,7 +108,7 @@ function ClaimPage() {
       // suppressing it on a later re-claim is the right answer anyway.
       //
       // The pack row does NOT come with it. See below: that carry has to wait.
-      if (device) carryTrophySeen(`d:${device}`, selected);
+      if (device) carryTrophySeen(deviceIdentity(device), selected);
       // The token has to land first — `adoptCollection` authenticates as the
       // member it is filing cards for. But the moment it lands, the collection
       // hook starts reconciling this device against a server record that has
@@ -152,7 +153,11 @@ function ClaimPage() {
       // what makes carrying the pack safe: it is the record for these cards, so the
       // member must not file them a second time.
       if (device) {
-        await carryPackToIdentity(`d:${device}`, `m:${selected}`, adoptableIds(held));
+        await carryPackToIdentity(
+          deviceIdentity(device),
+          memberIdentity(selected),
+          adoptableIds(held),
+        );
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity. A THROW here

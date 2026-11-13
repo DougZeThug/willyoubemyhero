@@ -1,3 +1,4 @@
+import { memberIdentity } from "./identity";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   addUnrecorded,
@@ -99,7 +100,7 @@ export async function holdForAdoption(
 ): Promise<void> {
   const ids = adoptableIds(snapshot);
   if (ids.length === 0) return;
-  const identity = `m:${participantId}`;
+  const identity = memberIdentity(participantId);
   await addUnrecorded({ dayKey: leagueDay(), identity, ids });
   // Read back, because `addUnrecorded` swallows a failed write by design — the
   // pack screen would rather deal a pack than stop on a blocked database. Here
@@ -145,5 +146,5 @@ export async function releaseAdoptionHold(
     );
   }
   // Scoped to the identity the hold was filed under; see `retireUnrecorded`.
-  await retireUnrecorded(ids, `m:${participantId}`);
+  await retireUnrecorded(ids, memberIdentity(participantId));
 }

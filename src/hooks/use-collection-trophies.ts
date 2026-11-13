@@ -1,3 +1,4 @@
+import { isDeviceIdentity, memberIdentity } from "@/lib/identity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -123,7 +124,7 @@ export function useCollectionTrophyWatcher() {
     // complete and nothing marked it, on the one path where it is most earned.
     if (
       !identity ||
-      (participantId ? identity !== `m:${participantId}` : !identity.startsWith("d:"))
+      (participantId ? identity !== memberIdentity(participantId) : !isDeviceIdentity(identity))
     )
       return;
 

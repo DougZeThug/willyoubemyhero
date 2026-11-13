@@ -1,3 +1,4 @@
+import { deviceIdentity, memberIdentity } from "@/lib/identity";
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -180,7 +181,7 @@ export function useAccountSync(user: User | null) {
         // gate is about not rewriting a pack row for an account already switched
         // away from; re-filing seen-keys is idempotent and costs nothing if the
         // run turns out to be stale.
-        if (carryFrom) carryTrophySeen(`d:${carryFrom}`, res.id);
+        if (carryFrom) carryTrophySeen(deviceIdentity(carryFrom), res.id);
         // Held first for the tabs this one cannot see: see claim.tsx. After the
         // snapshot, before the token that wakes them.
         await holdForAdoption(res.id, held);
@@ -233,7 +234,11 @@ export function useAccountSync(user: User | null) {
         // the same person, and must not cost them their pack.
         const device = deviceId();
         if (device && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
-          await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
+          await carryPackToIdentity(
+            deviceIdentity(device),
+            memberIdentity(res.id),
+            adoptableIds(held),
+          );
         }
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.

@@ -1,3 +1,4 @@
+import { memberIdentityOrNull } from "@/lib/identity";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -142,7 +143,7 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
         // The secrets cache is keyed on an actor, which for a claimed member is
         // `m:<participantId>` — see useSecretActor.
         qc.invalidateQueries({
-          queryKey: mySecretsKey(participantId ? `m:${participantId}` : null),
+          queryKey: mySecretsKey(memberIdentityOrNull(participantId)),
         });
       })
       .subscribe();

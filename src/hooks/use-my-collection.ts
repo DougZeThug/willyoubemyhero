@@ -1,3 +1,4 @@
+import { memberIdentity, memberIdentityOrNull } from "@/lib/identity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -179,7 +180,7 @@ export function useMyCollection(
     // before `seed`, which needs the identity — so this is the safe reading of a
     // case that should not arise, not leniency toward a legacy row. There are no
     // legacy rows: this key ships with the protection that reads it.
-    if (participantId && unrecorded.identity !== `m:${participantId}`) return EMPTY_IDS;
+    if (participantId && unrecorded.identity !== memberIdentity(participantId)) return EMPTY_IDS;
     return new Set(unrecorded.ids);
   }, [unrecorded, participantId]);
 
@@ -338,7 +339,7 @@ export function useMyCollection(
         }
         const listed = new Set(answer.cards.map((c) => c.eventParticipantId));
         const held =
-          now && (!participantId || now.identity === `m:${participantId}`)
+          now && (!participantId || now.identity === memberIdentity(participantId))
             ? new Set(now.ids)
             : EMPTY_IDS;
         const doomed: string[] = [];
@@ -349,7 +350,7 @@ export function useMyCollection(
         // `heldBy` makes the row count again inside the delete's own transaction,
         // closing the gap between the read above and this write.
         if (doomed.length > 0)
-          await forgetCards(doomed, participantId ? `m:${participantId}` : undefined);
+          await forgetCards(doomed, memberIdentityOrNull(participantId) ?? undefined);
       } catch {
         for (const id of fresh) forgottenRef.current.delete(id);
       }
