@@ -54,13 +54,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { ImageDropZone } from "@/components/admin/image-drop-zone";
+import { isUploadImage, MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/components/admin/image-limits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-/** Matches the per-card cap in secret-cards.functions.ts (12M base64 chars ≈ 8.8 MB raw). */
-const MAX_BYTES = 8_800_000;
-const ACCEPT = ["image/png", "image/jpeg", "image/webp"];
 const MAX_FLAVOUR = 240;
 
 /**
@@ -119,9 +118,7 @@ export function SecretCardsPanel() {
   /** See `grant` below: the in-flight grant key per card+recipient. */
   const grantKeys = useRef(new Map<string, string>());
 
-  const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   // Per-card grant target: the participant id currently chosen in that row's picker.
@@ -246,12 +243,12 @@ export function SecretCardsPanel() {
   async function addFiles(files: File[]) {
     const next: Draft[] = [];
     for (const file of files) {
-      if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {
+      if (!isUploadImage(file)) {
         toast.error(`${file.name}: card art must be a PNG, JPEG, or WebP`);
         continue;
       }
-      if (file.size > MAX_BYTES) {
-        toast.error(`${file.name}: card art is over 8.8 MB`);
+      if (file.size > MAX_IMAGE_BYTES) {
+        toast.error(`${file.name}: card art is over ${MAX_IMAGE_MB} MB`);
         continue;
       }
       // Read the bytes now, while the OS handle is still alive. One unreadable
@@ -616,33 +613,11 @@ export function SecretCardsPanel() {
         </p>
       )}
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          void addFiles(Array.from(e.dataTransfer.files ?? []));
-        }}
-        onClick={() => !busy && inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
-        className={cn(
-          "mt-3 cursor-pointer rounded-lg border border-dashed p-5 text-center transition-colors",
-          dragging
-            ? "border-primary bg-primary/10"
-            : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
-          busy && "pointer-events-none opacity-60",
-        )}
+      <ImageDropZone
+        onFiles={(files) => void addFiles(files)}
+        multiple
+        busy={busy}
+        className="mt-3 p-5"
       >
         <UploadCloud className="mx-auto h-8 w-8 text-primary/70" aria-hidden />
         <p className="mt-2 font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
@@ -650,21 +625,17 @@ export function SecretCardsPanel() {
           {!busy && <span className="sm:hidden">Add card art</span>}
         </p>
         <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-          The filename becomes the card&apos;s name. PNG, JPEG or WebP, up to 8.8 MB. Portrait,
-          roughly 5:7.
+          The filename becomes the card&apos;s name. PNG, JPEG or WebP, up to {MAX_IMAGE_MB} MB.
+          Portrait, roughly 5:7.
         </p>
         {/* The whole box is a drop target, but on a phone there is nothing to
-            drop from — an explicit button is the affordance that reads as tappable. */}
+                drop from — an explicit button is the affordance that reads as tappable. */}
         <Button
           size="sm"
           variant="secondary"
           type="button"
           className="mt-3 min-h-11 sm:min-h-0"
           disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            inputRef.current?.click();
-          }}
         >
           Browse files
         </Button>
@@ -674,7 +645,7 @@ export function SecretCardsPanel() {
           </p>
         )}
         {/* Filed on the way in, so a batch of twelve is one pick rather than
-            twelve. Stops the click from reaching the drop target behind it. */}
+                twelve. Stops the click from reaching the drop target behind it. */}
         <label
           className="mx-auto mt-3 flex max-w-xs items-center gap-2"
           onClick={(e) => e.stopPropagation()}
@@ -696,18 +667,7 @@ export function SecretCardsPanel() {
             ))}
           </select>
         </label>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept="image/png,image/jpeg,image/webp"
-          className="hidden"
-          onChange={(e) => {
-            void addFiles(Array.from(e.target.files ?? []));
-            e.target.value = "";
-          }}
-        />
-      </div>
+      </ImageDropZone>
 
       {drafts.length > 0 && (
         <div className="mt-3 space-y-2">
