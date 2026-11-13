@@ -80,3 +80,18 @@ export function useModalSurface<T extends HTMLElement>(active = true) {
 
   return surfaceRef;
 }
+
+/**
+ * Stops the page behind a fixed overlay scrolling under a thumb. Restored rather
+ * than cleared, so whatever the body had before — including another surface's
+ * lock, vaul's own — is what it goes back to.
+ */
+export function useBodyScrollLock() {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+}

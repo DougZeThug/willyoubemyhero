@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/drawer";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-card";
-import { useModalSurface } from "@/hooks/use-modal-surface";
+import { useBodyScrollLock, useModalSurface } from "@/hooks/use-modal-surface";
 import { useTradeSpares } from "@/hooks/use-trades";
 import { rarityRank } from "@/lib/card-rarity";
 import type { ImageUrlSet } from "@/lib/media";
@@ -148,16 +148,7 @@ export function TradeBuilder({
     return () => document.removeEventListener("keydown", onKey, true);
   }, [picking, onClose]);
 
-  // The page behind is still a scrolling column, and a phone will happily scroll
-  // it under a fixed overlay. Saved and restored rather than set to "" on the way
-  // out, so nesting vaul's own lock inside this one cannot strand the page.
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  useBodyScrollLock();
 
   const rosterRank = useCallback(
     (eventParticipantId: string) => rarityRank(lookup(eventParticipantId).rarity.tier),

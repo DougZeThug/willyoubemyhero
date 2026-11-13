@@ -24,7 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useModalSurface } from "@/hooks/use-modal-surface";
+import { useBodyScrollLock, useModalSurface } from "@/hooks/use-modal-surface";
 import { editionStyle, type Edition } from "@/lib/card-edition";
 import { packedByLabel } from "@/lib/card-pulls";
 import { playFlip } from "@/lib/card-sfx";
@@ -183,17 +183,9 @@ export function CardViewer({
     return () => document.removeEventListener("keydown", onKey, true);
   }, [cards.length, index, menuOpen, onClose, onStep]);
 
-  // The page underneath is still scrollable, and on the details page it is a very
-  // long one: a drag over the card's margins would scroll the stats around behind
-  // the viewer. Restored rather than cleared, so whatever the body had before —
-  // including another surface's lock — is what it goes back to.
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  // The page underneath is still a very long one on the details page: a drag over
+  // the card's margins would scroll the stats around behind the viewer.
+  useBodyScrollLock();
 
   if (!card) return null;
 
