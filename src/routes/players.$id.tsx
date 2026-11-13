@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, NO_FLICK, type HoloGestures } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
@@ -73,6 +73,10 @@ import { acquisitionWindow } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
 import { useRevealCue } from "@/hooks/use-reveal-cue";
 import { setTradeIntent } from "@/lib/trade-intent";
+
+// The card sits on a page that still has to scroll under a thumb.
+const PAGE_CARD: HoloGestures = { ...NO_FLICK, pageScroll: true };
+const PAGE_CARD_GYRO: HoloGestures = { ...PAGE_CARD, gyro: true };
 
 export const Route = createFileRoute("/players/$id")({
   head: () => ({
@@ -718,13 +722,11 @@ function PlayerCardPage() {
                         edition={edition}
                         flipped={flipped}
                         onFlippedChange={setFlipped}
-                        gyro={gyro}
                         tilt="hero"
-                        pageScroll
+                        gestures={gyro ? PAGE_CARD_GYRO : PAGE_CARD}
                         // While magnified the frame owns the pointer; a card leaning
                         // under a pan would make the thing you are reading move.
                         interactive={!zoomed}
-                        flickToFlip={false}
                         backContent={
                           <CardBackPanel
                             ep={ep}

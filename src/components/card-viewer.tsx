@@ -11,7 +11,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, NO_FLICK } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY } from "@/components/locked-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { CardRibbon } from "@/components/card-ribbon";
@@ -343,7 +343,7 @@ export function CardViewer({
                     // under a pan would make the thing you are reading move.
                     interactive={!zoomed}
                     // The horizontal throw means "next card" here.
-                    flickToFlip={false}
+                    gestures={NO_FLICK}
                     backContent={card.back}
                   />
                 )}

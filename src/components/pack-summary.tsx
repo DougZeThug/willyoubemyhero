@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Check, Flame, PackageOpen, Share2 } from "lucide-react";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, type HoloGestures } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
@@ -25,6 +25,16 @@ import { StreakClaim } from "@/components/streak-claim";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { SellSpareDialog } from "@/components/sell-spare-dialog";
 import { cn } from "@/lib/utils";
+
+/**
+ * The row scrolls sideways now, and drag-tilt cannot share that axis with it. A
+ * tilting card sets `touch-action: pan-y`, which hands the browser the vertical
+ * pan and keeps the horizontal one for itself — so a thumb dragging across a card
+ * tilted it and the row underneath never moved. touch-action is read once at
+ * gesture start and is final, so there is no arrangement where both work.
+ * Scrolling wins: these are thumbnails in a scrolling row.
+ */
+const SCROLLING_ROW: HoloGestures = { touchTilt: false };
 
 /**
  * The box a pulled card's name sits in, link or not.
@@ -253,7 +263,7 @@ export function PackSummary({
                     backUrl={universalBack}
                     name={name}
                     rarity={rarity}
-                    touchTilt={false}
+                    gestures={SCROLLING_ROW}
                     backContent={<SecretBackPanel card={slot.card} rarity={rarity} />}
                   />
                 ) : (
@@ -263,15 +273,7 @@ export function PackSummary({
                     name={name}
                     rarity={rarity}
                     edition={edition ?? "standard"}
-                    // The row scrolls sideways now, and drag-tilt cannot share that
-                    // axis with it. A tilting card sets `touch-action: pan-y`, which
-                    // hands the browser the vertical pan and keeps the horizontal
-                    // one for itself — so a thumb dragging across a card tilted it
-                    // and the row underneath never moved. touch-action is read once
-                    // at gesture start and is final, so there is no arrangement
-                    // where both work. Scrolling wins: these are thumbnails in a
-                    // scrolling row, which is the case this prop exists for.
-                    touchTilt={false}
+                    gestures={SCROLLING_ROW}
                     backContent={
                       ep ? (
                         <CardBackPanel
