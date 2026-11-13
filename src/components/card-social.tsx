@@ -1,3 +1,4 @@
+import { STORAGE_KEYS } from "@/lib/storage-keys";
 import { eventSocialKey } from "@/hooks/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,7 +25,7 @@ const BURST = [
 ];
 
 /** Local storage key for the guest display name — one per browser. */
-const GUEST_NAME_KEY = "wwbh:guest-name";
+const GUEST_NAME_KEY = STORAGE_KEYS.guestName;
 
 function readGuestName(): string {
   if (typeof window === "undefined") return "";

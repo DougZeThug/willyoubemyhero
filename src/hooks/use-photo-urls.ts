@@ -1,3 +1,4 @@
+import { signedUrlSnapshotKey } from "@/lib/storage-keys";
 import { eventCardBackKey, signedUrlsKey, type SignedUrlKind } from "./query-keys";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ function useSignedUrls<T>(
   eventId: string | null | undefined,
   fetcher: () => Promise<T>,
 ) {
-  const storageKey = `wwbh:v${SNAPSHOT_VERSION}:${kind}:${eventId ?? ""}`;
+  const storageKey = signedUrlSnapshotKey(SNAPSHOT_VERSION, kind, eventId);
   const qc = useQueryClient();
 
   // Seeded after hydration rather than as `initialData`: the server has no

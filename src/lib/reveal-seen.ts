@@ -23,7 +23,9 @@
 // would cancel the confetti import the same pass had just started. A cue is an
 // event, not state.
 
-const PREFIX = "wwbh:reveal-seen:";
+import { STORAGE_KEYS } from "./storage-keys";
+
+const PREFIX = STORAGE_KEYS.revealSeenPrefix;
 
 /** The acquisition already celebrated for this card, or null for none. */
 export function readRevealedAt(eventParticipantId: string): string | null {

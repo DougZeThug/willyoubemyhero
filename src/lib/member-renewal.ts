@@ -4,6 +4,7 @@
 // season used to drop to guest on day 91 without a word. Renewing inside the
 // last month leaves plenty of visits to land it on, and nobody who has stopped
 // opening the app gets a session extended for them.
+import { STORAGE_KEYS } from "./storage-keys";
 import { getMemberToken, refreshMemberToken } from "./member-token";
 
 /** Renew once fewer than this many milliseconds of the token are left. */
@@ -23,7 +24,7 @@ function expiryOf(token: string): number {
  * the token's life is noise. Keyed on the token string itself: a new token —
  * a fresh claim, a sign-in — no longer matches and is asked about normally.
  */
-export const REFUSED_KEY = "wwbh:member-renewal-refused";
+export const REFUSED_KEY = STORAGE_KEYS.memberRenewalRefused;
 const PERMANENT = new Set(["rotated", "no_player"]);
 
 function readRefused(): string | null {

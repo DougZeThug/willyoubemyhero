@@ -1,4 +1,5 @@
 // Client-side active-run persistence via IndexedDB with a localStorage fallback.
+import { STORAGE_KEYS } from "./storage-keys";
 import { cachedDb, isBrowser } from "./idb";
 
 export type ActivePenalty = {
@@ -60,7 +61,7 @@ const getDb = cachedDb(DB_NAME, 1, (db) => {
 });
 
 const KEY = "current";
-const LS_KEY = "wwbh-active-run";
+const LS_KEY = STORAGE_KEYS.activeRun;
 
 /**
  * Bring a stored record up to the current schema, or refuse it.
