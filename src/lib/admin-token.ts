@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { parseAdminToken } from "./token-format";
 
 const KEY = "wwbh:admin-token";
 // The account that was signed in when the token above was issued, or absent for
@@ -12,17 +13,9 @@ export type AdminSession = Parsed & { owner: string | null };
 
 function parse(token: string | null): Parsed | null {
   if (!token) return null;
-  const parts = token.split(".");
-  // 3 parts from the PIN, 5 ("a.<user>.<event>.<exp>.<sig>") from an account.
-  let eventId: string | undefined;
-  let expStr: string | undefined;
-  if (parts.length === 3) [eventId, expStr] = parts;
-  else if (parts.length === 5 && parts[0] === "a") [, , eventId, expStr] = parts;
-  else return null;
-  const expiresAt = Number(expStr);
-  if (!eventId || !Number.isFinite(expiresAt)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { eventId, expiresAt, token };
+  const parsed = parseAdminToken(token);
+  if (!parsed || Date.now() > parsed.expiresAt) return null;
+  return { eventId: parsed.id, expiresAt: parsed.expiresAt, token };
 }
 
 export function getAdminToken(): string | null {

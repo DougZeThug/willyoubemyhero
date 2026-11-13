@@ -1,19 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
 import { uuid as zuuid } from "./zod-uuid";
 import type { Json } from "@/integrations/supabase/types";
+import { adminDb } from "./admin-db.server";
+import { noStore } from "./no-store.server";
 
-async function db() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
 const slug = z.enum([
   "draft_combine_player",
   "cornhole_player",
@@ -34,7 +27,7 @@ const TEMPLATE_NAMES = {
 export const listCardPromptTemplates = createServerFn({ method: "GET" }).handler(async () => {
   await requireLeagueAdmin();
   noStore();
-  const client = await db();
+  const client = await adminDb();
   const { data, error } = await client
     .from("card_prompt_templates")
     .select("*")
@@ -50,7 +43,7 @@ export const updateCardPromptTemplate = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
-    const client = await db();
+    const client = await adminDb();
     const { data: row, error } = await client
       .from("card_prompt_templates")
       .update({ master_prompt: data.masterPrompt })
@@ -89,7 +82,7 @@ export const saveCardPromptRun = createServerFn({ method: "POST" })
   .validator((data: unknown) => saveSchema.parse(data))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const client = await db();
+    const client = await adminDb();
     if (data.eventParticipantId) {
       const { data: participant, error: participantError } = await client
         .from("event_participants")
@@ -146,7 +139,7 @@ export const listCardPromptRuns = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     noStore();
-    const client = await db();
+    const client = await adminDb();
     const { data: rows, error } = await client
       .from("card_prompt_runs")
       .select("*")

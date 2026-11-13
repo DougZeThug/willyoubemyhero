@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
 import { signPath } from "./media.functions";
@@ -8,10 +7,14 @@ import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
 import { MARKET_PRICE_MAX, MARKET_PRICE_MIN } from "./market";
 import type { MarketBrowse, MarketListing, MarketListingItem, MyMarketListing, MyStall } from "./market"; // prettier-ignore
-import type { BuyListingResult, CancelListingResult, ListCardResult, MarketListingRow } from "./market-db.server"; // prettier-ignore
+import type { BuyListingResult, CancelListingResult, ListCardResult, MarketListingRow } from "./market-rows"; // prettier-ignore
 import type { CardCopyRow } from "./trades-rows";
 import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
 import { uuid as zuuid } from "./zod-uuid";
+import { activeEventId } from "./active-event.server";
+import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { noStore } from "./no-store.server";
 
 /**
  * The marketplace: a spare priced by the person selling it.
@@ -44,12 +47,6 @@ import { uuid as zuuid } from "./zod-uuid";
  * and through their own stall, which is the only place a sale is ever visible.
  */
 
-/** Untyped client, for the marketplace tables types.ts has not been regenerated for. */
-async function db() {
-  const { marketDb } = await import("./market-db.server");
-  return marketDb();
-}
-
 /**
  * Tell the seller their card sold. Dynamic import for the reason
  * trades.functions.ts gives: nudge.server.ts reaches for node:crypto, and a
@@ -71,28 +68,6 @@ async function nudge(participantId: string) {
     // Belt and braces on top of sendTradeNudge already swallowing its own
     // failures — the layer that holds if that ever stops being true.
   }
-}
-
-/** These vary by the caller's token, so a shared cache hit would hand one member another's shelf. */
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
-
-/**
- * The active combine, resolved server-side rather than taken from the caller —
- * the `recordCardPulls` pattern. A payload event id would be both spoofable and,
- * on a screen that renders before the event query answers, racy.
- */
-async function activeEventId(): Promise<string | null> {
-  const sb = await db();
-  const { data } = await sb
-    .from("events")
-    .select("id")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ id: string }>();
-  return data?.id ?? null;
 }
 
 /**
@@ -129,7 +104,7 @@ async function hydrate(
 ): Promise<Map<string, MarketListingItem>> {
   const out = new Map<string, MarketListingItem>();
   if (rows.length === 0) return out;
-  const sb = await db();
+  const sb = await adminDb();
 
   const copyIds = rows.flatMap((r) =>
     r.card_copy_id && !r.listed_event_participant_id ? [r.card_copy_id] : [],
@@ -234,7 +209,7 @@ async function hydrate(
 
 /** Secret card ids the caller already holds a copy of. Their own rows only. */
 async function viewerSecrets(me: string): Promise<ReadonlySet<string>> {
-  const sb = await db();
+  const sb = await adminDb();
   const { data } = await sb
     .from("secret_card_pulls")
     .select("secret_card_id")
@@ -265,7 +240,7 @@ export const getMarketListings = createServerFn({ method: "GET" }).handler(
   async (): Promise<MarketBrowse> => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { tradeNudgeTopic } = await import("./nudge.server");
     const nudgeTopic = tradeNudgeTopic(me);
@@ -320,7 +295,7 @@ export const getMarketListings = createServerFn({ method: "GET" }).handler(
 export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Promise<MyStall> => {
   const me = await requireMember();
   noStore();
-  const sb = await db();
+  const sb = await adminDb();
 
   const [{ data: live, error }, { data: settled, error: settledError }] = await Promise.all([
     sb
@@ -420,7 +395,7 @@ async function withListedSecrets(
     !r.listed_secret_card_id && r.secret_pull_id ? [r.secret_pull_id] : [],
   );
   if (pullIds.length === 0) return listed.length ? new Set([...held, ...listed]) : held;
-  const sb = await db();
+  const sb = await adminDb();
   const { data } = await sb
     .from("secret_card_pulls")
     .select("secret_card_id")
@@ -460,12 +435,12 @@ export const listCardForDust = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("list_card_for_dust", {
       _participant_id: me,
       _kind: data.kind,
-      _card_copy_id: data.kind === "roster" ? data.copyId : null,
-      _secret_pull_id: data.kind === "secret" ? data.pullId : null,
+      _card_copy_id: sqlNull(data.kind === "roster" ? data.copyId : null),
+      _secret_pull_id: sqlNull(data.kind === "secret" ? data.pullId : null),
       _price: data.price,
     });
     if (error) throw new Error(error.message);
@@ -486,7 +461,7 @@ export const cancelMarketListing = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("cancel_market_listing", {
       _participant_id: me,
       _listing_id: data.listingId,
@@ -516,7 +491,7 @@ export const buyMarketListing = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("buy_market_listing", {
       _participant_id: me,
       _listing_id: data.listingId,

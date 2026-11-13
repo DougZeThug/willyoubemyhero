@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
 import { signPath } from "./media.functions";
@@ -8,6 +7,8 @@ import type { CardCopyRow } from "./trades-rows";
 import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
 import { toSecretTier, type SecretTier } from "./secret-rarity";
 import { uuid as zuuid } from "./zod-uuid";
+import { adminDb } from "./admin-db.server";
+import { noStore } from "./no-store.server";
 
 /**
  * What arrived since you last looked.
@@ -33,12 +34,6 @@ import { uuid as zuuid } from "./zod-uuid";
  * response's keys exactly rather than merely spot-checking them.
  */
 
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
 /**
  * Resolved once and handed down, rather than re-imported inside each reader.
  *
@@ -48,17 +43,7 @@ async function admin() {
  * place and quietly talk to a live database. One client, resolved before anything
  * forks, cannot.
  */
-type Admin = Awaited<ReturnType<typeof admin>>;
-
-/**
- * Personalised by a request header, so a shared cache hit would hand one member
- * another's arrivals. Same reasoning as the streak and trade reads, and its own
- * copy for the same reason theirs are: nobody has wanted this in a shared module
- * badly enough to make one.
- */
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
+type Admin = Awaited<ReturnType<typeof adminDb>>;
 
 /** Newest first, and never more of them than a strip could ever show. */
 const MAX_ROWS = 50;
@@ -155,7 +140,7 @@ export const getRecentAcquisitions = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<RecentAcquisitions> => {
     const participantId = await requireMember();
     noStore();
-    const sb = await admin();
+    const sb = await adminDb();
 
     // card_copies carries no event_id, so the combine is resolved through the
     // event_participants it points at. Two queries rather than a PostgREST

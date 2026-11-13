@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
 import { signPath } from "./media.functions";
@@ -27,6 +26,9 @@ import type {
 } from "./trades-rows";
 import { uuid as zuuid } from "./zod-uuid";
 import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { activeEventId } from "./active-event.server";
+import { noStore } from "./no-store.server";
 
 /**
  * The Trading Post: moving a spare card from one member to another.
@@ -53,29 +55,6 @@ import { sqlNull } from "./rpc-null";
  * them is checked against the giver by `trade_item_is_spare` inside the RPC.
  */
 
-/** Typed client, for tables the generated types already know about. */
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function db() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/**
- * The same client, widened, for the one RPC `types.ts` has not been regenerated
- * against yet. The escape hatch trades-rows.ts opens and market.functions.ts
- * takes in the same shape — dynamically, inside the handler, so the top-level
- * `client.server` import over there never reaches the bundle.
- */
-async function untypedDb() {
-  const { tradesDb } = await import("./trades-rows");
-  return tradesDb();
-}
-
 /**
  * Tell the other side something moved. Dynamic import for the same reason as the
  * two above: nudge.server.ts reaches for node:crypto, and a top-level import here
@@ -94,31 +73,6 @@ async function nudge(participantId: string) {
     // it is what makes "a broken nudge does not break a trade" a fact rather
     // than a promise about another module.
   }
-}
-
-/**
- * These responses vary by the caller's token, and a shared cache hit would hand
- * one member another's inbox. Same reasoning as secret-cards.functions.ts.
- */
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
-
-/**
- * The active combine, resolved server-side rather than taken from the caller —
- * the `recordCardPulls` pattern. A payload event id here would be both spoofable
- * and, on a screen that renders before the event query answers, racy.
- */
-async function activeEventId(): Promise<string | null> {
-  const sb = await admin();
-  const { data } = await sb
-    .from("events")
-    .select("id")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data?.id ?? null;
 }
 
 const itemSchema = z.discriminatedUnion("kind", [
@@ -162,7 +116,7 @@ async function hydrateSecrets(
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
 
-  const sb = await db();
+  const sb = await adminDb();
   // Names are public enough to judge an offer; the art is what stays hidden.
   // We fetch every card referenced by rows the caller is already entitled to see,
   // but only sign URLs for the ones they actually hold (or when concealment is
@@ -217,7 +171,7 @@ async function hydrateSecrets(
 async function viewerHoldings(
   me: string,
 ): Promise<{ roster: ReadonlySet<string>; secrets: ReadonlySet<string> }> {
-  const sb = await db();
+  const sb = await adminDb();
   const [{ data: copies }, { data: pulls }] = await Promise.all([
     sb
       .from("card_copies")
@@ -271,7 +225,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     const eventId = await activeEventId();
     if (!eventId) return empty;
 
-    const sb = await admin();
+    const sb = await adminDb();
     // Constrain to this event's own cards first, exactly as getCardPullCounts and
     // getMyCardStats do, so this can never be used to enumerate another event.
     const { data: eps, error: epsError } = await sb
@@ -281,10 +235,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     if (epsError) throw epsError;
     const ids = (eps ?? []).map((r) => r.id);
 
-    const trades = await db();
     const [{ data: allCopies, error }, { data: dupes, error: dupeError }] = await Promise.all([
       ids.length
-        ? trades
+        ? sb
             .from("card_copies")
             // THE EDITION IS IN THIS RESPONSE, and that is a deliberate widening
             // rather than an oversight: you cannot choose which copy to hand over,
@@ -310,7 +263,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // give — unlike a roster card there is no public count riding on you keeping
       // one. Which means this query is also where `lastCopy` is worked out, so the
       // tile can say so before somebody hands away their only mythic.
-      trades
+      sb
         .from("secret_card_pulls")
         .select("id, secret_card_id, tier")
         .eq("participant_id", data.participantId)
@@ -428,7 +381,7 @@ async function toOfferViews(
 
   let hydrated = new Map<string, SecretSpare>();
   let byCopy = new Map<string, Pick<CardCopyRow, "id" | "event_participant_id" | "edition">>();
-  const sb = await db();
+  const sb = await adminDb();
 
   if (secretRows.length) {
     const { data: pulls } = await sb
@@ -581,7 +534,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
   }> => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
 
     // Handed out here rather than from a server function of its own. A member
     // cannot derive their own topic — it is HMAC'd with SESSION_SECRET — and this
@@ -714,7 +667,7 @@ export const createTradeOffer = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { data: result, error } = await sb.rpc("create_trade_offer", {
       _proposer_id: me,
@@ -743,7 +696,7 @@ export const acceptTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     // `_recipient_id` is the token holder. The RPC raises if it is not the offer's
     // recipient, which is what stops anyone accepting an offer aimed at somebody
@@ -787,7 +740,7 @@ export const declineTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { data: row, error } = await sb
       .from("trade_offers")
@@ -811,7 +764,7 @@ export const cancelTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { data: row, error } = await sb
       .from("trade_offers")
@@ -843,7 +796,7 @@ export const reopenTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await untypedDb();
+    const sb = await adminDb();
 
     const { data: result, error } = await sb.rpc("reopen_trade_offer", {
       _offer_id: data.offerId,
@@ -874,7 +827,7 @@ const FEED_LIMIT = 25;
 export const getTradeFeed = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeFeedEntry[]> => {
-    const sb = await db();
+    const sb = await adminDb();
     const { data: rows, error } = await sb
       .from("trades")
       .select("id, proposer_id, recipient_id, proposer_gave, recipient_gave, executed_at")

@@ -1,6 +1,7 @@
 // League-member session on this device. Mirrors src/lib/admin-token.ts, with a
 // separate storage key so claiming a player and unlocking admin are independent.
 import { useSyncExternalStore } from "react";
+import { MEMBER_PREFIX, parsePrefixedToken } from "./token-format";
 
 const KEY = "wwbh:member-token";
 const NAME_KEY = "wwbh:member-name";
@@ -17,14 +18,9 @@ export type MemberSession = {
 
 function parse(token: string | null, name: string | null, now = Date.now()): MemberSession | null {
   if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [prefix, participantId, expStr] = parts;
-  if (prefix !== "m") return null;
-  const expiresAt = Number(expStr);
-  if (!participantId || !Number.isFinite(expiresAt)) return null;
-  if (now > expiresAt) return null;
-  return { participantId, expiresAt, token, name };
+  const parsed = parsePrefixedToken(MEMBER_PREFIX, token);
+  if (!parsed || now > parsed.expiresAt) return null;
+  return { participantId: parsed.id, expiresAt: parsed.expiresAt, token, name };
 }
 
 export function getMemberToken(): string | null {

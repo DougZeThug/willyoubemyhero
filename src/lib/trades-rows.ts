@@ -1,24 +1,6 @@
-// A supabase client that will talk to the trading tables `types.ts` has never
-// heard of.
-//
-// Exactly the escape hatch secret-cards-db.server.ts opens, and for exactly the
-// same reason: src/integrations/supabase/types.ts is `supabase gen types` output,
-// must not be hand-edited, and is .prettierignore'd — so `trade_offers`,
-// `trade_offer_items` and `trades`, along with `create_trade_offer` and
-// `accept_trade_offer`, are compile errors against the generated `Database` type,
-// which is an alias rather than an interface and so cannot be rescued by
-// declaration merging.
-//
-// Widened to the ungenericised client, recovering shape per query with
-// `.returns<T>()` / `.maybeSingle<T>()`, which is already the house style.
-//
-// DELETE THIS FILE once types.ts has been regenerated against a project with
-// 20260817120000_card_trading.sql applied: every call site then switches to plain
-// `supabaseAdmin` unchanged.
-import type { SupabaseClient } from "@supabase/supabase-js";
-// A top-level client.server import is safe here and nowhere else: this is a
-// *.server.ts module, so it never reaches the client bundle.
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+// Row and result shapes for the trading tables and RPCs. `Returns: Json` can never
+// give a discriminated union, so the RPC results are written by hand; the rows
+// are narrowed here where a literal union is wanted.
 import type { CompletedCollectionFor } from "./collection-trophies";
 import type { TradeOfferStatus, TradeSummaryItem } from "./trades";
 
@@ -132,7 +114,3 @@ export type AcceptTradeOfferResult =
  */
 export type ReopenTradeOfferResult =
   { ok: true; counterpartyId: string } | { ok: false; reason: "resolved" | "expired" | "stale" };
-
-export function tradesDb(): SupabaseClient {
-  return supabaseAdmin as unknown as SupabaseClient;
-}
