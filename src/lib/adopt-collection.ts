@@ -5,8 +5,8 @@ import {
   loadCollectionOrThrow,
   loadUnrecorded,
   retireUnrecorded,
-  todayKey,
 } from "./card-collection";
+import { leagueDay } from "./league-day";
 import { adoptCollection } from "./card-pulls.functions";
 
 /**
@@ -100,7 +100,7 @@ export async function holdForAdoption(
   const ids = adoptableIds(snapshot);
   if (ids.length === 0) return;
   const identity = `m:${participantId}`;
-  await addUnrecorded({ dayKey: todayKey(), identity, ids });
+  await addUnrecorded({ dayKey: leagueDay(), identity, ids });
   // Read back, because `addUnrecorded` swallows a failed write by design — the
   // pack screen would rather deal a pack than stop on a blocked database. Here
   // that contract is the wrong one: a hold that was never written, reported as

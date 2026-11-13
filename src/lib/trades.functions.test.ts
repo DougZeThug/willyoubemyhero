@@ -9,12 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { callServerFn, memberHeaders } from "@/test/server-fn";
 import { signMemberToken } from "./session.server";
-import {
-  leagueDay,
-  TRADE_UNDO_WINDOW_SECONDS,
-  type TradeOfferView,
-  type TradeSpares,
-} from "./trades";
+import { leagueDay } from "./league-day";
+import { TRADE_UNDO_WINDOW_SECONDS, type TradeOfferView, type TradeSpares } from "./trades";
 
 let mock = createSupabaseMock();
 

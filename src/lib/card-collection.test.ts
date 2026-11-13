@@ -5,6 +5,7 @@
 // into the next one.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
+import { leagueDay } from "./league-day";
 
 async function freshModule() {
   vi.resetModules();
@@ -519,7 +520,7 @@ describe("carrying a pack across a claim", () => {
 
   async function todaysPack(mod: typeof import("./card-collection"), identity = DEVICE) {
     const state = {
-      dayKey: mod.todayKey(),
+      dayKey: leagueDay(),
       ids: [CARD_A, CARD_B],
       revealed: [0],
       cursor: 1,
@@ -598,7 +599,7 @@ describe("carrying a pack across a claim", () => {
     // thing that will ever file them.
     const mod = await freshModule();
     await mod.savePackState({
-      dayKey: mod.todayKey(),
+      dayKey: leagueDay(),
       ids: [CARD_A, CARD_B],
       revealed: [0],
       cursor: 1,
@@ -634,7 +635,7 @@ describe("carrying a pack across a claim", () => {
     const mod = await freshModule();
     await todaysPack(mod);
     await mod.addUnrecorded({ dayKey: "2026-07-27", identity: DEVICE, ids: [CARD_A] });
-    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_B] });
+    await mod.addUnrecorded({ dayKey: leagueDay(), identity: DEVICE, ids: [CARD_B] });
     expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A])).toBe(true);
     const row = (await mod.loadUnrecorded())!;
     expect(row.ids).toEqual([CARD_B]);
@@ -652,7 +653,7 @@ describe("carrying a pack across a claim", () => {
     // vault they do not belong in.
     const mod = await freshModule();
     await todaysPack(mod);
-    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: "m:p-bob", ids: [CARD_A] });
+    await mod.addUnrecorded({ dayKey: leagueDay(), identity: "m:p-bob", ids: [CARD_A] });
     expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A])).toBe(true);
     const row = (await mod.loadUnrecorded())!;
     expect(row.identity).toBe("m:p-bob");
@@ -662,7 +663,7 @@ describe("carrying a pack across a claim", () => {
   it("drops the row outright when the adoption took everything", async () => {
     const mod = await freshModule();
     await todaysPack(mod);
-    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_A, CARD_B] });
+    await mod.addUnrecorded({ dayKey: leagueDay(), identity: DEVICE, ids: [CARD_A, CARD_B] });
     expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A, CARD_B])).toBe(true);
     expect(await mod.loadUnrecorded()).toBeNull();
   });
@@ -670,7 +671,7 @@ describe("carrying a pack across a claim", () => {
   it("leaves the unrecorded row alone when it refuses", async () => {
     const mod = await freshModule();
     await todaysPack(mod, "d:somebody-else");
-    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_A] });
+    await mod.addUnrecorded({ dayKey: leagueDay(), identity: DEVICE, ids: [CARD_A] });
     expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(false);
     expect((await mod.loadUnrecorded())?.ids).toEqual([CARD_A]);
   });
@@ -695,10 +696,10 @@ describe("carrying a pack across a claim", () => {
     // stop the member's tab dealing a second pack nor tell it to look again.
     const mod = await freshModule();
     await todaysPack(mod);
-    expect(mod.packDealtElsewhere(mod.todayKey(), DEVICE)).toBe(true);
+    expect(mod.packDealtElsewhere(leagueDay(), DEVICE)).toBe(true);
     await mod.carryPackToIdentity(DEVICE, MEMBER);
-    expect(mod.packDealtElsewhere(mod.todayKey(), MEMBER)).toBe(true);
-    expect(mod.packDealtElsewhere(mod.todayKey(), DEVICE)).toBe(false);
+    expect(mod.packDealtElsewhere(leagueDay(), MEMBER)).toBe(true);
+    expect(mod.packDealtElsewhere(leagueDay(), DEVICE)).toBe(false);
   });
 });
 

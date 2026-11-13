@@ -16,7 +16,7 @@ import {
   type Streak,
 } from "./streaks";
 
-import { leagueDay } from "./trades";
+import { leagueDay } from "./league-day";
 import { sqlNull } from "./rpc-null";
 
 /**

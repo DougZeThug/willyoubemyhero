@@ -14,6 +14,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { useSyncExternalStore, type ReactNode } from "react";
 import PackPage from "./players.pack";
 import { EVENT_ID, makeBundle } from "@/test/fixtures";
+import { leagueDay } from "@/lib/league-day";
 
 /**
  * Who the phone is, as one store every identity hook reads — so dropping the
@@ -151,10 +152,8 @@ beforeEach(async () => {
   openPack.mockReset().mockRejectedValue(new Error("Claim your player first."));
   // Today's pack, dealt to the member. The resume path finds it on mount and asks
   // the server for the cards — which is the request the server turns away.
-  const { todayKey } =
-    await vi.importActual<typeof import("@/lib/card-collection")>("@/lib/card-collection");
   loadPackState.mockReset().mockResolvedValue({
-    dayKey: todayKey(),
+    dayKey: leagueDay(),
     identity: "m:me",
     ids: ["ep-1"],
     cards: [{ kind: "roster", id: "ep-1" }],

@@ -4,9 +4,9 @@
 // that database holds an in-progress timed run, which is the most safety-critical
 // client state in the app. Card data has no business forcing a version upgrade on it.
 
-import { openDB, type IDBPDatabase } from "idb";
+import { cachedDb, isBrowser } from "./idb";
 import { bestEdition, type Edition } from "./card-edition";
-import { leagueDay } from "./trades";
+import { leagueDay } from "./league-day";
 
 // The name, the version and the store names below are read directly by
 // e2e/journeys.spec.ts, which opens this database itself to assert what a pack
@@ -19,26 +19,6 @@ const PACK_STATE = "pack-state";
 
 /** A second row in the same store, so the pack and its unsent ids expire apart. */
 const UNRECORDED_KEY = "unrecorded";
-
-/**
- * The day a pack belongs to: the LEAGUE's, in New York, exactly as `open_pack`
- * stamps it.
- *
- * This used to be the device's local date, and the app ran on two clocks — the
- * roster re-sealed on the phone's midnight while the secret rolled over on the
- * league's, and anyone up between the two saw the fourth slot re-arm while the
- * three cards did not. The server deals the whole pack now, keyed on its own
- * day, so the row here follows that day too; when the server's answer arrives
- * it overrides this, and the two only ever disagree on a phone whose clock is
- * wrong.
- *
- * Lives beside the row that carries it rather than in the pack route, because
- * the screen deciding whether to re-seal and `carryPackToIdentity` below
- * deciding whether a stored pack is still today's have to agree.
- */
-export function todayKey(): string {
-  return leagueDay();
-}
 
 /**
  * One slot of today's pack, as this device remembers it.
@@ -201,31 +181,13 @@ export type CollectedCard = {
   edition?: string;
 };
 
-function isBrowser() {
-  return typeof window !== "undefined" && typeof indexedDB !== "undefined";
-}
-
-let dbPromise: Promise<IDBPDatabase> | null = null;
-function getDb() {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, 2, {
-      // Guarded rather than switched on `oldVersion`: a device upgrading from v1
-      // and a device creating the database fresh both land here, and the only
-      // thing that matters is that both stores exist afterwards.
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(COLLECTED)) db.createObjectStore(COLLECTED);
-        if (!db.objectStoreNames.contains(PACK_STATE)) db.createObjectStore(PACK_STATE);
-      },
-    });
-    // A rejected open is cached forever otherwise: one transient failure (a
-    // blocked upgrade, a private-mode hiccup) would fail every later read until
-    // the tab is reloaded, so a retry could never succeed.
-    dbPromise.catch(() => {
-      dbPromise = null;
-    });
-  }
-  return dbPromise;
-}
+// Guarded rather than switched on `oldVersion`: a device upgrading from v1
+// and a device creating the database fresh both land here, and the only
+// thing that matters is that both stores exist afterwards.
+const getDb = cachedDb(DB_NAME, 2, (db) => {
+  if (!db.objectStoreNames.contains(COLLECTED)) db.createObjectStore(COLLECTED);
+  if (!db.objectStoreNames.contains(PACK_STATE)) db.createObjectStore(PACK_STATE);
+});
 
 /**
  * The same read as `loadCollection`, but a failed read throws.
@@ -627,7 +589,7 @@ export async function carryPackToIdentity(
     // and stops protecting anyway.
     const tx = db.transaction(PACK_STATE, "readwrite");
     const state = (await tx.store.get(PACK_STATE_KEY)) as PackState | undefined;
-    if (!state || state.dayKey !== todayKey() || state.identity !== from) {
+    if (!state || state.dayKey !== leagueDay() || state.identity !== from) {
       await tx.done;
       return false;
     }

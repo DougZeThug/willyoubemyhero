@@ -30,7 +30,6 @@ import {
   PACK_STATE_CHANGED,
   retireUnrecorded,
   savePackState,
-  todayKey,
   PACK_DEALT_KEY,
   type PackSlotRef,
 } from "@/lib/card-collection";
@@ -40,6 +39,7 @@ import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret, celebrateUpgrade } from "@/lib/card-confetti";
 import { openPack } from "@/lib/pack.functions";
+import { leagueDay } from "@/lib/league-day";
 import { adoptCollection } from "@/lib/card-pulls.functions";
 import { secretFoil, SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
@@ -364,9 +364,9 @@ function PackPage() {
   const autoRef = useRef(false);
   const [autoRunning, setAutoRunning] = useState(false);
 
-  // The pack's day is the league's — see `todayKey`. The server's answer, when
+  // The pack's day is the league's — see `leagueDay`. The server's answer, when
   // it has one, wins over this phone's idea of it.
-  const [dayKey, setDayKey] = useState(todayKey);
+  const [dayKey, setDayKey] = useState(leagueDay);
   // Null until the browser has answered. Nothing is dealt against a half-known
   // identity, or a claimed member would flash a device-seeded pack first.
   const identity = usePackIdentity();
@@ -608,7 +608,7 @@ function PackPage() {
       // pulling the pack out from under the opening ceremony, which is three
       // cards in the air rather than one on a stand.
       if (revealingRef.current || openingRef.current) return;
-      const next = todayKey();
+      const next = leagueDay();
       setDayKey((prev) => {
         if (prev === next) return prev;
         // The server's own view of the day, refreshed with it.
