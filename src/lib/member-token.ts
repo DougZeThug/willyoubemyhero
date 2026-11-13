@@ -8,7 +8,7 @@ import {
   onOtherTab,
   readStored,
   removeStored,
-  writeStored,
+  writeStrict,
 } from "./device-store";
 import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
@@ -46,13 +46,13 @@ export function getMemberToken(): string | null {
 
 export function setMemberToken(token: string, name: string) {
   if (typeof window === "undefined") return;
-  writeStored(KEY, token);
-  writeStored(NAME_KEY, name);
+  writeStrict(KEY, token);
+  writeStrict(NAME_KEY, name);
   // Deliberately never cleared, including on sign-out. A member's secret cards
   // live on their name rather than on the phone, so somebody arriving on a new
   // handset to an empty vault needs to be told where their collection went — and
   // by then the token that would have proved they had one is gone.
-  writeStored(WAS_MEMBER_KEY, "1");
+  writeStrict(WAS_MEMBER_KEY, "1");
   emitLocal(CHANGED);
 }
 
@@ -96,7 +96,7 @@ export function refreshMemberToken(token: string, renewed?: string): boolean {
   } else if (next !== memberTokenParticipant(getMemberToken())) {
     return false;
   }
-  writeStored(KEY, token);
+  writeStrict(KEY, token);
   emitLocal(CHANGED);
   return true;
 }

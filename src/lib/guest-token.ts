@@ -13,7 +13,7 @@ import {
   onOtherTab,
   readStored,
   removeStored,
-  writeStored,
+  writeStrict,
 } from "./device-store";
 import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
@@ -42,7 +42,7 @@ export function getGuestToken(): string | null {
 
 export function setGuestToken(token: string) {
   if (typeof window === "undefined") return;
-  writeStored(KEY, token);
+  writeStrict(KEY, token);
   emitLocal(CHANGED);
 }
 

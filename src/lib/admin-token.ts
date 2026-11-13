@@ -6,7 +6,7 @@ import {
   onOtherTab,
   readStored,
   removeStored,
-  writeStored,
+  writeStrict,
 } from "./device-store";
 import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
@@ -51,8 +51,8 @@ export function getAdminToken(): string | null {
  */
 export function setAdminToken(token: string, owner: string | null) {
   if (typeof window === "undefined") return;
-  writeStored(KEY, token);
-  if (owner) writeStored(OWNER_KEY, owner);
+  writeStrict(KEY, token);
+  if (owner) writeStrict(OWNER_KEY, owner);
   else removeStored(OWNER_KEY);
   emitLocal(CHANGED);
 }
@@ -81,7 +81,7 @@ export function bindAdminTokenTo(userId: string) {
   // Also evicts an expired token, and the owner with it.
   if (!getAdminToken()) return;
   const owner = readStored(OWNER_KEY);
-  if (!owner) writeStored(OWNER_KEY, userId);
+  if (!owner) writeStrict(OWNER_KEY, userId);
   else if (owner !== userId) clearAdminToken();
 }
 

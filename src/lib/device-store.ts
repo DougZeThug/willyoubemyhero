@@ -125,6 +125,16 @@ export function writeStored(key: string, value: string) {
   }
 }
 
+/**
+ * `localStorage.setItem` that lets a blocked store throw. For tokens: a sign-in
+ * that cannot be kept must fail loudly, not look like it worked and leave the
+ * device with no session.
+ */
+export function writeStrict(key: string, value: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, value);
+}
+
 /** Guarded `localStorage.removeItem`. */
 export function removeStored(key: string) {
   if (typeof window === "undefined") return;
