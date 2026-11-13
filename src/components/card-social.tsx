@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { prefersReducedMotionNow } from "@/hooks/use-reduced-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "motion/react";
@@ -239,7 +240,7 @@ export function CardSocial({
       ...prev,
       [emoji]: { delta: (prev[emoji]?.delta ?? 0) + (adding ? 1 : -1), want: adding },
     }));
-    if (adding && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    if (adding && !prefersReducedMotionNow()) {
       setBursting(emoji);
       buzz([8]);
     }

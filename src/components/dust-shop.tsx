@@ -23,7 +23,6 @@ import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { SetChip } from "@/components/set-chip";
-import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { PresentationMode } from "@/components/presentation-mode";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
@@ -181,7 +180,6 @@ export function DustShopPanel({
     onError: () => toast("Could not buy that just now"),
   });
 
-  const sets = useSecretCollections();
   const sparesFn = useServerFn(getTradeSpares);
   const spares = useQuery({
     queryKey: dustSparesKey(participantId),
@@ -531,7 +529,7 @@ export function DustShopPanel({
                       <div className="min-w-0 basis-full">
                         <SetChip
                           collection={s.collection}
-                          sets={sets}
+                         
                           className="block w-fit max-w-full"
                         />
                       </div>
@@ -545,7 +543,7 @@ export function DustShopPanel({
               const sharedSet = g.copies.every((c) => c.collection === g.copies[0].collection);
               const chip = (collection: string) => (
                 <div className="min-w-0 basis-full">
-                  <SetChip collection={collection} sets={sets} className="block w-fit max-w-full" />
+                  <SetChip collection={collection} className="block w-fit max-w-full" />
                 </div>
               );
               return (

@@ -26,6 +26,15 @@ function subscribe(onChange: () => void) {
   return () => mq.removeEventListener("change", onChange);
 }
 
+/**
+ * The preference, read synchronously. The hook below starts false and settles in
+ * an effect so hydration matches, which is useless to code deciding whether to
+ * start at all on its first frame, or to plain functions with no React around them.
+ */
+export function prefersReducedMotionNow(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.(QUERY).matches;
+}
+
 export function usePrefersReducedMotion(): boolean {
   // The server snapshot is `false`: the server has no matchMedia, and hydration
   // has to match the server's render. React then re-reads the client snapshot.

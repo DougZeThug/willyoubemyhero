@@ -1,5 +1,5 @@
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { SECRET_RARITY, secretCollectionLabel, setAccent } from "@/lib/secret-cards";
-import type { SecretCollection } from "@/lib/secret-cards";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,17 +20,14 @@ import { cn } from "@/lib/utils";
  */
 export function SetChip({
   collection,
-  sets,
   className,
 }: {
   collection: string | null | undefined;
-  /**
-   * The live set list, or undefined while it is still in the air — in which case
-   * the helpers below fall back to the sets that shipped. See useSecretCollections.
-   */
-  sets?: readonly SecretCollection[];
   className?: string;
 }) {
+  // The live list, or undefined while it is still in the air — in which case the
+  // helpers below fall back to the sets that shipped. See useSecretCollections.
+  const sets = useSecretCollections();
   if (!collection) return null;
   // The live list first, then the sets that shipped, then the id itself.
   //
