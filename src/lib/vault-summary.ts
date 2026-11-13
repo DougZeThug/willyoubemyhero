@@ -8,6 +8,7 @@
 //
 // The roster is the exception and is stated as a fraction on purpose: thirteen
 // people, publicly, is the one denominator this app has always been allowed.
+import { plural } from "./format";
 
 /**
  * Whether the roster has answered, so the line may state it as a fraction.
@@ -59,8 +60,6 @@ export type VaultSummary = {
   complete: number;
 };
 
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
-
 /**
  * "Roster 3 / 13 · Secrets 3 across 2 sets · 1 set complete".
  *
@@ -74,10 +73,10 @@ export function vaultSummaryLine(s: VaultSummary): string {
   // "across N sets" and never "of N": the number is how many sets you have
   // touched, which is a fact about your collection, not about the catalogue.
   if (s.secrets > 0) {
-    parts.push(`Secrets ${s.secrets} across ${s.sets} ${plural(s.sets, "set", "sets")}`);
+    parts.push(`Secrets ${s.secrets} across ${plural(s.sets, "set")}`);
   }
   if (s.complete > 0) {
-    parts.push(`${s.complete} ${plural(s.complete, "set", "sets")} complete`);
+    parts.push(`${plural(s.complete, "set")} complete`);
   }
   return parts.join(" · ");
 }

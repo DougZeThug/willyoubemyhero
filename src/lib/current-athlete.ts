@@ -55,7 +55,7 @@ export function notInEventMessage(what: string): string {
 }
 
 /** What the console says for that one, matching startRun's own pre-flight. */
-export const OFF_ROSTER_MESSAGE = "That athlete is no longer on the roster.";
+const OFF_ROSTER_MESSAGE = "That athlete is no longer on the roster.";
 
 /**
  * A start the server REFUSED, as opposed to one the network dropped. Returns the

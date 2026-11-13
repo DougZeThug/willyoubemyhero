@@ -21,7 +21,7 @@ import { STORAGE_KEYS } from "./storage-keys";
 export const ACQUISITION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** How coarsely the window is rounded, so two screens agree on one query key. */
-export const WINDOW_BUCKET_MS = 5 * 60 * 1000;
+const WINDOW_BUCKET_MS = 5 * 60 * 1000;
 
 const store = createDeviceStore<string | null>({
   key: STORAGE_KEYS.vaultLastSeen,

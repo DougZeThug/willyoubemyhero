@@ -14,7 +14,7 @@ import { TOKEN_HEADERS } from "@/lib/token-format";
 import { createServerEntry } from "@tanstack/react-start/server";
 
 /** Run `fn` inside a request whose headers are `headers`. */
-export async function withRequestHeaders<T>(
+async function withRequestHeaders<T>(
   headers: Record<string, string>,
   fn: () => T | Promise<T>,
 ): Promise<T> {
@@ -49,7 +49,7 @@ export async function withRequestHeaders<T>(
   return result as T;
 }
 
-export type CallOptions = {
+type CallOptions = {
   /** Payload for the function's validator. */
   data?: unknown;
   /** Request headers — `x-admin-token` / `x-member-token` drive the auth guards. */
