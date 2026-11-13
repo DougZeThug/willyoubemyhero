@@ -28,7 +28,7 @@ export type RosterCardLookup = (eventParticipantId: string) => {
   rarity: Rarity;
 };
 
-export type TradeItemTileProps = {
+type TradeItemTileProps = {
   item: TradeItemView;
   lookup: RosterCardLookup;
   /** Rendered as a control rather than a picture. */
@@ -312,7 +312,7 @@ function Exchange({ pending }: { pending: boolean }) {
   );
 }
 
-export type TradeOfferCardProps = {
+type TradeOfferCardProps = {
   offer: TradeOfferView;
   /** The viewer's participant id, which decides which side reads as "you". */
   me: string;

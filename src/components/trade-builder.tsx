@@ -31,9 +31,9 @@ import {
 import { BLOCKED_LABEL, tradeItemBareName, tradeItemsLabel, type TradeSpares } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
-export type BuilderCounterparty = { id: string; name: string };
+type BuilderCounterparty = { id: string; name: string };
 
-export type TradeBuilderProps = {
+type TradeBuilderProps = {
   /** The viewer — the first half of every tradeSparesKey read in here. */
   me: string;
   counterparties: BuilderCounterparty[];

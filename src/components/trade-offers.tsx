@@ -13,7 +13,7 @@ import { offerPerspective, tradeSwapPrompt, type TradeOfferView } from "@/lib/tr
 import type { ImageUrlSet } from "@/lib/media";
 import { offlineReason } from "@/hooks/use-online";
 
-export type TradeOffersPanelProps = {
+type TradeOffersPanelProps = {
   /** The viewer's participant id, which decides which side of each offer reads as "you". */
   me: string;
   inbox: TradeOfferView[];

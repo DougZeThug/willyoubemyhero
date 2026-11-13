@@ -1,6 +1,7 @@
 import { IdCard, Sparkles } from "lucide-react";
-import { cardBadge, editionOddsLabel, type Edition } from "@/lib/card-edition";
-import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
+import { badgeFor } from "@/components/card-badge";
+import type { Edition } from "@/lib/card-edition";
+import type { Rarity } from "@/lib/card-rarity";
 
 /**
  * The one badge saying what this card is.
@@ -22,10 +23,7 @@ import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
  * pill draws in whatever the last screen left behind.
  */
 export function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
-  const badge = cardBadge(
-    { label: rarity.label, reason: TIER_REASON[rarity.tier] ?? "", accent: rarity.accent },
-    edition,
-  );
+  const badge = badgeFor(rarity, edition);
   // The tier and the finish keep separate custom properties on purpose — two
   // axes, never merged — so the ribbon picks whichever one it is wearing.
   const c = badge.isEdition ? "var(--edn)" : "var(--tier)";
@@ -53,7 +51,7 @@ export function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Editi
         {/* On a finish this is the pull rate and nothing else — the tier is not
             repeated under its own metal. */}
         <div className="hidden truncate text-meta font-semibold text-muted-foreground sm:block">
-          {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
+          {badge.subLine}
         </div>
       </div>
     </div>

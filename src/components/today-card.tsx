@@ -20,7 +20,7 @@ const AMBER = "oklch(0.82 0.19 85)";
 const EMPTY_NEW: readonly NewSinceItem[] = [];
 
 /** Today's pack, as the vault sees it. `left` only means anything while torn. */
-export type TodayCardPack = {
+type TodayCardPack = {
   state: "loading" | "sealed" | "torn" | "done";
   left: number;
 };
