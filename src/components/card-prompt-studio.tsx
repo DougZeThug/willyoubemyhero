@@ -8,7 +8,9 @@ import {
   CardPromptBatch,
   CardPromptHistory,
   CardPromptTemplateManager,
+  resolveMasterPrompt,
   type PromptHistoryRow,
+  type PromptStudioBundle,
 } from "@/components/card-prompt-tools";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { StatsBundle } from "@/lib/card-stats";
 import { formatKnownPerformanceData, restoredEventParticipantId } from "@/lib/card-prompt-data";
 import { listCardPromptTemplates, saveCardPromptRun } from "@/lib/card-prompt.functions";
 import { urlFromSet, type ImageUrlSet } from "@/lib/media";
@@ -33,18 +34,6 @@ import {
   isPlayerSeries,
   type CardSeriesId,
 } from "@/lib/card-prompt-templates";
-
-export type PromptStudioBundle = StatsBundle & {
-  participants: Array<{
-    id: string;
-    participant_id: string;
-    participant: {
-      name: string;
-      nickname: string | null;
-      profile_image_url?: string | null;
-    } | null;
-  }>;
-};
 
 export type CardPromptStudioProps = {
   eventId: string;
@@ -112,10 +101,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   const persistedTemplate = templates.data?.templates?.find(
     (item: { slug: string }) => item.slug === series,
   );
-  const effectiveMasterPrompt =
-    typeof persistedTemplate?.master_prompt === "string" && persistedTemplate.master_prompt.trim()
-      ? persistedTemplate.master_prompt
-      : CARD_SERIES[series].prompt;
+  const effectiveMasterPrompt = resolveMasterPrompt(templates.data?.templates, series);
 
   function generate() {
     if (!canGenerate) return;
