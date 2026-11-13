@@ -1,3 +1,4 @@
+import { cardUrlsKey } from "@/lib/query-keys";
 import {
   createFileRoute,
   Link,
@@ -515,7 +516,7 @@ function PlayerCardPage() {
     return exportCard(`${name.replace(/\s+/g, "-").toLowerCase()}-card.png`, {
       fallback: "Could not export card",
       // Signed storage URLs expire after an hour; a stale one rasterises blank.
-      prepare: () => qc.refetchQueries({ queryKey: ["card-urls", event?.id] }),
+      prepare: () => qc.refetchQueries({ queryKey: cardUrlsKey(event?.id) }),
     });
   }
 

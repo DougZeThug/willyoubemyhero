@@ -9,6 +9,7 @@
  * sheet sends the complete intended set of splits and penalties, so clearing a
  * station's field deletes that split.
  */
+import { eventBundleKey } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -211,7 +212,7 @@ export function EditResultSheet({
           data: { eventId, participantId, raw_time_ms: rawMs, ...payload() },
         });
       }
-      await qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+      await qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
       onOpenChange(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The edit did not save. Try again.");
@@ -229,7 +230,7 @@ export function EditResultSheet({
     setError(null);
     try {
       await deleteFn({ data: { eventId, runId: run.id } });
-      await qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+      await qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
       onOpenChange(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The delete did not go through. Try again.");

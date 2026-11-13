@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { prefersReducedMotionNow } from "@/hooks/use-reduced-motion";
+import { prefersReducedMotionNow } from "@/lib/motion";
 import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion, AnimatePresence } from "motion/react";
 import { formatTime } from "@/lib/format";

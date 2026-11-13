@@ -1,3 +1,4 @@
+import { eventBundleKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -91,7 +92,7 @@ function OrderPage() {
       // Past here the order HAS changed, so this runs whatever happens next.
       // Not left to the realtime subscription: a reshuffle nobody can see is
       // worse than no reshuffle, and this is the screen everyone is looking at.
-      await qc.invalidateQueries({ queryKey: ["event-bundle", event.id] });
+      await qc.invalidateQueries({ queryKey: eventBundleKey(event.id) });
 
       try {
         await recordFn({

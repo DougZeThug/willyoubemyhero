@@ -430,8 +430,6 @@ export const SECRET_COLLECTIONS: readonly SecretCollection[] = [
   { id: "legacyPets", label: "Legacy Pets" },
 ];
 
-export const SECRET_COLLECTION_IDS = SECRET_COLLECTIONS.map((c) => c.id) as readonly string[];
-
 /**
  * A set id an admin can create. Not an enum any more — the vocabulary lives in a
  * table — so the shape is pinned here and existence is checked against the table.

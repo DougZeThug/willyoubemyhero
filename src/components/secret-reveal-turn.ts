@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { celebrateSecret } from "@/lib/card-confetti";
 import { cue, playReveal } from "@/lib/card-sfx";
 import { SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
-import { prefersReducedMotionNow } from "@/hooks/use-reduced-motion";
+import { prefersReducedMotionNow } from "@/lib/motion";
 
 const TURN_DELAY_MS = 260;
 

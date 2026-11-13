@@ -5,16 +5,13 @@
 // Every entry point is a no-op on the server, when the user prefers reduced motion,
 // or if Web Audio is unavailable.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { createDeviceStore, parseFlag } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 import { editionCelebrates } from "./card-edition";
-
-const MUTE_KEY = "wwbh:sfx-muted";
-/** Stored as "off" rather than "on" so an unwritten key means the default: buzzing. */
-const HAPTICS_KEY = "wwbh:haptics-off";
+import { prefersReducedMotionNow } from "./motion";
 
 let ctx: AudioContext | null = null;
-let muted = false;
-let hapticsOff = false;
 
 /**
  * Whether the device asks for less MOTION.
@@ -26,13 +23,8 @@ let hapticsOff = false;
  * toggle could not give it back. `prefers-reduced-sound` does not exist, so the
  * app's own mute switch is the answer for audio, and it already is one.
  */
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
-
 function audio(): AudioContext | null {
-  if (typeof window === "undefined" || muted) return null;
+  if (typeof window === "undefined" || isCardSfxMuted()) return null;
   if (!ctx) {
     const Ctor =
       window.AudioContext ??
@@ -49,142 +41,52 @@ function audio(): AudioContext | null {
   return ctx;
 }
 
-export function setCardSfxMuted(next: boolean) {
-  muted = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(MUTE_KEY, next ? "1" : "0");
-  } catch {
-    /* private mode with storage blocked still mutes for this page load */
-  }
-  // Storage events only fire in *other* tabs, so the hook below listens for
-  // this instead. Same pattern as member-token.ts's token-changed event.
-  window.dispatchEvent(new Event("wwbh:sfx-muted-changed"));
-}
-
-export function isCardSfxMuted() {
-  return muted;
-}
-
-function readMuted(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(MUTE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
+const muteStore = createDeviceStore<boolean>({
+  key: STORAGE_KEYS.sfxMuted,
+  empty: false,
+  parse: parseFlag,
+  serialize: (on) => (on ? "1" : "0"),
+});
 
 /**
- * Restore the saved preference into module state. Call once, high in the tree —
- * the setting has to be live before the first card is ever tapped.
+ * The haptics preference, stored exactly like the mute one and kept separate from
+ * it on purpose — see `buzz`. Stored as "off" rather than "on" so an unwritten key
+ * means the default: buzzing.
+ */
+const hapticsStore = createDeviceStore<boolean>({
+  key: STORAGE_KEYS.hapticsOff,
+  empty: false,
+  parse: parseFlag,
+  serialize: (on) => (on ? "1" : "0"),
+});
+
+export const setCardSfxMuted = muteStore.set;
+export const isCardSfxMuted = muteStore.get;
+export const setHapticsOff = hapticsStore.set;
+export const isHapticsOff = hapticsStore.get;
+
+/**
+ * Restore the saved preferences into module state. Call once, high in the tree —
+ * the setting has to be live before the first card is ever tapped, and a phone that
+ * buzzes once before the setting loads has already ignored it.
  */
 export function hydrateCardSfxMuted() {
-  muted = readMuted();
+  muteStore.load();
 }
-
-/**
- * The haptics preference, stored exactly like the mute one above and kept
- * separate from it on purpose — see `buzz`.
- */
-export function setHapticsOff(next: boolean) {
-  hapticsOff = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(HAPTICS_KEY, next ? "1" : "0");
-  } catch {
-    /* private mode with storage blocked still holds for this page load */
-  }
-  window.dispatchEvent(new Event("wwbh:haptics-changed"));
-}
-
-export function isHapticsOff() {
-  return hapticsOff;
-}
-
-function readHapticsOff(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(HAPTICS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Restore the saved preference into module state. Call once, high in the tree,
- * beside `hydrateCardSfxMuted` — a phone that buzzes once before the setting
- * loads has already ignored it.
- */
 export function hydrateHapticsOff() {
-  hapticsOff = readHapticsOff();
+  hapticsStore.load();
 }
 
-/** Reactive view of the haptics preference. Same hydration dance as `useCardSfx`. */
+/** Reactive view of the haptics preference. */
 export function useHaptics() {
-  const [isOff, setIsOff] = useState(false);
-
-  useEffect(() => {
-    const mine = () => setIsOff(isHapticsOff());
-    const reread = () => {
-      hapticsOff = readHapticsOff();
-      setIsOff(hapticsOff);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to re-read and re-render on every
-    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== HAPTICS_KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener("wwbh:haptics-changed", mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener("wwbh:haptics-changed", mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
-
+  const off = hapticsStore.useValue();
   const toggle = useCallback(() => setHapticsOff(!isHapticsOff()), []);
-
-  return { off: isOff, toggle };
+  return { off, toggle };
 }
 
-/**
- * Reactive view of the mute preference for a toggle button.
- *
- * Starts unmuted so the server and the first client render agree, then reads
- * storage in an effect — the same hydration dance as `useMemberSession`.
- */
+/** Reactive view of the mute preference for a toggle button. */
 export function useCardSfx() {
-  const [isMuted, setIsMuted] = useState(false);
-
-  useEffect(() => {
-    // Same tab: module state is already authoritative, just mirror it into React.
-    const mine = () => setIsMuted(isCardSfxMuted());
-    // Another tab: storage is the only thing that changed, so the module flag —
-    // which is what actually gates playback in `audio()` — has to be caught up
-    // too, or this tab shows muted while it keeps making noise.
-    const reread = () => {
-      muted = readMuted();
-      setIsMuted(muted);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to re-read and re-render on every
-    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== MUTE_KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener("wwbh:sfx-muted-changed", mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener("wwbh:sfx-muted-changed", mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
+  const muted = muteStore.useValue();
 
   const toggle = useCallback(() => {
     const next = !isCardSfxMuted();
@@ -195,7 +97,7 @@ export function useCardSfx() {
     if (!next) audio();
   }, []);
 
-  return { muted: isMuted, toggle };
+  return { muted, toggle };
 }
 
 /**
@@ -282,7 +184,7 @@ function thud(fromHz: number, toHz: number, durationSec: number, gain: number) {
  * `navigator.vibrate` directly and buzzed through both of them.
  */
 export function buzz(pattern: number | number[]) {
-  if (typeof navigator === "undefined" || prefersReducedMotion() || hapticsOff) return;
+  if (typeof navigator === "undefined" || prefersReducedMotionNow() || isHapticsOff()) return;
   navigator.vibrate?.(pattern);
 }
 

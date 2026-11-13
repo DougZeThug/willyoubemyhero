@@ -1,9 +1,6 @@
 // Cards this device has pinned to the top of the vault.
 //
-// A preference, like the shelf order in vault-layout.ts, and stored the same way:
-// a `wwbh:` key, every touch of storage in a try/catch so a locked private-mode
-// browser degrades to "works for this page load", and a custom event because
-// `storage` only fires in *other* tabs.
+// Stored on the device like every preference here; see device-store.ts.
 //
 // Its own key rather than a third field on VaultLayout. The layout is about
 // sections and this is about cards, so the two change on completely different
@@ -14,10 +11,16 @@
 // best-of-copies and a trade can take the good copy away, so a cached finish
 // would strand a favourite wearing metal its owner no longer holds.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { createDeviceStore, parseIdList } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
-const KEY = "wwbh:vault-favourites";
-const CHANGED = "wwbh:vault-favourites-changed";
+const store = createDeviceStore<readonly string[]>({
+  key: STORAGE_KEYS.vaultFavourites,
+  empty: [],
+  parse: parseIdList,
+  serialize: (ids) => JSON.stringify({ ids }),
+});
 
 /**
  * Prefixed so a roster card and a secret can never collide, and distinct from
@@ -32,36 +35,7 @@ export function secretFavouriteId(secretCardId: string): string {
   return `s:${secretCardId}`;
 }
 
-// Mirrors vault-layout.ts's `current`: the last value we set, which is all that
-// is left to trust when the write below is refused.
-let current: readonly string[] = [];
-
-function read(): readonly string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    const ids = (parsed as { ids?: unknown } | null)?.ids;
-    if (!Array.isArray(ids)) return [];
-    return ids.filter((v): v is string => typeof v === "string");
-  } catch {
-    // Blocked storage, or something else wrote junk under our key. An empty
-    // shelf is a working page.
-    return [];
-  }
-}
-
-export function setVaultFavourites(next: readonly string[]) {
-  current = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify({ ids: next }));
-  } catch {
-    /* private mode with storage blocked still pins for this page load */
-  }
-  window.dispatchEvent(new Event(CHANGED));
-}
+export const setVaultFavourites = store.set;
 
 /**
  * On, or off again.
@@ -76,37 +50,9 @@ export function toggleFavourite(ids: readonly string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
 }
 
-/** The pinned ids, reactive. Same hydration dance as useVaultLayout. */
+/** The pinned ids, reactive. */
 export function useVaultFavourites() {
-  const [ids, setIds] = useState<readonly string[]>([]);
-
-  useEffect(() => {
-    // Our own writes trust the module value; re-reading storage would hand a
-    // private-mode browser back the list it just refused to save, and the star
-    // would visibly un-fill under the thumb that tapped it.
-    const mine = () => setIds(current);
-    const reread = () => {
-      current = read();
-      setIds(current);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to spend a getItem and a JSON.parse on
-    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
-    // in-memory hold above with whatever storage happens to hold, putting a
-    // refused write back under the thumb that made it. A null key is
-    // localStorage.clear(), which does concern us.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener(CHANGED, mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(CHANGED, mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
+  const ids = store.useValue();
 
   const set = useMemo(() => new Set(ids), [ids]);
   const isFavourite = useCallback((id: string) => set.has(id), [set]);

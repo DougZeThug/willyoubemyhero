@@ -1,10 +1,13 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { dustBalanceKey } from "@/hooks/use-dust";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { myCardStatsKey } from "@/hooks/use-my-collection";
-import { packStatusKey } from "@/hooks/use-pack-status";
-import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
+import {
+  dustBalanceKey,
+  dustSparesKey,
+  myCardStatsKey,
+  mySecretsKey,
+  packStatusKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
 import { getTradeSpares } from "@/lib/trades.functions";
 import type { TradeSpares } from "@/lib/trades";
 

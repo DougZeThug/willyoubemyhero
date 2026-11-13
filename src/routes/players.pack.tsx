@@ -1,3 +1,14 @@
+import {
+  cardPullCountsKey,
+  collectionTrophiesKey,
+  dustSparesKey,
+  myCardStatsKey,
+  mySecretsKey,
+  packStatusKey,
+  streakStatusKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
+import { deviceIdentity, isMemberIdentity } from "@/lib/identity";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,8 +18,8 @@ import { ArrowLeft } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { mySecretsKey, useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
-import { packStatusKey, usePackStatus } from "@/hooks/use-pack-status";
+import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
+import { usePackStatus } from "@/hooks/use-pack-status";
 import { PackOpening } from "@/components/pack-opening";
 import { PackStand, type StandSlot } from "@/components/pack-stand";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
@@ -17,7 +28,6 @@ import { SoundToggle } from "@/components/sound-toggle";
 import { StreakFlame } from "@/components/streak-flame";
 import { MilestoneReveal } from "@/components/milestone-reveal";
 import { CollectionComplete } from "@/components/collection-complete";
-import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
@@ -27,19 +37,18 @@ import {
   collectCard,
   loadPackState,
   packDealtElsewhere,
-  PACK_STATE_CHANGED,
   retireUnrecorded,
   savePackState,
-  todayKey,
-  PACK_DEALT_KEY,
   type PackSlotRef,
 } from "@/lib/card-collection";
-import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
+import { useMyCollection } from "@/hooks/use-my-collection";
+import { usePackSignals } from "@/hooks/use-pack-signals";
 import { useTradeSpares } from "@/hooks/use-trades";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret, celebrateUpgrade } from "@/lib/card-confetti";
 import { openPack } from "@/lib/pack.functions";
+import { leagueDay } from "@/lib/league-day";
 import { adoptCollection } from "@/lib/card-pulls.functions";
 import { secretFoil, SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
@@ -65,12 +74,12 @@ import { dustLive, MILL_BY_EDITION, secretSellValue } from "@/lib/dust";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
-import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
+import { useStreakStatus } from "@/hooks/use-streak";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { usePackSell } from "@/hooks/use-pack-sell";
-import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { streakLine } from "@/lib/streaks";
-import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
+import { useCardPullCounts } from "@/hooks/use-card-pulls";
+import { urlFromSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
 import { universalBack } from "@/lib/collection-view";
@@ -341,9 +350,9 @@ function PackPage() {
   const autoRef = useRef(false);
   const [autoRunning, setAutoRunning] = useState(false);
 
-  // The pack's day is the league's — see `todayKey`. The server's answer, when
+  // The pack's day is the league's — see `leagueDay`. The server's answer, when
   // it has one, wins over this phone's idea of it.
-  const [dayKey, setDayKey] = useState(todayKey);
+  const [dayKey, setDayKey] = useState(leagueDay);
   // Null until the browser has answered. Nothing is dealt against a half-known
   // identity, or a claimed member would flash a device-seeded pack first.
   const identity = usePackIdentity();
@@ -484,8 +493,8 @@ function PackPage() {
         !!s &&
         s.dayKey === dayKey &&
         !!device &&
-        s.identity === `d:${device}` &&
-        identity.startsWith("m:");
+        s.identity === deviceIdentity(device) &&
+        isMemberIdentity(identity);
       if (carrying) {
         carryDeadlineRef.current ??= Date.now() + CARRY_GRACE_MS;
         const left = carryDeadlineRef.current - Date.now();
@@ -554,26 +563,17 @@ function PackPage() {
   // beside it is the only signal this one gets — and without it a tab left on a
   // sealed wrapper stayed sealed, then asked for the same pack over the other
   // tab's reveal progress when somebody eventually tapped it.
-  useEffect(() => {
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== PACK_DEALT_KEY) return;
-      setResumeNonce((n) => n + 1);
-    };
+  usePackSignals({
+    dealtElsewhere: () => setResumeNonce((n) => n + 1),
     // And a carry in THIS tab, which `storage` never reports — a sign-in runs
     // `useAccountSync` right here, so the pack the hold below is waiting for can
     // arrive without a single cross-tab event. Gated on the hold rather than
     // listened to always: this fires on every write to the pack row, and outside
     // the hold that is our own save on every card turned.
-    const ours = () => {
+    changedHere: () => {
       if (awaitingCarryRef.current) setResumeNonce((n) => n + 1);
-    };
-    window.addEventListener("storage", theirs);
-    window.addEventListener(PACK_STATE_CHANGED, ours);
-    return () => {
-      window.removeEventListener("storage", theirs);
-      window.removeEventListener(PACK_STATE_CHANGED, ours);
-    };
-  }, []);
+    },
+  });
 
   // A tab left open past midnight used to sit on yesterday's pack forever.
   // Polled rather than scheduled, because a phone suspends timers the moment the
@@ -585,7 +585,7 @@ function PackPage() {
       // pulling the pack out from under the opening ceremony, which is three
       // cards in the air rather than one on a stand.
       if (revealingRef.current || openingRef.current) return;
-      const next = todayKey();
+      const next = leagueDay();
       setDayKey((prev) => {
         if (prev === next) return prev;
         // The server's own view of the day, refreshed with it.

@@ -26,6 +26,7 @@ import { ResultsAdminPanel } from "@/components/results-admin-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useAdminAction } from "@/components/admin/use-admin-action";
 import { RosterPanel } from "@/components/admin/roster-panel";
+import { cardUrlsKey, photoUrlsKey } from "@/lib/query-keys";
 import { dustLive } from "@/lib/dust";
 import { navHidden } from "@/lib/nav";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -86,7 +87,7 @@ export function EventOpsPanel({ eventId, eventName }: { eventId: string; eventNa
       async () => {
         const dataUrls = await encodeUploadImageVariants(file);
         await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrls } });
-        await qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
+        await qc.invalidateQueries({ queryKey: photoUrlsKey(eventId) });
         return "Photo uploaded";
       },
       epId,
@@ -99,7 +100,7 @@ export function EventOpsPanel({ eventId, eventName }: { eventId: string; eventNa
       async () => {
         const dataUrls = await encodeUploadImageVariants(file);
         await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrls } });
-        await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+        await qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
         return `Card ${side} uploaded`;
       },
       `${epId}:${side}`,
@@ -110,7 +111,7 @@ export function EventOpsPanel({ eventId, eventName }: { eventId: string; eventNa
     if (!confirm(`Remove this player's ${side} card image?`)) return;
     return cardRemoval.run("Remove failed", async () => {
       await deleteCardFn({ data: { eventId, eventParticipantId: epId, side } });
-      await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      await qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
       return "Card removed";
     });
   }
@@ -167,8 +168,8 @@ export function EventOpsPanel({ eventId, eventName }: { eventId: string; eventNa
         setRegenState({ running: true, done, total: needs.length, failed });
       }
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["photo-urls", eventId] }),
-        qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
+        qc.invalidateQueries({ queryKey: photoUrlsKey(eventId) }),
+        qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) }),
       ]);
       setRegenState({ running: false, done, total: needs.length, failed });
       if (failed === 0) {

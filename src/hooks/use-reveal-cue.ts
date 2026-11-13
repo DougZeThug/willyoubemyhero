@@ -3,6 +3,8 @@ import { editionCelebrates, editionStyle, type Edition } from "@/lib/card-editio
 import { playEditionShine, playReveal } from "@/lib/card-sfx";
 import { markRevealed, readRevealedAt, shouldCelebrate } from "@/lib/reveal-seen";
 import type { Rarity } from "@/lib/card-rarity";
+import { rosterCelebrates } from "@/lib/pack-outcome";
+import { prefersReducedMotionNow } from "@/lib/motion";
 
 /**
  * Cards whose reveal has already played this page load.
@@ -41,11 +43,6 @@ const revealed = new Set<string>();
  * a card pulled outside the acquisitions window.
  */
 const cueKey = (id: string, acquiredAt: string | null) => (acquiredAt ? `${id}@${acquiredAt}` : id);
-
-/** Test seam. Nothing in the app clears this — a page load is the reset. */
-export function resetRevealedForTests() {
-  revealed.clear();
-}
 
 /**
  * Landing on a card is an event: the tier chime, and a burst in the tier's own
@@ -97,11 +94,8 @@ export function useRevealCue({
     if (acquiredAt) markRevealed(id, acquiredAt);
     playReveal(rarity.tier);
     playEditionShine(edition);
-    // The finish can carry a card the tier never would — same gate as the pack
-    // stand, so landing on a platinum base card is an event on both screens.
-    if (rarity.tier !== "champion" && rarity.tier !== "podium" && !editionCelebrates(edition))
-      return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (!rosterCelebrates(rarity.tier, edition)) return;
+    if (prefersReducedMotionNow()) return;
     let cancelled = false;
     void import("canvas-confetti").then(({ default: confetti }) => {
       if (cancelled) return;

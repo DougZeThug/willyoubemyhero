@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { prefersReducedMotionNow } from "@/hooks/use-reduced-motion";
+import { prefersReducedMotionNow } from "@/lib/motion";
 import { HoloCard } from "@/components/holo-card";
 import { initialsOf } from "@/lib/format";
 import type { Rarity } from "@/lib/card-rarity";

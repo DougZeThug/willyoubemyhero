@@ -9,15 +9,17 @@
 // One thing here is NOT bookkeeping: the confirm before a last-copy sale. There
 // is no last-copy rule in SQL — any secret sells, which is the feature — so that
 // dialog is the only thing between a thumb and a vanished mythic.
+import {
+  collectionTrophiesKey,
+  dustBalanceKey,
+  mySecretsKey,
+  packStatusKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { packStatusKey } from "@/hooks/use-pack-status";
-import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { dustBalanceKey } from "@/hooks/use-dust";
-import { tradeSparesKey } from "@/hooks/use-trades";
 import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
 import { toast } from "sonner";
 import { DustShopPanel } from "./dust-shop";

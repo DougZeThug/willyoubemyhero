@@ -15,7 +15,7 @@ import {
   type Streak,
 } from "./streaks";
 
-import { leagueDay } from "./trades";
+import { leagueDay } from "./league-day";
 import { sqlNull } from "./rpc-null";
 import { adminDb } from "./admin-db.server";
 import { activeEventId } from "./active-event.server";

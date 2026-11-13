@@ -1,20 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemberQuery } from "./use-member-query";
+import { marketListingsKey, myStallKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getMarketListings, getMyStall } from "@/lib/market.functions";
 import type { MarketBrowse, MyStall } from "@/lib/market";
-
-/**
- * KEYED ON THE VIEWER, not on the event, and that is a correctness rule rather
- * than a preference. What the shelf says about a secret depends on who is reading
- * it — a card you hold shows its name and art, one you do not renders face-down —
- * so a key shared across members would serve one person another's de-concealed
- * view straight out of the cache. `src/components/market-panel.test.tsx` pins it.
- */
-export const marketListingsKey = (participantId: string | null | undefined) =>
-  ["market-listings", participantId ?? null] as const;
-
-export const myStallKey = (participantId: string | null | undefined) =>
-  ["market-stall", participantId ?? null] as const;
 
 /**
  * Everybody else's active listings.
@@ -31,13 +19,11 @@ export const myStallKey = (participantId: string | null | undefined) =>
  */
 export function useMarketListings(participantId: string | null | undefined) {
   const fn = useServerFn(getMarketListings);
-  return useQuery({
+  return useMemberQuery({
     queryKey: marketListingsKey(participantId),
     queryFn: () => fn() as Promise<MarketBrowse>,
     enabled: !!participantId,
     staleTime: 15_000,
-    refetchOnWindowFocus: true,
-    retry: false,
   });
 }
 
@@ -50,12 +36,10 @@ export function useMarketListings(participantId: string | null | undefined) {
  */
 export function useMyStall(participantId: string | null | undefined) {
   const fn = useServerFn(getMyStall);
-  return useQuery({
+  return useMemberQuery({
     queryKey: myStallKey(participantId),
     queryFn: () => fn() as Promise<MyStall>,
     enabled: !!participantId,
     staleTime: 15_000,
-    refetchOnWindowFocus: true,
-    retry: false,
   });
 }

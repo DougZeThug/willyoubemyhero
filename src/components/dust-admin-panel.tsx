@@ -1,3 +1,4 @@
+import { activeEventKey } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Sparkles } from "lucide-react";
@@ -37,7 +38,7 @@ export function DustAdminPanel({ eventId, enabled }: { eventId: string; enabled:
       await setFn({ data: { eventId, enabled: next } });
       // The flag rides on the active event, which is what every screen reads to
       // decide whether the chip exists.
-      await qc.invalidateQueries({ queryKey: ["active-event"] });
+      await qc.invalidateQueries({ queryKey: activeEventKey() });
       return next ? "Dust is live" : "Dust is off";
     });
   }

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { requireMember } from "./require-auth.server";
 import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
-import { leagueDay, TRADE_UNDO_WINDOW_SECONDS } from "./trades";
+import { leagueDay } from "./league-day";
+import { TRADE_UNDO_WINDOW_SECONDS } from "./trades";
 import type {
   BlockedSpare,
   SecretSpare,

@@ -1,10 +1,6 @@
 // The last time this device actually looked at the vault.
 //
-// Stored the way every other device preference in this app is — see the header of
-// vault-favourites.ts: a `wwbh:` key, every touch of storage in a try/catch so a
-// locked private-mode browser degrades to "works for this page load", a
-// module-level `current` because that is all there is left to trust when a write
-// is refused, and a custom event because `storage` only fires in *other* tabs.
+// Stored on the device like every preference here; see device-store.ts.
 //
 // A TIMESTAMP AND NOT A SEEN-SET, unlike trophy-seen.ts next door. Newness is a
 // comparison against this one instant, so the device never has to hold a list of
@@ -12,10 +8,8 @@
 // secret ledger is exactly the list that would need pruning. It is bumped when
 // somebody ACTS on the strip, never merely by arriving on the page, which would
 // clear the row before it had been read.
-import { useEffect, useState } from "react";
-
-const KEY = "wwbh:vault-last-seen";
-const CHANGED = "wwbh:vault-last-seen-changed";
+import { createDeviceStore } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
 /**
  * How far back anything is ever willing to look.
@@ -29,39 +23,23 @@ export const ACQUISITION_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** How coarsely the window is rounded, so two screens agree on one query key. */
 export const WINDOW_BUCKET_MS = 5 * 60 * 1000;
 
-let current: string | null = null;
+const store = createDeviceStore<string | null>({
+  key: STORAGE_KEYS.vaultLastSeen,
+  empty: null,
+  // Junk under our key reads as "never visited", which seeds silently below
+  // rather than showing a strip built on a number nobody can parse.
+  parse: (raw) => (raw && !Number.isNaN(Date.parse(raw)) ? raw : null),
+  serialize: (at) => at ?? "",
+  // Nothing changed, so nothing to announce. Here it is what stops a tap on the
+  // strip re-rendering the whole vault for an identical value.
+  equals: (a, b) => a === b,
+});
 
-function read(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    // Junk under our key reads as "never visited", which seeds silently below
-    // rather than showing a strip built on a number nobody can parse.
-    return raw && !Number.isNaN(Date.parse(raw)) ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-export function readVaultLastSeen(): string | null {
-  current = read();
-  return current;
-}
+export const readVaultLastSeen = store.load;
 
 /** Mark everything up to now as looked at. */
 export function markVaultSeen(at: string = new Date().toISOString()) {
-  // Nothing changed, so nothing to announce. Same short-circuit setTrophySeen and
-  // markTradeOffersSeen make, and here it is what stops a tap on the strip
-  // re-rendering the whole vault for an identical value.
-  if (current === at) return;
-  current = at;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, at);
-  } catch {
-    /* private mode with storage blocked still clears the strip for this page load */
-  }
-  window.dispatchEvent(new Event(CHANGED));
+  store.set(at);
 }
 
 /**
@@ -112,46 +90,12 @@ export function isNewSince(acquiredAt: string, lastSeen: string | null): boolean
 /**
  * The stored instant, reactive, seeding itself on a device that has none.
  *
- * The seed happens in the mount effect rather than during render for the reason
- * use-photo-urls.ts is written around: SSR has no localStorage, and a first paint
- * that disagrees with the second is the bug.
+ * First visit on this device: seed the instant so the NEXT visit has something to
+ * measure from, while this one stays quiet. The seed runs before the listeners
+ * attach, which is what keeps it quiet — our own seed has nothing to repaint
+ * through, so the value this render hands back is still null and `isNewSince`
+ * answers false for everything.
  */
 export function useVaultLastSeen(): string | null {
-  const [lastSeen, setLastSeen] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Our own writes trust the module value; re-reading storage would hand a
-    // private-mode browser back the value it just refused to save, and the strip
-    // would reappear under the thumb that dismissed it.
-    const mine = () => setLastSeen(current);
-    const reread = () => {
-      current = read();
-      setLastSeen(current);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to spend a getItem and a JSON.parse on
-    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
-    // in-memory hold above with whatever storage happens to hold, putting a
-    // refused write back under the thumb that made it. A null key is
-    // localStorage.clear(), which does concern us.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== KEY) return;
-      reread();
-    };
-    reread();
-    // First visit on this device: seed the instant so the NEXT visit has
-    // something to measure from, while this one stays quiet. The listeners go on
-    // AFTER, which is what keeps it quiet — our own seed has nothing to repaint
-    // through, so the value this render hands back is still null and `isNewSince`
-    // answers false for everything.
-    if (current === null) markVaultSeen();
-    window.addEventListener(CHANGED, mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(CHANGED, mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
-
-  return lastSeen;
+  return store.useValue({ afterLoad: (value) => value === null && markVaultSeen() });
 }

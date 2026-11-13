@@ -1,5 +1,13 @@
 import { useTransientId } from "@/hooks/use-transient-id";
 import {
+  claimRosterKey,
+  collectionTrophiesKey,
+  invalidateCardsMoved,
+  tradeFeedKey,
+  tradeOffersKey,
+} from "@/lib/query-keys";
+import { memberIdentityOrNull } from "@/lib/identity";
+import {
   createFileRoute,
   Link,
   useCanGoBack,
@@ -14,7 +22,6 @@ import { ArrowLeft, ArrowLeftRight } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
 import { PresentationMode } from "@/components/presentation-mode";
-import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { alreadyCelebrated, markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -28,18 +35,8 @@ import {
   declineTradeOffer,
   reopenTradeOffer,
 } from "@/lib/trades.functions";
-import {
-  tradeFeedKey,
-  tradeOffersKey,
-  dustSparesKey,
-  tradeSparesKey,
-  useTradeFeed,
-  useTradeOffers,
-} from "@/hooks/use-trades";
+import { useTradeFeed, useTradeOffers } from "@/hooks/use-trades";
 import { markTradeOffersSeen } from "@/hooks/use-trade-badge";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { myCardStatsKey } from "@/hooks/use-my-collection";
-import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { takeTradeIntent, type TradeIntent } from "@/lib/trade-intent";
 import type { Staged } from "@/lib/trade-staging";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
@@ -167,7 +164,7 @@ function TradePage() {
   // same test, so the picker and the server agree about who can be offered to.
   const rosterFn = useServerFn(getClaimRoster);
   const roster = useQuery({
-    queryKey: ["claim-roster"],
+    queryKey: claimRosterKey(),
     queryFn: () => rosterFn(),
     staleTime: 5 * 60_000,
   });
@@ -251,23 +248,19 @@ function TradePage() {
   async function refreshMine() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: tradeOffersKey(myId) }),
-      // The viewer prefix: theirs and mine alike.
-      qc.invalidateQueries({ queryKey: tradeSparesKey(myId) }),
-      // The shop's copy of the same list. Missing it left a card you had just
-      // traded away on the burn and sell counters until the cache aged out.
-      qc.invalidateQueries({ queryKey: dustSparesKey(myId) }),
       qc.invalidateQueries({ queryKey: tradeFeedKey(event?.id) }),
       // The collection caches too, rather than leaving them to the realtime
       // handler in useTradeFeed. That handler is what updates everybody ELSE, and
       // it is the wrong thing to depend on for the person who just pressed
       // accept: the channel may still be subscribing when they arrive from the
       // vault and act immediately, and realtime may be unavailable entirely.
-      // Their own answer is already in hand here. `my-card-stats` holds for 60s
-      // and `my-secrets` for five minutes, so getting this wrong shows somebody
-      // their pre-trade collection for minutes after the trade landed.
-      qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
-      qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, myId) }),
-      qc.invalidateQueries({ queryKey: mySecretsKey(myId ? `m:${myId}` : null) }),
+      // `my-card-stats` holds for 60s and `my-secrets` for five minutes, so
+      // getting this wrong shows somebody their pre-trade collection for minutes.
+      invalidateCardsMoved(qc, {
+        eventId: event?.id,
+        participantId: myId,
+        actor: memberIdentityOrNull(myId),
+      }),
     ]);
   }
 

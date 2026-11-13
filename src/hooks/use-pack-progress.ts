@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePackIdentity } from "@/lib/device-id";
-import {
-  loadPackState,
-  PACK_DEALT_KEY,
-  PACK_STATE_CHANGED,
-  todayKey,
-  type PackState,
-} from "@/lib/card-collection";
+import { loadPackState, type PackState } from "@/lib/card-collection";
+import { usePackSignals } from "./use-pack-signals";
+import { leagueDay } from "@/lib/league-day";
 import { todayPackState } from "@/lib/pack";
 
 /**
@@ -36,7 +32,7 @@ const DAY_TICK_MS = 60_000;
 
 export function usePackProgress(): PackProgress {
   const identity = usePackIdentity();
-  const [dayKey, setDayKey] = useState(todayKey);
+  const [dayKey, setDayKey] = useState(leagueDay);
   const [now, setNow] = useState(() => Date.now());
   // The ROW, not the derived state: the answer is pure arithmetic over a row
   // we already hold, and re-reading IndexedDB for it would blank the card for a
@@ -53,7 +49,7 @@ export function usePackProgress(): PackProgress {
    * The day rolls over on a poll, not a timer, for the reason players.pack.tsx
    * gives for the same interval: a phone suspends timers when it sleeps, and the
    * one that mattered was always scheduled for exactly the moment the screen was
-   * off. The day is the league's (`todayKey`), so this and the pack screen agree
+   * off. The day is the league's (`leagueDay`), so this and the pack screen agree
    * about when a row stops being today's. The poll doubles as the clock behind
    * "Next pack in 6h" — hours, so once a minute is more than enough.
    *
@@ -69,7 +65,7 @@ export function usePackProgress(): PackProgress {
     const check = () => {
       setNow(Date.now());
       setDayKey((prev) => {
-        const next = todayKey();
+        const next = leagueDay();
         return prev === next ? prev : next;
       });
     };
@@ -86,24 +82,9 @@ export function usePackProgress(): PackProgress {
     };
   }, [reread]);
 
-  /**
-   * Both halves of "the pack changed", because neither covers the other.
-   * `PACK_STATE_CHANGED` is this tab's own write, which is what carries a tear
-   * back to a vault left open behind the pack screen; `storage` on the mirror key
-   * is the OTHER tab, which IndexedDB fires nothing for at all. Same pair
-   * players.pack.tsx listens to, and for the same reason.
-   */
-  useEffect(() => {
-    const theirs = (e: StorageEvent) => {
-      if (e.key === PACK_DEALT_KEY) reread();
-    };
-    window.addEventListener(PACK_STATE_CHANGED, reread);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(PACK_STATE_CHANGED, reread);
-      window.removeEventListener("storage", theirs);
-    };
-  }, [reread]);
+  // This tab's own write is what carries a tear back to a vault left open behind
+  // the pack screen; the mirror key is the OTHER tab.
+  usePackSignals({ changedHere: reread, dealtElsewhere: reread });
 
   useEffect(() => {
     // Wait for the browser to say who this pack is for. usePackIdentity is null

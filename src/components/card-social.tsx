@@ -1,5 +1,7 @@
+import { STORAGE_KEYS } from "@/lib/storage-keys";
+import { eventSocialKey } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { prefersReducedMotionNow } from "@/hooks/use-reduced-motion";
+import { prefersReducedMotionNow } from "@/lib/motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "motion/react";
@@ -25,7 +27,7 @@ const BURST = [
 ];
 
 /** Local storage key for the guest display name — one per browser. */
-const GUEST_NAME_KEY = "wwbh:guest-name";
+const GUEST_NAME_KEY = STORAGE_KEYS.guestName;
 
 function readGuestName(): string {
   if (typeof window === "undefined") return "";
@@ -229,7 +231,7 @@ export function CardSocial({
     return map;
   }, [reactions]);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["event-social", eventId] });
+  const refresh = () => qc.invalidateQueries({ queryKey: eventSocialKey(eventId) });
 
   async function onReact(emoji: string) {
     const who = ensureIdentity(() => void onReact(emoji));

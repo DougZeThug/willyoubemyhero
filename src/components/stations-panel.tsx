@@ -1,3 +1,4 @@
+import { eventBundleKey } from "@/lib/query-keys";
 import { useMemo, useState } from "react";
 import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
@@ -129,7 +130,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
     failedTables.includes("penalties") ||
     failedTables.includes("runs");
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+  const refresh = () => qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
 
   /** Blank means no penalty; anything else has been checked by onSaveDraft. */
   function penaltyMs(raw: string): number {

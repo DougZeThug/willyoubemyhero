@@ -18,8 +18,8 @@ import {
   readFailedMessage,
 } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
-import { ResultCard, type ResultCardData } from "@/components/result-card";
-import { toResultCardData } from "@/lib/result-card-data";
+import { ResultCard } from "@/components/result-card";
+import { toResultCardData, type ResultCardData } from "@/lib/result-card-data";
 import { useCardExport } from "@/hooks/use-card-export";
 import { toast } from "sonner";
 import { useStandingsRows } from "@/hooks/use-standings-rows";

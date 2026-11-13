@@ -1,3 +1,4 @@
+import { activeEventKey } from "@/lib/query-keys";
 import { useEffect, useState } from "react";
 import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
@@ -102,7 +103,7 @@ export function NavRowsPanel({
       await setFn({ data: { eventId, hidden: [...draft] as NavRowId[] } });
       // The list rides on the active event, which is the query the bar reads and
       // the one this panel is seeded from — one key refreshes both.
-      await qc.invalidateQueries({ queryKey: ["active-event"] });
+      await qc.invalidateQueries({ queryKey: activeEventKey() });
       return `Nav saved — ${plural(preview.length, "row")}`;
     });
   }

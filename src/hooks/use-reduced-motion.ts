@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { prefersReducedMotionNow, REDUCED_MOTION_QUERY } from "@/lib/motion";
 
 /**
  * Whether the device asks for less motion, as a live subscription.
@@ -17,30 +18,15 @@ import { useSyncExternalStore } from "react";
  * app can tell, because the module-scope reads happen inside event handlers that
  * are a whole gesture away from a media query flipping.
  */
-const QUERY = "(prefers-reduced-motion: reduce)";
-
 function subscribe(onChange: () => void) {
-  const mq = window.matchMedia?.(QUERY);
+  const mq = window.matchMedia?.(REDUCED_MOTION_QUERY);
   if (!mq) return () => {};
   mq.addEventListener("change", onChange);
   return () => mq.removeEventListener("change", onChange);
 }
 
-/**
- * The preference, read synchronously. The hook below starts false and settles in
- * an effect so hydration matches, which is useless to code deciding whether to
- * start at all on its first frame, or to plain functions with no React around them.
- */
-export function prefersReducedMotionNow(): boolean {
-  return typeof window !== "undefined" && !!window.matchMedia?.(QUERY).matches;
-}
-
 export function usePrefersReducedMotion(): boolean {
   // The server snapshot is `false`: the server has no matchMedia, and hydration
   // has to match the server's render. React then re-reads the client snapshot.
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia?.(QUERY).matches ?? false,
-    () => false,
-  );
+  return useSyncExternalStore(subscribe, prefersReducedMotionNow, () => false);
 }

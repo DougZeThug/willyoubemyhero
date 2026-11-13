@@ -1,5 +1,6 @@
 // Client-side active-run persistence via IndexedDB with a localStorage fallback.
-import { openDB, type IDBPDatabase } from "idb";
+import { STORAGE_KEYS } from "./storage-keys";
+import { cachedDb, isBrowser } from "./idb";
 
 export type ActivePenalty = {
   clientKey: string;
@@ -55,24 +56,12 @@ type LegacyActiveRun = Omit<ActiveRun, "v" | "startedAt" | "finishedAt"> & {
 const DB_NAME = "wwbh-combine";
 const STORE = "active-run";
 
-function isBrowser() {
-  return typeof window !== "undefined" && typeof indexedDB !== "undefined";
-}
-
-let dbPromise: Promise<IDBPDatabase> | null = null;
-function getDb() {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, 1, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-      },
-    });
-  }
-  return dbPromise;
-}
+const getDb = cachedDb(DB_NAME, 1, (db) => {
+  if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+});
 
 const KEY = "current";
-const LS_KEY = "wwbh-active-run";
+const LS_KEY = STORAGE_KEYS.activeRun;
 
 /**
  * Bring a stored record up to the current schema, or refuse it.
