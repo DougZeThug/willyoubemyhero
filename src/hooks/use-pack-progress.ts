@@ -55,7 +55,7 @@ export function usePackProgress(): PackProgress {
    * COMING BACK TO THE TAB RE-READS THE ROW, and that is not belt-and-braces.
    * The two events below cover a tear and nothing after it: `PACK_STATE_CHANGED`
    * is same-window only, and the localStorage mirror is written once per pack by
-   * design (`markPackDealt` no-ops on an unchanged value), so every reveal AFTER
+   * design (`packDealt.record` no-ops on an unchanged value), so every reveal AFTER
    * the first in another tab is silent here. Without this, a vault left open
    * beside the pack shows the count it had when the pack was torn, for the rest
    * of the day.

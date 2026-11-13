@@ -7,6 +7,7 @@
  * reads and writes the same record, and a run started on Live can be finished
  * on Admin.
  */
+import { onLocal } from "@/lib/device-store";
 import { errorMessage } from "@/lib/errors";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,8 +56,7 @@ export function useRunConsole() {
     function onCleared() {
       setRun(null);
     }
-    window.addEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
-    return () => window.removeEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
+    return onLocal(ACTIVE_RUN_CLEARED_EVENT, onCleared);
   }, []);
 
   useEffect(() => {

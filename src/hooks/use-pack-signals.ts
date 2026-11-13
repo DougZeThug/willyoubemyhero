@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { onLocal } from "@/lib/device-store";
 import { PACK_STATE_CHANGED } from "@/lib/card-collection";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 
@@ -37,10 +38,10 @@ export function usePackSignals(handlers: PackSignalHandlers) {
         latest.current.unrecordedElsewhere?.();
       }
     };
-    window.addEventListener(PACK_STATE_CHANGED, here);
+    const offHere = onLocal(PACK_STATE_CHANGED, here);
     window.addEventListener("storage", elsewhere);
     return () => {
-      window.removeEventListener(PACK_STATE_CHANGED, here);
+      offHere();
       window.removeEventListener("storage", elsewhere);
     };
   }, []);
