@@ -1,4 +1,5 @@
 import { errorMessage } from "@/lib/errors";
+import { myAwardVotesKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,7 +63,7 @@ function AwardsPage() {
   const countingVotes = !awards.lockedAtRead;
 
   const myVotes = useQuery({
-    queryKey: ["my-award-votes", event?.id, me?.participantId],
+    queryKey: myAwardVotesKey(event?.id, me?.participantId),
     queryFn: () => myVotesFn({ data: { eventId: event!.id } }),
     enabled: !!event?.id && !!me,
     staleTime: 30_000,
@@ -98,7 +99,7 @@ function AwardsPage() {
     setPending(`${category}:${targetParticipantId}`);
     try {
       await voteFn({ data: { eventId: event.id, category, targetParticipantId } });
-      await qc.invalidateQueries({ queryKey: ["my-award-votes", event.id, me.participantId] });
+      await qc.invalidateQueries({ queryKey: myAwardVotesKey(event.id, me.participantId) });
       toast.success("Vote recorded");
     } catch (e) {
       toast.error(errorMessage(e, "Could not vote"));

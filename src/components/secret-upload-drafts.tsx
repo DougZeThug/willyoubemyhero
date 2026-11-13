@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { secretCardsKey } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -10,7 +11,7 @@ import type { SecretCollection } from "@/lib/secret-cards";
 import { plural } from "@/components/plural";
 import { ImageDropZone } from "@/components/admin/image-drop-zone";
 import { isUploadImage, MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/components/admin/image-limits";
-import type { useAdminAction } from "@/components/admin/use-admin-action";
+import type { useAdminAction } from "@/hooks/use-admin-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -141,7 +142,7 @@ export function SecretUploadDrafts({
       );
       const res = await createFn({ data: { cards: encoded } });
       const failed = res.results.filter((r) => !r.ok);
-      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      await qc.invalidateQueries({ queryKey: secretCardsKey() });
       clearDrafts();
       if (failed.length > 0) {
         toast.error(`${plural(failed.length, "card")} failed to upload`);

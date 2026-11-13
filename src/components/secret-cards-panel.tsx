@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { secretCardsKey } from "@/lib/query-keys";
 import { plural } from "@/components/plural";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -21,10 +22,10 @@ import {
 import { SecretCardEditSheet } from "@/components/secret-card-edit-sheet";
 import { SecretSetManager } from "@/components/secret-set-manager";
 import { SecretUploadDrafts, type Draft } from "@/components/secret-upload-drafts";
-import { useSecretSave } from "@/components/use-secret-save";
-import { useAdminAction } from "@/components/admin/use-admin-action";
-import { useIdSet } from "@/components/use-id-set";
-import { useKeyedQueue } from "@/components/admin/use-keyed-queue";
+import { useSecretSave } from "@/hooks/use-secret-save";
+import { useAdminAction } from "@/hooks/use-admin-action";
+import { useIdSet } from "@/hooks/use-id-set";
+import { useKeyedQueue } from "@/hooks/use-keyed-queue";
 import {
   SecretCardTile,
   type Roster,
@@ -68,13 +69,13 @@ export function SecretCardsPanel() {
   // Expanded sets, by id ("" for unsorted). Tracked as "what is open" rather than
   // "what is closed" so a set created after this mounted is closed like the rest
   // instead of springing open because nobody had listed it as collapsed.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const expanded = useIdSet();
 
   // No eventId in the key, which is itself the documentation that the set is
   // league-wide — and keeps the panel from going stale when the active event
   // rolls over next year.
   const list = useQuery({
-    queryKey: ["secret-cards"],
+    queryKey: secretCardsKey(),
     queryFn: () => listFn(),
     staleTime: 30 * 60_000,
     refetchOnWindowFocus: false,
@@ -270,14 +271,7 @@ export function SecretCardsPanel() {
             >
               <button
                 type="button"
-                onClick={() =>
-                  setExpanded((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(key)) next.delete(key);
-                    else next.add(key);
-                    return next;
-                  })
-                }
+                onClick={() => expanded.toggle(key)}
                 aria-expanded={open}
                 className="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left"
               >

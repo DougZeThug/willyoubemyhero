@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { secretCardsKey } from "@/lib/query-keys";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 
@@ -22,7 +23,7 @@ export function useSecretSave() {
     },
   ): Promise<boolean> {
     const settled = write.then(async (r) => {
-      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      await qc.invalidateQueries({ queryKey: secretCardsKey() });
       return r;
     });
     toast.promise(settled, {

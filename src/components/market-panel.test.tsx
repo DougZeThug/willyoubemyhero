@@ -91,7 +91,6 @@ function renderPanel(balance = 500, dustOn = true) {
       <MarketPanel
         balance={balance}
         participantId={ME}
-        actor={ACTOR}
         eventId={EVENT}
         nameFor={() => "Alice Ace"}
         nameOf={(id) => (id === THEM ? "Bob Bison" : "Someone")}

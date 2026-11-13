@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { cardPromptRunsKey, cardPromptTemplatesKey } from "@/lib/query-keys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -82,7 +83,7 @@ export function CardPromptTemplateManager({ templates }: { templates: PromptTemp
   async function save(value = draft) {
     try {
       await updateFn({ data: { slug, masterPrompt: value } });
-      await qc.invalidateQueries({ queryKey: ["card-prompt-templates"] });
+      await qc.invalidateQueries({ queryKey: cardPromptTemplatesKey() });
       setDrafts((d) => ({ ...d, [slug]: value }));
       toast.success("Series prompt saved");
     } catch (e) {
@@ -155,7 +156,7 @@ export function CardPromptHistory({
 }) {
   const listFn = useServerFn(listCardPromptRuns);
   const history = useQuery({
-    queryKey: ["card-prompt-runs", eventId],
+    queryKey: cardPromptRunsKey(eventId),
     queryFn: () => listFn({ data: { eventId, limit: 30 } }),
     staleTime: 10_000,
   });
@@ -366,7 +367,7 @@ export function CardPromptBatch({
           if (buildEpoch.current === epoch) {
             saved.set(item.key, row.id);
           }
-          void qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
+          void qc.invalidateQueries({ queryKey: cardPromptRunsKey(eventId) });
         } catch {
           toast.warning("Prompt copied, but history could not be saved");
         }

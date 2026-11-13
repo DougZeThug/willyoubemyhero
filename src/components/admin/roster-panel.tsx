@@ -12,7 +12,7 @@ import { clearActiveRun } from "@/lib/active-run";
 import { Plus, Trash2, UserPlus, UserMinus, UserCheck, RotateCcw } from "lucide-react";
 import { fieldSize } from "@/lib/current-athlete";
 import { cn } from "@/lib/utils";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 
 export function RosterPanel({ eventId }: { eventId: string }) {
   const qc = useQueryClient();

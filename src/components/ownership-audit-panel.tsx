@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ChevronDown, RefreshCw, SearchCheck } from "lucide-react";
 import { attachDeviceToPlayer, getOwnershipAudit } from "@/lib/ownership-audit.functions";
 import type { OwnershipAudit, OwnershipRow } from "@/lib/ownership-audit.functions";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

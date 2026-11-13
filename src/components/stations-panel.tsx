@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Flag, Pencil, Plus, Trash2 } from "luc
 import { upsertStation, deleteStation, swapStationOrder } from "@/lib/admin-write.functions";
 import { formatTime, parseTime } from "@/lib/format";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

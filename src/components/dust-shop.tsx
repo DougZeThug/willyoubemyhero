@@ -29,11 +29,12 @@ import { ListError } from "@/components/list-error";
 import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
-import { settleDustMutation, useDustSpares } from "@/components/dust-cache";
+import { settleDustMutation, useDustSpares } from "@/hooks/use-dust-cache";
 import { SetChip } from "@/components/set-chip";
 import { PresentationMode } from "@/components/presentation-mode";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
+import { memberIdentityOrNull } from "@/lib/identity";
 import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
@@ -85,22 +86,12 @@ const SETTLE_CAP = 3;
 export function DustShopPanel({
   balance,
   participantId,
-  actor,
   eventId,
   nameFor,
   backUrl = null,
 }: {
   balance: number | undefined;
   participantId: string | null | undefined;
-  /**
-   * `m:<participantId>`, the form the secret queries are keyed on.
-   *
-   * Taken as a prop rather than rebuilt here: the route already holds it from
-   * useSecretActor(), and a second place that knows how to spell an actor is a
-   * second place that can spell it wrong — which is exactly what went wrong when
-   * this invalidated on the bare participant id and matched nothing.
-   */
-  actor: string | null;
   eventId: string | null | undefined;
   /** `event_participants.id` → the name on the card. */
   nameFor: (eventParticipantId: string) => string;
@@ -112,7 +103,8 @@ export function DustShopPanel({
   backUrl?: ImageUrlSet | string | null;
 }) {
   const qc = useQueryClient();
-  const ids = { participantId, eventId, actor };
+  const ids = { participantId, eventId };
+  const actor = memberIdentityOrNull(participantId);
   const buyFn = useServerFn(buyBonusSecretPull);
   const mySecretsFn = useServerFn(getMySecrets);
   /**
@@ -471,11 +463,7 @@ export function DustShopPanel({
                       full-width line would still cost the row's gap-y. */}
                     {s.collection && (
                       <div className="min-w-0 basis-full">
-                        <SetChip
-                          collection={s.collection}
-
-                          className="block w-fit max-w-full"
-                        />
+                        <SetChip collection={s.collection} className="block w-fit max-w-full" />
                       </div>
                     )}
                   </li>

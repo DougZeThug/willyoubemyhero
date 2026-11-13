@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { cardPromptRunsKey, cardPromptTemplatesKey } from "@/lib/query-keys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ClipboardCopy, ExternalLink, Sparkles } from "lucide-react";
@@ -47,7 +48,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   const saveRunFn = useServerFn(saveCardPromptRun);
   const qc = useQueryClient();
   const templates = useQuery({
-    queryKey: ["card-prompt-templates"],
+    queryKey: cardPromptTemplatesKey(),
     queryFn: () => listTemplatesFn(),
     staleTime: 60_000,
   });
@@ -162,7 +163,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
         setGenerated((current) =>
           current?.prompt === generated.prompt ? { ...current, historyId: row.id } : current,
         );
-        await qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
+        await qc.invalidateQueries({ queryKey: cardPromptRunsKey(eventId) });
         return row.id as string;
       } catch {
         toast.warning("Prompt copied, but history could not be saved");
@@ -227,7 +228,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
             revisionInstruction: revision,
           },
         });
-        await qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
+        await qc.invalidateQueries({ queryKey: cardPromptRunsKey(eventId) });
       } catch {
         toast.warning("Revision copied, but history could not be saved");
       }

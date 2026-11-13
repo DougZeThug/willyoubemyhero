@@ -71,7 +71,6 @@ function renderShop(given: number | null = DUST_PRICES.bonusPull) {
       <DustShopPanel
         balance={balance}
         participantId={ME}
-        actor={ACTOR}
         eventId={EVENT}
         nameFor={() => "Alice Ace"}
       />

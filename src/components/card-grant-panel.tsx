@@ -6,7 +6,7 @@ import { grantCard } from "@/lib/card-pulls.functions";
 import { newClientKey } from "@/lib/format";
 import { EDITION_ORDER, type Edition } from "@/lib/card-edition";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 

@@ -8,16 +8,30 @@ import { useCallback, useState } from "react";
  */
 export function useIdSet() {
   const [ids, setIds] = useState<ReadonlySet<string>>(new Set());
-  const add = useCallback((id: string) => setIds((prev) => new Set(prev).add(id)), []);
+  // Returning prev when nothing changes lets React skip the re-render.
+  const add = useCallback(
+    (id: string) => setIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
+    [],
+  );
   const remove = useCallback(
     (id: string) =>
       setIds((prev) => {
+        if (!prev.has(id)) return prev;
         const next = new Set(prev);
         next.delete(id);
         return next;
       }),
     [],
   );
+  const toggle = useCallback(
+    (id: string) =>
+      setIds((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      }),
+    [],
+  );
   const has = useCallback((id: string) => ids.has(id), [ids]);
-  return { has, add, remove };
+  return { has, add, remove, toggle };
 }

@@ -8,14 +8,14 @@ import {
   packStatusKey,
   tradeSparesKey,
 } from "@/lib/query-keys";
+import { memberIdentityOrNull } from "@/lib/identity";
 import { getTradeSpares } from "@/lib/trades.functions";
 import type { TradeSpares } from "@/lib/trades";
 
-/** Whose phone this is: the participant, the event, and `m:<participantId>` for the secret queries. */
+/** Whose phone this is: the participant and the event. */
 export type DustIds = {
   participantId: string | null | undefined;
   eventId: string | null | undefined;
-  actor: string | null;
 };
 
 /**
@@ -29,11 +29,12 @@ export type DustIds = {
  *
  * `secrets` is the vault's shelf and the pack count beside it, KEYED ON THE ACTOR:
  * those queries register as ["my-secrets", "m:<uuid>"], so a bare participant id
- * matches nothing and fails silently. `stats` is the vault's per-card counts.
+ * matches nothing and fails silently. The identity is built here, from the
+ * participant, so no caller has to spell it. `stats` is the vault's per-card counts.
  */
 export function settleDustMutation(
   qc: QueryClient,
-  { participantId, eventId, actor }: DustIds,
+  { participantId, eventId }: DustIds,
   balance: number,
   { secrets = false, stats = false }: { secrets?: boolean; stats?: boolean } = {},
 ) {
@@ -42,6 +43,7 @@ export function settleDustMutation(
   void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
   if (stats) void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
   if (secrets) {
+    const actor = memberIdentityOrNull(participantId);
     void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
     void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
   }
