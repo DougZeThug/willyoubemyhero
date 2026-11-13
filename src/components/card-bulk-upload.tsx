@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -7,6 +8,8 @@ import { uploadParticipantCardsBulk } from "@/lib/media.functions";
 import type { CardSide } from "@/lib/media";
 import { encodeUploadImageVariants, snapshotFile } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
+import { ImageDropZone } from "@/components/admin/image-drop-zone";
+import { isUploadImage, MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/components/admin/image-limits";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,8 +20,6 @@ import { cn } from "@/lib/utils";
  * requests validate the whole batch atomically, so one oversize file would
  * reject the entire round trip instead of failing per-item.
  */
-const MAX_BYTES = 8_800_000;
-const ACCEPT = ["image/png", "image/jpeg", "image/webp"];
 
 type Candidate = {
   id: string;
@@ -104,9 +105,7 @@ function bestMatch(filename: string, targets: BulkTarget[]) {
 export function CardBulkUpload({ eventId, targets }: { eventId: string; targets: BulkTarget[] }) {
   const qc = useQueryClient();
   const bulkFn = useServerFn(uploadParticipantCardsBulk);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Candidate[]>([]);
-  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const addFiles = useCallback(
@@ -115,7 +114,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
       for (const file of Array.from(files)) {
         // Some browsers report an empty MIME type for dragged files, so fall
         // back to the extension rather than silently dropping the file.
-        if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) continue;
+        if (!isUploadImage(file)) continue;
         // Copy the bytes now: an Android gallery handle can be revoked between
         // staging and save, which is what surfaced the raw NotReadableError.
         let staged: File;
@@ -133,7 +132,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
           eventParticipantId: id,
           side,
           autoMatched: !!id,
-          oversize: file.size > MAX_BYTES,
+          oversize: file.size > MAX_IMAGE_BYTES,
         });
       }
       if (next.length === 0) {
@@ -195,7 +194,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       const failed = res.results.filter((r) => !r.ok);
       if (failed.length === 0) {
-        toast.success(`Uploaded ${res.results.length} card${res.results.length === 1 ? "" : "s"}`);
+        toast.success(`Uploaded ${plural(res.results.length, "card")}`);
         clearAll();
       } else {
         toast.error(`${failed.length} of ${res.results.length} failed: ${failed[0]?.error ?? ""}`);
@@ -226,33 +225,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
       title="Bulk Card Upload"
       meta={items.length > 0 ? `${items.length} staged` : undefined}
     >
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          void addFiles(e.dataTransfer.files);
-        }}
-        onClick={() => inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
-        className={cn(
-          "cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors",
-          dragging
-            ? "border-primary bg-primary/10"
-            : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
-        )}
-      >
+      <ImageDropZone onFiles={(files) => void addFiles(files)} multiple className="p-6">
         <p className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
           <span className="max-sm:hidden">Drop card images here</span>
           <span className="sm:hidden">Tap to choose card images</span>
@@ -261,18 +234,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
           Names are matched automatically. Add <code>-front</code> or <code>-back</code> to a
           filename to set the side.
         </p>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept="image/png,image/jpeg,image/webp"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) void addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-      </div>
+      </ImageDropZone>
 
       {items.length > 0 && (
         <>
@@ -301,8 +263,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                       {/* The number, from the constant, rather than a hand-typed one that had
     drifted: it read "Over 12 MB" against an 8.8 MB cap, so a 10 MB file
     was correctly rejected and then labelled with a number it is under. */}
-                      <AlertTriangle className="h-3 w-3 shrink-0" /> Over{" "}
-                      {Math.round(MAX_BYTES / 100_000) / 10} MB
+                      <AlertTriangle className="h-3 w-3 shrink-0" /> Over {MAX_IMAGE_MB} MB
                     </div>
                   ) : (
                     // text-base below sm: anything under 16px makes iOS Safari

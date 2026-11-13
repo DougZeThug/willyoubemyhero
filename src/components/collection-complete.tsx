@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Medal } from "lucide-react";
 import { RevealAmbience } from "@/components/reveal-ambience";
 import { useCountUp } from "@/hooks/use-count-up";
-import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { prefersReducedMotionNow, usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { celebrateCollection } from "@/lib/card-confetti";
 import { cue, playReveal } from "@/lib/card-sfx";
 import { TROPHY_CHIME, TROPHY_RARITY, trophySizeLabel } from "@/lib/collection-trophies";
@@ -26,21 +26,6 @@ import { TROPHY_CHIME, TROPHY_RARITY, trophySizeLabel } from "@/lib/collection-t
  */
 
 const SEAL_MS = 900;
-
-/**
- * The preference, read synchronously.
- *
- * `usePrefersReducedMotion` deliberately starts false and settles in an effect so
- * hydration matches, which is right for choosing a duration and useless to a
- * component deciding whether to start at all on its first frame. Same inline read
- * milestone-reveal.tsx, card-sfx.ts and card-confetti.ts do.
- */
-function reducedNow(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 type Phase = "seal" | "count";
 
@@ -67,7 +52,7 @@ export function CollectionComplete({
   // breaks quietly.
   useEffect(() => {
     if (phase !== "seal") return;
-    if (reducedNow()) {
+    if (prefersReducedMotionNow()) {
       setPhase("count");
       return;
     }

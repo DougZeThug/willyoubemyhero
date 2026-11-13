@@ -1,4 +1,3 @@
-import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -7,13 +6,11 @@ import { uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions"
 import { urlFromSet } from "@/lib/media";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
+import { useAdminAction } from "@/components/admin/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-/** Matches the per-card cap in media.functions.ts (12M base64 chars ≈ 8.8 MB raw). */
-const MAX_BYTES = 8_800_000;
-const ACCEPT = ["image/png", "image/jpeg", "image/webp"];
+import { ImageDropZone } from "@/components/admin/image-drop-zone";
+import { isUploadImage, MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/components/admin/image-limits";
 
 /**
  * One image, uploaded once, used as the back of every player card in the event.
@@ -24,9 +21,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
   const qc = useQueryClient();
   const uploadFn = useServerFn(uploadEventCardBack);
   const deleteFn = useServerFn(deleteEventCardBack);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const { busy, run } = useAdminAction();
 
   // Shared with the sealed pack on /players/pack, which wears this same image.
   // The invalidations below only reach this tab; a pack already open on somebody
@@ -35,16 +30,15 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
   const back = useEventCardBack(eventId);
 
   async function onPick(file: File) {
-    if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {
+    if (!isUploadImage(file)) {
       toast.error("Card back must be a PNG, JPEG, or WebP");
       return;
     }
-    if (file.size > MAX_BYTES) {
-      toast.error("Card back is over 8.8 MB");
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error(`Card back is over ${MAX_IMAGE_MB} MB`);
       return;
     }
-    setBusy(true);
-    try {
+    await run("Upload failed", async () => {
       const dataUrls = await encodeUploadImageVariants(file);
       await uploadFn({ data: { eventId, dataUrls } });
       await Promise.all([
@@ -52,30 +46,21 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
         // Every player's back resolves through this query.
         qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
       ]);
-      toast.success("Universal card back set for every player");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setBusy(false);
-    }
+      return "Universal card back set for every player";
+    });
   }
 
   async function onRemove() {
     if (!confirm("Remove the universal card back? Cards fall back to the generated stats back."))
       return;
-    setBusy(true);
-    try {
+    await run("Remove failed", async () => {
       await deleteFn({ data: { eventId } });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
         qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
       ]);
-      toast.success("Universal card back removed");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Remove failed");
-    } finally {
-      setBusy(false);
-    }
+      return "Universal card back removed";
+    });
   }
 
   const url = urlFromSet(back.data?.urls);
@@ -96,35 +81,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
         )}
 
         <div className="min-w-0 flex-1">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              const file = e.dataTransfer.files?.[0];
-              if (file) void onPick(file);
-            }}
-            onClick={() => !busy && inputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                inputRef.current?.click();
-              }
-            }}
-            className={cn(
-              "cursor-pointer rounded-lg border border-dashed p-5 text-center transition-colors",
-              dragging
-                ? "border-primary bg-primary/10"
-                : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
-              busy && "pointer-events-none opacity-60",
-            )}
-          >
+          <ImageDropZone onFiles={(files) => void onPick(files[0])} busy={busy} className="p-5">
             <p className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
               {busy ? "Uploading…" : url ? "Replace card back" : "Upload card back"}
             </p>
@@ -132,18 +89,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
               One image, used as the back of every player&apos;s card. A player with their own back
               art uploaded keeps it.
             </p>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void onPick(file);
-                e.target.value = "";
-              }}
-            />
-          </div>
+          </ImageDropZone>
 
           {url && (
             <div className="mt-2 flex justify-end">

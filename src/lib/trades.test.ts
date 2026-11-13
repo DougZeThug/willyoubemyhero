@@ -5,7 +5,10 @@ import {
   arrivalRarity,
   isTradeOfferStatus,
   leagueDay,
+  offerPerspective,
   offerStatusLabel,
+  offerStatusTone,
+  tradeItemBareName,
   tradeItemName,
   tradeItemsLabel,
   tradeSummaryLabel,
@@ -283,5 +286,44 @@ describe("arrivalRarity", () => {
     );
     expect(arrivalRarity(undefined, ME, rarities).tier).toBe("base");
     expect(arrivalRarity(offer({ proposerGives: [] }), ME, rarities).tier).toBe("base");
+  });
+});
+
+describe("offer perspective helpers", () => {
+  it("reads an offer from either side of the table", () => {
+    const a = { kind: "secret", pullId: "a", name: "A" } as unknown as TradeItemView;
+    const b = { kind: "secret", pullId: "b", name: "B" } as unknown as TradeItemView;
+    const offer = {
+      proposerId: "p1",
+      recipientId: "p2",
+      proposerGives: [a],
+      recipientGives: [b],
+    } as unknown as TradeOfferView;
+    expect(offerPerspective(offer, "p1")).toEqual({
+      iAmProposer: true,
+      theirId: "p2",
+      iGive: [a],
+      iGet: [b],
+    });
+    expect(offerPerspective(offer, "p2")).toEqual({
+      iAmProposer: false,
+      theirId: "p1",
+      iGive: [b],
+      iGet: [a],
+    });
+  });
+
+  it("sorts statuses into live, won, dead and quiet", () => {
+    expect(offerStatusTone("pending")).toBe("live");
+    expect(offerStatusTone("accepted")).toBe("won");
+    for (const s of ["declined", "cancelled", "voided"]) expect(offerStatusTone(s)).toBe("dead");
+    expect(offerStatusTone("from-the-future")).toBe("quiet");
+  });
+
+  it("names a card without its tier or finish", () => {
+    expect(tradeItemBareName({ kind: "secret", name: "Gary" }, () => "x")).toBe("Gary");
+    expect(tradeItemBareName({ kind: "roster", eventParticipantId: "ep" }, (id) => `${id}!`)).toBe(
+      "ep!",
+    );
   });
 });

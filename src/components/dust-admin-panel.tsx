@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { useAdminAction } from "@/components/admin/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { setDustEnabled } from "@/lib/dust.functions";
@@ -22,7 +21,7 @@ import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
 export function DustAdminPanel({ eventId, enabled }: { eventId: string; enabled: boolean }) {
   const qc = useQueryClient();
   const setFn = useServerFn(setDustEnabled);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
 
   async function flip(next: boolean) {
     if (
@@ -34,18 +33,13 @@ export function DustAdminPanel({ eventId, enabled }: { eventId: string; enabled:
     ) {
       return;
     }
-    setBusy(true);
-    try {
+    await run("Could not change that", async () => {
       await setFn({ data: { eventId, enabled: next } });
       // The flag rides on the active event, which is what every screen reads to
       // decide whether the chip exists.
       await qc.invalidateQueries({ queryKey: ["active-event"] });
-      toast.success(next ? "Dust is live" : "Dust is off");
-    } catch {
-      toast.error("Could not change that");
-    } finally {
-      setBusy(false);
-    }
+      return next ? "Dust is live" : "Dust is off";
+    });
   }
 
   return (

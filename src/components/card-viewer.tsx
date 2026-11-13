@@ -17,7 +17,6 @@ import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { CardRibbon } from "@/components/card-ribbon";
 import { LevelPips } from "@/components/level-pips";
 import { SetChip } from "@/components/set-chip";
-import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import {
   DropdownMenu,
@@ -25,7 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useModalSurface } from "@/hooks/use-modal-surface";
+import { useBodyScrollLock, useModalSurface } from "@/hooks/use-modal-surface";
 import { editionStyle, type Edition } from "@/lib/card-edition";
 import { packedByLabel } from "@/lib/card-pulls";
 import { playFlip } from "@/lib/card-sfx";
@@ -184,17 +183,9 @@ export function CardViewer({
     return () => document.removeEventListener("keydown", onKey, true);
   }, [cards.length, index, menuOpen, onClose, onStep]);
 
-  // The page underneath is still scrollable, and on the details page it is a very
-  // long one: a drag over the card's margins would scroll the stats around behind
-  // the viewer. Restored rather than cleared, so whatever the body had before —
-  // including another surface's lock — is what it goes back to.
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  // The page underneath is still a very long one on the details page: a drag over
+  // the card's margins would scroll the stats around behind the viewer.
+  useBodyScrollLock();
 
   if (!card) return null;
 
@@ -457,7 +448,6 @@ export function CardViewer({
  * how many PEOPLE have found it. Never a denominator, never a set size.
  */
 function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> }) {
-  const sets = useSecretCollections();
   return (
     <>
       {card.flavour && (
@@ -477,7 +467,7 @@ function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> })
           the card is on its own, and "which page of the binder is this" was the
           one thing it stopped being able to answer. Still no size — a name is not
           a count. */}
-      <SetChip collection={card.collection} sets={sets} />
+      <SetChip collection={card.collection} />
       <span className="text-meta font-semibold text-muted-foreground">
         Pulled {formatDay(card.firstPulledOn)}
         {card.copies > 1 && (

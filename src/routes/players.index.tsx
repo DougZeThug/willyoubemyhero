@@ -1003,7 +1003,7 @@ function PlayersPage() {
           {/* On the tile as well as on the shelf above it, because a favourite
               leaves its set's panel for the pinned shelf and would otherwise
               arrive there with nothing left saying where it came from. */}
-          <SetChip collection={s.collection} sets={collections} className="mt-1" />
+          <SetChip collection={s.collection} className="mt-1" />
           {packedByLabel(s.ownerCount) && (
             <div className="text-meta font-semibold text-muted-foreground">
               {packedByLabel(s.ownerCount)}
