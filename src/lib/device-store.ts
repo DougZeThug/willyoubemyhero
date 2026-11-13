@@ -99,7 +99,6 @@ export function createDeviceStore<T>(config: {
         window.removeEventListener(changed, mine);
         window.removeEventListener("storage", theirs);
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- options are fixed per call site
     }, []);
 
     return value;

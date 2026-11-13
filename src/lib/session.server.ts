@@ -77,8 +77,6 @@ export function verifyAdminToken(
     : { eventId: parsed.id, expiresAt: parsed.expiresAt };
 }
 
-// ---------- League member sessions ----------
-//
 // Same HMAC construction as the admin token, but a distinct 4-part shape with an
 // "m" prefix that is also inside the signed payload. An admin token can never be
 // parsed as a member token (3 parts vs 4) and a signature cannot be transplanted
@@ -132,8 +130,6 @@ function parsePrefixed(prefix: string, token: string | null | undefined) {
   return parsed;
 }
 
-// ---------- Guest sessions ----------
-//
 // A third scheme, so somebody who has not claimed a player can still own a daily
 // secret card. Same construction again, with a "g" prefix that is likewise inside
 // the signed payload — this one matters more than the admin/member pair, because a

@@ -156,5 +156,4 @@ export function uncelebratedTrophies<T extends { participantId: string; collecti
   );
 }
 
-/** The seen set, reactive. */
 export const useTrophySeen = store.useValue;

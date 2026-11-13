@@ -90,8 +90,6 @@ export async function signSecretCard(row: SecretCardRow, tier: string) {
   return toView(row, artUrl, backUrl, tier);
 }
 
-// ------- Member-facing -------
-
 /**
  * The secrets whoever is asking has pulled, and only those.
  *
@@ -180,8 +178,6 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
   // this response, and adding one would give away how many secrets exist.
   return { cards, pulled: cards.length };
 });
-
-// ------- Admin -------
 
 /**
  * The whole catalogue, with how many people have found each card.

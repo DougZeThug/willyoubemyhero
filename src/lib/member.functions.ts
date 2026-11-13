@@ -218,8 +218,6 @@ export const renewMemberSession = createServerFn({ method: "POST" }).handler(asy
   return { ok: true as const, token, expiresAt };
 });
 
-// ---------- Admin ----------
-
 /**
  * Issue a fresh code for every active participant (or just the ones named).
  * Plaintext is returned exactly once — only the salted hash is stored — so the

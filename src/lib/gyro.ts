@@ -91,8 +91,6 @@ export function hasLiveGyro(): Promise<boolean> {
   return awaitReading().then((access) => access === "granted");
 }
 
-// ------- The preference, as opposed to the permission -------
-
 /**
  * "Tilt wanted", never "permission held".
  *

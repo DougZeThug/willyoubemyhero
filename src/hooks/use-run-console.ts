@@ -43,7 +43,6 @@ export function useRunConsole() {
   const [run, setRun] = useState<ActiveRun | null>(null);
   const [selectedParticipantId, setSelected] = useState<string>("");
 
-  // Hydrate active run on mount.
   useEffect(() => {
     loadActiveRun().then((r) => {
       if (r) setRun(r);

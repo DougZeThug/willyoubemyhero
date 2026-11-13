@@ -36,8 +36,6 @@ function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
   if (!rows || rows.length === 0) throw new Error(notInEventMessage(what));
 }
 
-// ---------- Participants (global) ----------
-
 /**
  * Put somebody on this event's roster, creating the person only if the league
  * has never heard of them.
@@ -358,7 +356,6 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
     return { ok: true, clearedRuns: runIds.length };
   });
 
-// ---------- Running order ----------
 export const setRunningOrder = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -432,7 +429,6 @@ export const recordRandomization = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ---------- Stations ----------
 export const upsertStation = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -531,7 +527,6 @@ export const deleteStation = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ---------- Runs ----------
 /**
  * The admin token is scoped to one event, and the privileged client trusts
  * whatever athlete id it is handed — so the roster check is what keeps a result
@@ -679,7 +674,6 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
       if (penaltiesError) throw penaltiesError;
     }
 
-    // Mark participant finished
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
       .update({ participation_status: "finished", on_clock_since: null })
@@ -982,8 +976,6 @@ export const updateRunResult = createServerFn({ method: "POST" })
     return { ok: true, official_time_ms: data.raw_time_ms + penaltyTotal };
   });
 
-// ---------- Draft selections ----------
-
 export const recordDraftSelection = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -1028,7 +1020,6 @@ export const undoLastDraftSelection = createServerFn({ method: "POST" })
     return { ok: true as const, participantId: undone as string };
   });
 
-// ---------- Event ----------
 export const updateEvent = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z

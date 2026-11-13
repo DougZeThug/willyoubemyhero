@@ -28,9 +28,6 @@ import { SECRET_TIER_ORDER, toSecretTier, type SecretTier } from "./secret-rarit
  * triggers TypeScript's weak-type check and rejects an event that has none of
  * its properties — and callers hold the event as whatever their own query gave
  * them. So the cast lives here, once, rather than at every call site.
- *
- * types.ts carries `dust_enabled`, so the drift that started this is gone; the
- * weak-type problem is what keeps the shape.
  */
 export function dustLive(event: unknown): boolean {
   return !!(event as { dust_enabled?: boolean | null } | null | undefined)?.dust_enabled;

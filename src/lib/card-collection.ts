@@ -161,7 +161,6 @@ export type CollectedCard = {
   eventParticipantId: string;
   /** ms epoch of the first pull. */
   pulledAt: number;
-  /** How many times this card has been pulled. */
   count: number;
   /** Tier at the time of the first pull, for the collection view. */
   tier: string;
