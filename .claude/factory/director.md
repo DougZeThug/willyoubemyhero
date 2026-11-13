@@ -43,7 +43,6 @@ trust a record over git: `status` cross-checks branches and gate freshness.
 9. **Ready.** `set <id> --status ready` is refused unless the latest gate run passed on the current HEAD and the review is approve. Do not work around the refusal.
 
    **9b. Screenshots (visual work).** For `polish`, and for any build/fix whose diff changes what a screen looks like, run `node .claude/factory/shots.mjs <task-id>` and look at the result before reporting (see `/factory-polish` step 5). `polish` always owes them; for the rest, skip only when nothing visible changed, and say so.
-
 10. **Deliver.** Commit; push **only** the task branch (`git push -u origin <branch>`); PR only when the user asked or the task came from an approved queue item. Never merge, deploy, run production migrations or touch live data. Report (below).
 
 ## Hard boundaries (also enforced by `.claude/settings.json` and `factory-guard.mjs`)
