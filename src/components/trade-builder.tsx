@@ -9,6 +9,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import { OfferButton } from "@/components/offer-button";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-card";
 import { useBodyScrollLock, useModalSurface } from "@/hooks/use-modal-surface";
@@ -593,13 +594,9 @@ function Tray({
         // in a garden mid-offer. A tap is what gets them out of here.
         <div role="status">
           <p className="text-meta text-warn">Couldn&apos;t count the spares.</p>
-          <button
-            type="button"
-            onClick={onRetry}
-            className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
-          >
+          <OfferButton tone="dismiss" onClick={onRetry} className="mt-2 px-4">
             Try again
-          </button>
+          </OfferButton>
         </div>
       ) : nothingToOffer ? (
         <p className="text-meta text-muted-foreground">
