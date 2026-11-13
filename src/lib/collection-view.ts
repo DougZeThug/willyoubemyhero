@@ -31,3 +31,14 @@ export function summaryLine(
 export function universalBack(urls: ImageUrlSet | null | undefined) {
   return urlFromSet(urls) ? (urls ?? null) : null;
 }
+
+/**
+ * Where a card you have not packed sits in the rarity sort.
+ *
+ * Its real rank, not a sentinel, would float the locked champion to position one
+ * and name it — the sort itself becoming the leak the face-down slot exists to
+ * close. One shared rank for every locked card, so they fall back to the name
+ * tie-break and say nothing about each other either. Well clear of the real ones,
+ * which run 0..9.
+ */
+export const LOCKED_RARITY_RANK = 99;

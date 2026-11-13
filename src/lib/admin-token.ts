@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { parseAdminToken } from "./token-format";
+import { readStored } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
-const KEY = "wwbh:admin-token";
+const KEY = STORAGE_KEYS.adminToken;
 // The account that was signed in when the token above was issued, or absent for
 // a PIN unlock nobody was signed in for. The token itself names no user —
 // requireAdmin checks the event and nothing else — and since ADM-16 it outlives
 // a sign-out, so this is the only thing on the device that says whose it is.
-const OWNER_KEY = "wwbh:admin-token-owner";
+const OWNER_KEY = STORAGE_KEYS.adminTokenOwner;
 
 type Parsed = { eventId: string; expiresAt: number; token: string };
 export type AdminSession = Parsed & { owner: string | null };
@@ -20,7 +22,7 @@ function parse(token: string | null): Parsed | null {
 
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(KEY);
+  const raw = readStored(KEY);
   const parsed = parse(raw);
   if (!parsed) {
     if (raw) {
@@ -70,7 +72,7 @@ export function bindAdminTokenTo(userId: string) {
   if (typeof window === "undefined") return;
   // Also evicts an expired token, and the owner with it.
   if (!getAdminToken()) return;
-  const owner = window.localStorage.getItem(OWNER_KEY);
+  const owner = readStored(OWNER_KEY);
   if (!owner) window.localStorage.setItem(OWNER_KEY, userId);
   else if (owner !== userId) clearAdminToken();
 }
@@ -80,8 +82,8 @@ export function useAdminSession(): AdminSession | null {
   const [session, setSession] = useState<AdminSession | null>(null);
   useEffect(() => {
     function refresh() {
-      const parsed = parse(window.localStorage.getItem(KEY));
-      setSession(parsed && { ...parsed, owner: window.localStorage.getItem(OWNER_KEY) });
+      const parsed = parse(readStored(KEY));
+      setSession(parsed && { ...parsed, owner: readStored(OWNER_KEY) });
     }
     // `storage` fires for every key the other tab writes, so the listener needs
     // its own; the custom event beside it is this tab's write. A null key is

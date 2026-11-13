@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -100,7 +101,7 @@ function AwardsPage() {
       await qc.invalidateQueries({ queryKey: ["my-award-votes", event.id, me.participantId] });
       toast.success("Vote recorded");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not vote");
+      toast.error(errorMessage(e, "Could not vote"));
     } finally {
       setPending(null);
     }

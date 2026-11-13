@@ -4,7 +4,7 @@
 // member walk the catalogue. Every ids-in, faces-out path goes through here.
 import { adminDb } from "./admin-db.server";
 import { VARIANT_WIDTHS } from "./media";
-import { signPath } from "./media.functions";
+import { signPath } from "./media-sign.server";
 import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
 
 /** What a card the viewer may not see is called, and what a retired one falls back to. */

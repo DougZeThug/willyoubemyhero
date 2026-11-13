@@ -4,6 +4,7 @@ import { loadPackState, type PackState } from "@/lib/card-collection";
 import { usePackSignals } from "./use-pack-signals";
 import { leagueDay } from "@/lib/league-day";
 import { todayPackState } from "@/lib/pack";
+import { DAY_TICK_MS } from "@/lib/pack-ceremony";
 
 /**
  * Today's pack, read from a screen that is not the pack.
@@ -27,8 +28,6 @@ export type PackProgress = {
   /** The poll's clock, so the countdown below re-renders with the day tick. */
   now: number;
 };
-
-const DAY_TICK_MS = 60_000;
 
 export function usePackProgress(): PackProgress {
   const identity = usePackIdentity();

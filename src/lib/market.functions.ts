@@ -10,6 +10,7 @@ import type { CardCopyRow } from "./trades-rows";
 import type { SecretPullRow } from "./secret-cards-rows";
 import { uuid as zuuid } from "./zod-uuid";
 import { activeEventId } from "./active-event.server";
+import { nudge } from "./send-nudge";
 import { secretFaces, viewerSecretCardIds } from "./secret-visibility.server";
 import { sqlNull } from "./rpc-null";
 import { adminDb } from "./admin-db.server";
@@ -45,29 +46,6 @@ import { noStore } from "./no-store.server";
  * feed. The seller is told through the payload-free broadcast in nudge.server.ts
  * and through their own stall, which is the only place a sale is ever visible.
  */
-
-/**
- * Tell the seller their card sold. Dynamic import for the reason
- * trades.functions.ts gives: nudge.server.ts reaches for node:crypto, and a
- * top-level import would drag it into the client bundle.
- *
- * The SAME topic the Trading Post pokes, rather than a second one. It is one HMAC
- * per participant and the event carries nothing — which is the entire privacy
- * guarantee, so a second listener on it costs one extra refetch of a
- * member-guarded handler and widens the surface by exactly nothing.
- *
- * Awaited, but it cannot fail: sendTradeNudge swallows everything and gives up
- * after two seconds. A sale must never fail because Realtime did.
- */
-async function nudge(participantId: string) {
-  try {
-    const { sendTradeNudge } = await import("./nudge.server");
-    await sendTradeNudge(participantId);
-  } catch {
-    // Belt and braces on top of sendTradeNudge already swallowing its own
-    // failures — the layer that holds if that ever stops being true.
-  }
-}
 
 /**
  * How many settled listings the stall carries. The same number, for the same

@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { eventBundleKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -95,7 +96,7 @@ function DraftPage() {
       await refresh();
       toast.success(`${currentPicker.ep.participant?.name} picks #${pos}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
+      toast.error(errorMessage(e, "Failed"));
     } finally {
       setBusy(false);
     }
@@ -112,7 +113,7 @@ function DraftPage() {
       if (res.ok) toast.success("Undid last pick");
       else toast.info("No picks to undo yet");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
+      toast.error(errorMessage(e, "Failed"));
     } finally {
       setBusy(false);
     }
