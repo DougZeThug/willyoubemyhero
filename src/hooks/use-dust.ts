@@ -1,17 +1,7 @@
+import { dustBalanceKey } from "./query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getDustBalance } from "@/lib/dust.functions";
-
-/**
- * Keyed on the member, never on the event.
- *
- * Same reasoning as streakStatusKey: dust is earned across events and an event id
- * in the key would throw the balance away every year. It is only a cache key —
- * the server takes the participant from the verified token and never from
- * anything the client passes.
- */
-export const dustBalanceKey = (participantId: string | null | undefined) =>
-  ["dust-balance", participantId ?? null] as const;
 
 /**
  * What you have to spend.

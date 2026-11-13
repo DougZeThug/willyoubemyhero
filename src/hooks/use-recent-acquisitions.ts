@@ -1,3 +1,4 @@
+import { recentAcquisitionsKey } from "./query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecentAcquisitions, type RecentAcquisitions } from "@/lib/acquisitions.functions";
@@ -15,12 +16,6 @@ import { useMemberSession } from "@/lib/member-token";
  * deliberate: the key is identical, so the second one is served from cache rather
  * than issuing a second request for an answer that is already in hand.
  */
-export const recentAcquisitionsKey = (
-  eventId: string | null | undefined,
-  participantId: string | null | undefined,
-  since: string | null | undefined,
-) => ["recent-acquisitions", eventId, participantId, since] as const;
-
 export function useRecentAcquisitions(eventId: string | null, since: string | null) {
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;

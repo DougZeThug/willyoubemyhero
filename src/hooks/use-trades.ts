@@ -1,3 +1,12 @@
+import {
+  cardPullCountsKey,
+  dustSparesKey,
+  myCardStatsKey,
+  mySecretsKey,
+  tradeFeedKey,
+  tradeOffersKey,
+  tradeSparesKey,
+} from "./query-keys";
 import { memberIdentityOrNull } from "@/lib/identity";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -5,36 +14,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { browserSupabase } from "@/lib/browser-supabase";
 import { getMyTradeOffers, getTradeFeed, getTradeSpares } from "@/lib/trades.functions";
 import type { TradeFeedEntry, TradeOfferView, TradeSpares } from "@/lib/trades";
-import { mySecretsKey } from "./use-daily-secret";
-import { myCardStatsKey } from "./use-my-collection";
-import { cardPullCountsKey } from "./use-card-pulls";
-
-export const tradeOffersKey = (participantId: string | null | undefined) =>
-  ["trade-offers", participantId] as const;
-/**
- * Keyed on the VIEWER first, then whose spares. The response is shaped for the
- * viewer — a counterparty's unowned secrets arrive with no name and no art — so a
- * device that changes identity must not read the last person's answer out of the
- * cache. Called with the viewer alone it is a prefix, which is what every
- * invalidation wants: everything this viewer has cached, theirs and others'.
- */
-export const tradeSparesKey = (
-  viewerId: string | null | undefined,
-  participantId?: string | null | undefined,
-) =>
-  participantId === undefined
-    ? (["trade-spares", viewerId] as const)
-    : (["trade-spares", viewerId, participantId] as const);
-/**
- * The SAME getTradeSpares answer as tradeSparesKey, cached a second time for the
- * shop and the market — your own list only, so keyed on you alone. Two keys for
- * one list means every place that moves a card has to name both; a trade landing
- * named only the first, and a card traded away stayed on the sell counter.
- */
-export const dustSparesKey = (participantId: string | null | undefined) =>
-  ["dust-spares", participantId] as const;
-export const tradeFeedKey = (eventId: string | null | undefined) =>
-  ["trade-feed", eventId] as const;
 
 export type MyTradeOffers = {
   inbox: TradeOfferView[];

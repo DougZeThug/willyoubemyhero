@@ -1,20 +1,8 @@
+import { marketListingsKey, myStallKey } from "./query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMarketListings, getMyStall } from "@/lib/market.functions";
 import type { MarketBrowse, MyStall } from "@/lib/market";
-
-/**
- * KEYED ON THE VIEWER, not on the event, and that is a correctness rule rather
- * than a preference. What the shelf says about a secret depends on who is reading
- * it — a card you hold shows its name and art, one you do not renders face-down —
- * so a key shared across members would serve one person another's de-concealed
- * view straight out of the cache. `src/components/market-panel.test.tsx` pins it.
- */
-export const marketListingsKey = (participantId: string | null | undefined) =>
-  ["market-listings", participantId ?? null] as const;
-
-export const myStallKey = (participantId: string | null | undefined) =>
-  ["market-stall", participantId ?? null] as const;
 
 /**
  * Everybody else's active listings.

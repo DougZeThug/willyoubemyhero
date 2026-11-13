@@ -1,19 +1,8 @@
+import { packStatusKey } from "./query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getPackStatus } from "@/lib/pack.functions";
 import type { PackStatus } from "@/lib/pack";
-
-/**
- * Keyed on whoever is asking, never on the event.
- *
- * The same argument mySecretsKey makes next door: a pack is a daily thing but
- * the secrets it counts are a permanent league collection, and an event id in
- * the key would evict somebody's answer every year. It is only a cache key — the
- * server takes the identity from the verified token and never from anything the
- * client passes.
- */
-export const packStatusKey = (actorId: string | null | undefined) =>
-  ["pack-status", actorId] as const;
 
 /**
  * Has today's pack been opened?

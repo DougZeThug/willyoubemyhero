@@ -1,3 +1,4 @@
+import { streakHistoryKey } from "@/hooks/query-keys";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -15,7 +16,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { streakHistoryKey, useStreakStatus } from "@/hooks/use-streak";
+import { useStreakStatus } from "@/hooks/use-streak";
 import { useAccountSyncState } from "@/lib/account-sync-state";
 import { packsOpenedLabel } from "@/lib/card-pulls";
 import { useCardSfx, useHaptics } from "@/lib/card-sfx";

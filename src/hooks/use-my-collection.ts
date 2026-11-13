@@ -1,3 +1,4 @@
+import { myCardStatsKey } from "./query-keys";
 import { memberIdentity, memberIdentityOrNull } from "@/lib/identity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,9 +17,6 @@ import {
 import { bestEdition, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
 import { useMemberSession } from "@/lib/member-token";
-
-export const myCardStatsKey = (eventId: string | null | undefined, participantId?: string | null) =>
-  ["my-card-stats", eventId, participantId ?? null] as const;
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 

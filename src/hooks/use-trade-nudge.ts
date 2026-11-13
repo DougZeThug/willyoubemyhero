@@ -1,11 +1,16 @@
 // The receiving half of nudge.server.ts: join your own topic, and refetch when the
 // server pokes it.
+import {
+  dustBalanceKey,
+  dustSparesKey,
+  marketListingsKey,
+  myStallKey,
+  tradeOffersKey,
+  tradeSparesKey,
+} from "./query-keys";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { subscribeToNudges } from "@/lib/nudge-channel";
-import { dustSparesKey, tradeOffersKey, tradeSparesKey } from "./use-trades";
-import { marketListingsKey, myStallKey } from "./use-market";
-import { dustBalanceKey } from "./use-dust";
 
 /**
  * Subscribe this device to its own trade nudges.

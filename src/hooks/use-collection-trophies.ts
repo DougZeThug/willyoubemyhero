@@ -1,3 +1,4 @@
+import { collectionTrophiesKey } from "./query-keys";
 import { isDeviceIdentity, memberIdentity } from "@/lib/identity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,8 +15,6 @@ import {
   uncelebratedTrophies,
   useTrophySeen,
 } from "@/lib/trophy-seen";
-
-export const collectionTrophiesKey = () => ["collection-trophies"] as const;
 
 /**
  * Every finished set in the league.
