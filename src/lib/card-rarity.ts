@@ -5,7 +5,7 @@
 // "base", and because useEventBundle re-fetches on Supabase realtime changes, cards
 // upgrade themselves mid-event the moment someone takes the lead.
 
-import { OUT_OF_CONTENTION_STATUSES, outOfContention, standings } from "./standings";
+import { outOfContention, standings } from "./standings";
 
 export type RarityTier = "champion" | "podium" | "stationKing" | "penaltyBox" | "dnf" | "base";
 
@@ -221,6 +221,11 @@ export const RARITY_ORDER: readonly RarityTier[] = [
   "base",
 ];
 
+/** Whether a card's own tier is a party; the finish and the collection get their say elsewhere. */
+export function tierCelebrates(tier: RarityTier): boolean {
+  return tier === "champion" || tier === "podium";
+}
+
 /** 0 is champion. An unknown tier sorts last. */
 export function rarityRank(tier: string | null | undefined): number {
   const i = RARITY_ORDER.indexOf(tier as RarityTier);
@@ -247,11 +252,6 @@ type RarityBundle = {
   penalties: { run_id: string; penalty_ms: number }[];
 };
 
-// The dnf-family roster statuses live in standings.ts, so the board and the
-// tiers cannot drift apart about who is in contention. Re-exported under the
-// old name because this module reads it for its own dnf tier as well.
-const DNF_STATUSES = OUT_OF_CONTENTION_STATUSES;
-
 function isTier(v: string): v is RarityTier {
   return v in RARITY;
 }
@@ -270,9 +270,6 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   // fastest clock still held place 1: their own tier said dnf, but the champion
   // slot stayed consumed and the honest winner shipped as podium. Same story
   // for a station crown or the penalty box.
-  const dqParticipants = new Set(
-    bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id),
-  );
   const excluded = outOfContention(bundle);
 
   // Best official run per athlete, placed by counting everyone strictly faster,
@@ -325,7 +322,7 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
 
     const pid = ep.participant_id;
     let tier: RarityTier = "base";
-    if (DNF_STATUSES.has(ep.participation_status) || dqParticipants.has(pid)) {
+    if (excluded.has(pid)) {
       tier = "dnf";
     } else {
       const place = placeByParticipant.get(pid);

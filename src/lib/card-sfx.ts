@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { editionCelebrates } from "./card-edition";
+import { prefersReducedMotionNow } from "./motion";
 
 const MUTE_KEY = "wwbh:sfx-muted";
 /** Stored as "off" rather than "on" so an unwritten key means the default: buzzing. */
@@ -26,11 +27,6 @@ let hapticsOff = false;
  * toggle could not give it back. `prefers-reduced-sound` does not exist, so the
  * app's own mute switch is the answer for audio, and it already is one.
  */
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
-
 function audio(): AudioContext | null {
   if (typeof window === "undefined" || muted) return null;
   if (!ctx) {
@@ -282,7 +278,7 @@ function thud(fromHz: number, toHz: number, durationSec: number, gain: number) {
  * `navigator.vibrate` directly and buzzed through both of them.
  */
 export function buzz(pattern: number | number[]) {
-  if (typeof navigator === "undefined" || prefersReducedMotion() || hapticsOff) return;
+  if (typeof navigator === "undefined" || prefersReducedMotionNow() || hapticsOff) return;
   navigator.vibrate?.(pattern);
 }
 
