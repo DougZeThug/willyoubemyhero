@@ -52,6 +52,30 @@ const FAN_STEP = 0.14;
 const DECK_STEP = 0.05;
 
 /**
+ * Each sound sits on the thing it is the sound of, and every one of them is named
+ * for that thing rather than for how it is made. The pack coming apart is the
+ * strip letting go; the burst is the cards actually moving, which is a phase
+ * later — played at `peel` it was a whoosh for something still sitting inside the
+ * wrapper.
+ *
+ * Keyed by phase, so retuning the timeline moves each sound with its phase. The
+ * first two are why the opening no longer starts in silence: the pack is handled,
+ * then the seam is heard tightening, before anything is heard tearing. `tearRip`
+ * is the front starting to travel and `packOpen` is it arriving — one gesture,
+ * and the rip is the part with a length: six crinkles queued across the phase,
+ * then the foil letting go at the end of it. Each is its own timer — `packOpen`
+ * schedules its own tail — so a throttled tab cannot coalesce them into one smack.
+ */
+const PHASE_CUES: Partial<Record<CeremonyPhase, Parameters<typeof cue>[0]>> = {
+  anticipate: "packHandle",
+  seam: "seamTension",
+  rip: "tearRip",
+  peel: "packOpen",
+  launch: "packBurst",
+  handoff: "deckGather",
+};
+
+/**
  * The pack opening: the rest of the rip, and the cards coming out of it.
  *
  * Owns the clock. Both halves of the ceremony — the strip letting go and the
@@ -227,26 +251,13 @@ export function PackOpening({
     // — truthy, but not the deliberate `true` this reads as.
     timers.current.push(setTimeout(() => finish(true), CEREMONY_MS));
 
-    // Each sound sits on the thing it is the sound of, and every one of them is
-    // named for that thing rather than for how it is made. The pack coming apart
-    // is the strip letting go; the burst is the cards actually moving, which is a
-    // phase later — played at `peel` it was a whoosh for something still sitting
-    // inside the wrapper.
-    //
-    // The first two are new, and they are why the opening no longer starts in
-    // silence: the pack is handled, then the seam is heard tightening, before
-    // anything is heard tearing.
-    cue("packHandle");
-    timers.current.push(setTimeout(() => cue("seamTension"), CEREMONY_START.seam));
-    // `tearRip` on the front starting to travel, `packOpen` on it arriving. They
-    // are one gesture and the rip is the part with a length: the first is six
-    // crinkles queued across the phase, the second is the foil letting go at the
-    // end of it. Both start here — `packOpen` schedules its own tail — so a
-    // throttled tab cannot coalesce them into one smack.
-    timers.current.push(setTimeout(() => cue("tearRip"), CEREMONY_START.rip));
-    timers.current.push(setTimeout(() => cue("packOpen"), CEREMONY_START.peel));
-    timers.current.push(setTimeout(() => cue("packBurst"), CEREMONY_START.launch));
-    timers.current.push(setTimeout(() => cue("deckGather"), CEREMONY_START.handoff));
+    for (const step of CEREMONY) {
+      const sound = PHASE_CUES[step.phase];
+      if (!sound) continue;
+      const at = CEREMONY_START[step.phase];
+      if (at === 0) cue(sound);
+      else timers.current.push(setTimeout(() => cue(sound), at));
+    }
   }
 
   // A ceremony that outlives its screen would call back into a route that has

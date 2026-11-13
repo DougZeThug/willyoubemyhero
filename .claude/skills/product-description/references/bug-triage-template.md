@@ -5,7 +5,7 @@
 ## Building it
 
 1. Grep every document for "Open questions", "suspected", "looks like a bug", "may be worth treating as a bug", "inconsistent", "not handled", and read each "Open questions and verification" section in full.
-2. Sort the raised items into *unconfirmed* (the document could not tell from the code; stays in the document's open questions) and *looks wrong* (the code does something a user would not expect; becomes a triage entry).
+2. Sort the raised items into _unconfirmed_ (the document could not tell from the code; stays in the document's open questions) and _looks wrong_ (the code does something a user would not expect; becomes a triage entry).
 3. Merge by root cause. Fourteen documents saying "a reload mid-way loses the draft" is one entry with fourteen "Raised by" links. Two documents describing different symptoms of one missing handler is one entry.
 4. For each entry, go back to the code and pin the cause to a file and line range. An entry without a cause is an observation, not a triage item.
 5. Assign severity and the decision needed. Sort the summary table by severity, then by area.

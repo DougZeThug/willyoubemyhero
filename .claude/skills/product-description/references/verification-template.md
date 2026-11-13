@@ -69,7 +69,7 @@ Not checkable by hand:
 - The claim links to the section it summarizes. The section is the authority; the row is the summary.
 - Setup states the starting state precisely (which record, which role, which fields filled; which files on disk, which flags, which environment; how many objects, which selected, which mode, which preferences).
 - Steps are numbered, imperative, and include exact distances, keys, and timings where the claim depends on them ("Type a 65-character name", "press Ctrl+C within 1 s of the first progress line", "drag 200 px right", "wait 500 ms before releasing").
-- Expected describes what is seen *and* what is not ("the dialog closes, no toast, the list is unchanged"; "exit code 2, nothing on stdout, one line on stderr"). For suspected bugs, say "Record what happens" and mark the row "(suspected bug)".
+- Expected describes what is seen _and_ what is not ("the dialog closes, no toast, the list is unchanged"; "exit code 2, nothing on stdout, one line on stderr"). For suspected bugs, say "Record what happens" and mark the row "(suspected bug)".
 - Every suspected bug in the document gets a P1 row, even if the tester can only record the result.
 - Every cancel/interrupt table cell that is not "no effect" gets a row. Every modifier cell that is not "no effect" gets a row.
 - Numbers, colors, and timings are P3 unless many documents depend on them (the threshold that separates the short path from the extended one is P1).

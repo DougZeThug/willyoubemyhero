@@ -20,10 +20,10 @@ Treat this as a goal.
 
 Besides untangling the codebase, there are two other things you may do:
 
-| Addition | What it does |
-| --- | --- |
-| **Comments** | Remove comments that only restate the code. |
-| **Tests** | Remove tests that wouldn't catch a real bug, and fix the ones that fail without one. |
+| Addition     | What it does                                                                         |
+| ------------ | ------------------------------------------------------------------------------------ |
+| **Comments** | Remove comments that only restate the code.                                          |
+| **Tests**    | Remove tests that wouldn't catch a real bug, and fix the ones that fail without one. |
 
 List these (with their exact descriptions) for the user and ask which ones to do. Then do only those.
 

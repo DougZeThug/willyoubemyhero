@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
  * Bars are drawn relative to the *slowest* station rather than to the median,
  * so the shape of the row tells you where the course actually cost this player
  * time before you read a single number.
+ *
+ * The tier colour comes off `--tier`: mount it inside a `TierScope`.
  */
 export function FieldComparison({
   ladder,

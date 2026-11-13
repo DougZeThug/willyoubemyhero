@@ -19,6 +19,8 @@ import { editionLabel } from "@/lib/card-edition";
  * The case deliberately does not intercept pointer events anywhere over the
  * card itself — the whole point of the page is handling the card, and a frame
  * that ate the gesture would be a downgrade dressed as a feature.
+ *
+ * Colours come off `--tier` / `--edn`: mount it inside a `TierScope`.
  */
 export function CardSlab({
   eventName,

@@ -25,27 +25,14 @@ import {
 } from "@/components/ui/sheet";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { createManualRun, deleteRunResult, updateRunResult } from "@/lib/admin-write.functions";
-import { formatTime, parseTime } from "@/lib/format";
+import { formatTime, parseGridTime, parseTime, snapMs, timeField } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
 
-// The one definition of the hundredth grid. parseTime keeps up to three
-// decimals but the boxes only carry two, and official_time_ms (what standings
-// and records sort on) is the sum of the course time and the penalties, so
-// anything a typed value contributes has to land here or a 5ms stray survives
-// into a ranking that formatTime then displays as a tie.
-function snapMs(ms: number): number {
-  return Math.round(ms / 10) * 10;
-}
-
-function timeField(ms: number | null | undefined): string {
-  if (ms == null) return "";
-  // The boxes only carry hundredths, so a stored value with stray milliseconds
-  // has to land on the nearest hundredth rather than being truncated: opening a
-  // result and saving it untouched would otherwise shave time off every leg.
-  return formatTime(snapMs(ms)).replace("—", "");
-}
+/** A station box that has something in it the parser cannot read. Blank is fine: it removes the split. */
+const isBadLeg = (value: string) => value.trim() !== "" && parseTime(value) == null;
 
 export function EditResultSheet({
   eventId,
@@ -147,19 +134,15 @@ export function EditResultSheet({
   const cumulatives = useMemo(() => {
     let total = 0;
     return stations.map((st) => {
-      const value = legTimes[st.id] ?? "";
-      const parsed = value.trim() === "" ? null : parseTime(value);
-      if (parsed == null) {
-        return { id: st.id, leg: null as number | null, at: null as number | null };
-      }
       // Onto the hundredth grid here, where a typed leg becomes a split.
       // parseTime keeps up to three decimals and the course box does not, so a
       // leg typed as 15.005 saved a 15005 split under a 15010 course time — and
       // the server differences these cumulatives into the segment times that
       // stationKing is awarded on, so the stray 5ms could take a crown.
-      const leg = snapMs(parsed);
+      const leg = parseGridTime(legTimes[st.id] ?? "");
+      if (leg == null) return { id: st.id, at: null as number | null };
       total += leg;
-      return { id: st.id, leg, at: total };
+      return { id: st.id, at: total };
     });
   }, [stations, legTimes]);
 
@@ -179,17 +162,16 @@ export function EditResultSheet({
 
   // Gridded like the legs, so the Official-time pill and the saved payload agree.
   // null stays null: it is what marks an unparseable box.
-  const parsedRaw = parseTime(rawTime);
-  const rawMs = parsedRaw == null ? null : snapMs(parsedRaw);
-  const penaltyOf = (p: PenaltyDraft) => snapMs(parseTime(p.ms) ?? 0);
+  const rawMs = parseGridTime(rawTime);
+  const penaltyOf = (p: PenaltyDraft) => parseGridTime(p.ms) ?? 0;
   const penaltyMs = penalties.reduce((sum, p) => sum + penaltyOf(p), 0);
-  const badSplit = Object.values(legTimes).some((v) => v.trim() !== "" && parseTime(v) == null);
-  const badPenalty = penalties.some((p) => parseTime(p.ms) == null);
+  const badSplit = Object.values(legTimes).some(isBadLeg);
+  const badPenalty = penalties.some((p) => parseGridTime(p.ms) == null);
   const valid = rawMs != null && !badSplit && !badPenalty;
 
   const payload = () => ({
     splits: cumulatives
-      .filter((c): c is { id: string; leg: number; at: number } => c.at != null)
+      .filter((c): c is { id: string; at: number } => c.at != null)
       .map((c) => ({ stationId: c.id, cumulative_time_ms: c.at })),
     penalties: penalties.map((p) => ({
       stationId: p.stationId || null,
@@ -215,7 +197,7 @@ export function EditResultSheet({
       await qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The edit did not save. Try again.");
+      setError(errorMessage(e, "The edit did not save. Try again."));
     } finally {
       setSaving(false);
     }
@@ -233,7 +215,7 @@ export function EditResultSheet({
       await qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The delete did not go through. Try again.");
+      setError(errorMessage(e, "The delete did not go through. Try again."));
     } finally {
       setSaving(false);
     }
@@ -286,8 +268,6 @@ export function EditResultSheet({
             <div className="space-y-2">
               {stations.map((st) => {
                 const value = legTimes[st.id] ?? "";
-                const parsed = value.trim() === "" ? null : parseTime(value);
-                const bad = value.trim() !== "" && (parsed == null || parsed < 0);
                 const at = cumulatives.find((c) => c.id === st.id)?.at ?? null;
                 return (
                   <div key={st.id} className="flex items-center gap-2">
@@ -308,7 +288,7 @@ export function EditResultSheet({
                         setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }));
                       }}
                       placeholder="—"
-                      className={cn("h-9 w-28 tabular", bad && "border-destructive")}
+                      className={cn("h-9 w-28 tabular", isBadLeg(value) && "border-destructive")}
                     />
                   </div>
                 );
@@ -374,7 +354,7 @@ export function EditResultSheet({
                     }
                     className={cn(
                       "h-9 w-24 tabular",
-                      parseTime(p.ms) == null && "border-destructive",
+                      parseGridTime(p.ms) == null && "border-destructive",
                     )}
                   />
                   <Button

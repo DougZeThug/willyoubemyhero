@@ -23,8 +23,6 @@ import {
   LogOut,
   Pause,
   Play,
-  Plus,
-  Redo2,
   Timer as TimerIcon,
   X,
   Camera,
@@ -37,17 +35,18 @@ import { FeedDegradedBanner } from "@/components/feed-state";
 import { cn } from "@/lib/utils";
 import { EventOpsPanel } from "@/components/admin/event-ops-panel";
 import { StartCard } from "@/components/admin/start-card";
+import { SplitStrip } from "@/components/admin/split-strip";
 
 export function TimingConsole() {
   const qc = useQueryClient();
   // The console watches the same event channel every spectator screen does
   // and was the one that never said when it was down.
   const { error: bundleError, realtimeDegraded } = useEventBundle();
+  const rc = useRunConsole();
   const {
     event,
     run,
     participants,
-    stations,
     currentEp,
     paused,
     finished,
@@ -60,13 +59,10 @@ export function TimingConsole() {
     setSelected,
     startRun,
     togglePause,
-    recordSplit,
-    undoLastSplit,
-    addPenalty,
     finishRun,
     cancelRun,
     setOnClock,
-  } = useRunConsole();
+  } = rc;
 
   async function signOut() {
     clearAdminToken();
@@ -237,67 +233,7 @@ export function TimingConsole() {
               </div>
             )}
 
-            <div className="mt-6">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-display text-sm font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                  Stations & Splits
-                </h3>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={undoLastSplit}
-                  // `finished` for the same reason the penalty chip below
-                  // carries it: the finished record is what Retry save re-sends.
-                  disabled={run.splits.length === 0 || finished}
-                >
-                  <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo split
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {stations.map((st) => {
-                  const split = run.splits.find((s) => s.stationId === st.id);
-                  const disabled = Boolean(split) || paused || finished || run.status !== "running";
-                  return (
-                    <div key={st.id} className="flex flex-col gap-1">
-                      <button
-                        disabled={disabled}
-                        onClick={() => recordSplit(st.id)}
-                        className={cn(
-                          "rounded-md border p-3 text-left transition",
-                          split
-                            ? "border-primary/40 bg-primary/10"
-                            : disabled
-                              ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10",
-                        )}
-                      >
-                        <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                          {st.short_name ?? `#${st.station_order}`}
-                        </div>
-                        <div className="truncate font-display text-lg font-black uppercase leading-tight">
-                          {st.name}
-                        </div>
-                        <div className="mt-1 timer-digits tabular text-primary text-base">
-                          {split ? formatTime(split.cumulative_time_ms) : "—"}
-                        </div>
-                      </button>
-                      {st.penalty_amount_ms > 0 && (
-                        <button
-                          onClick={() =>
-                            addPenalty(st.id, st.penalty_amount_ms, `${st.name} penalty`)
-                          }
-                          disabled={finished}
-                          className="min-h-9 rounded-md border border-warn/30 bg-warn/10 py-1 text-label font-bold uppercase tracking-[0.08em] text-warn hover:bg-warn/20 disabled:opacity-50 sm:min-h-0"
-                        >
-                          <Plus className="mr-1 inline h-3 w-3" />+
-                          {formatTime(st.penalty_amount_ms)} pen
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <SplitStrip runConsole={rc} />
 
             {run.penalties.length > 0 && (
               <div className="mt-4">

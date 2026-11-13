@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, NO_FLICK, type HoloGestures } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
@@ -11,6 +11,8 @@ import type { SecretCardView } from "@/lib/secret-cards";
 import type { StatsBundle } from "@/lib/card-stats";
 import { BEAT_MS, FACE_LANDS_AT, flipMsFor, type StandBeat } from "@/lib/stand-view";
 import { cn } from "@/lib/utils";
+
+const TAP_REFUSED: HoloGestures = { ...NO_FLICK, tapDisabled: true };
 
 /**
  * The glow the card on the stand is wearing.
@@ -219,11 +221,11 @@ export function StandCardFace({
         // in those windows falls through to HoloCard's own flip and
         // turns a face-down card to its sealed back — the card would
         // answer, just not with the thing it offered.
-        tapDisabled={tapRefused}
+        //
         // A horizontal throw is the stand's own gesture now — it means
         // "next card", read by the wrapper above — so the card must not
         // also answer to it. Same split as the player detail page.
-        flickToFlip={false}
+        gestures={tapRefused ? TAP_REFUSED : NO_FLICK}
       />
     </motion.div>
   );

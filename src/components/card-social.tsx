@@ -14,6 +14,7 @@ import { EASE_OUT } from "@/lib/motion";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
 
@@ -262,7 +263,7 @@ export function CardSocial({
           Object.fromEntries(Object.entries(prev).filter(([key]) => key !== emoji)),
         );
       }
-      toast.error(e instanceof Error ? e.message : "Could not react");
+      toast.error(errorMessage(e, "Could not react"));
     } finally {
       // Only if this is still the card that sent it. Moving on does not cancel
       // a request in the air, and the reset above has already cleared this
@@ -301,7 +302,7 @@ export function CardSocial({
       if (shownCardRef.current === card) setDraft((d) => (d === typed ? "" : d));
       await refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not post");
+      toast.error(errorMessage(err, "Could not post"));
     } finally {
       // As above: card A's post finishing must not unlatch a post card B has in
       // flight, or the Post button comes back mid-submit and takes a second one.
@@ -321,7 +322,7 @@ export function CardSocial({
       });
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not delete");
+      toast.error(errorMessage(e, "Could not delete"));
     }
   }
 

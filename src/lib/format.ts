@@ -52,6 +52,34 @@ export function parseTime(input: string): number | null {
   return Math.round((minutes * 60 + seconds) * 1000);
 }
 
+/**
+ * The hundredth grid every typed time lands on. `parseTime` keeps up to three
+ * decimals but the boxes only carry two, and `official_time_ms` (what standings
+ * and records sort on) is the sum of the course time and the penalties, so
+ * anything a typed value contributes has to land here or a 5ms stray survives
+ * into a ranking that `formatTime` then displays as a tie.
+ */
+export function snapMs(ms: number): number {
+  return Math.round(ms / 10) * 10;
+}
+
+/** `parseTime` onto the hundredth grid. Blank and unreadable are both null. */
+export function parseGridTime(input: string): number | null {
+  const ms = parseTime(input);
+  return ms == null ? null : snapMs(ms);
+}
+
+/**
+ * A stored time as a time box shows it: blank for null.
+ *
+ * Snapped rather than truncated: opening a result and saving it untouched would
+ * otherwise shave time off every leg with a stray millisecond.
+ */
+export function timeField(ms: number | null | undefined): string {
+  if (ms == null) return "";
+  return formatTime(snapMs(ms)).replace("—", "");
+}
+
 export function initialsOf(name: string): string {
   // Trim first: splitting " Doug Weidensaul" on whitespace leads with an empty
   // string, which eats one of the two slots and renders a single initial.

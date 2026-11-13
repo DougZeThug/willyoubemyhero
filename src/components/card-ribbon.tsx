@@ -18,9 +18,7 @@ import type { Rarity } from "@/lib/card-rarity";
  * luck rather than something somebody did on the course. That rule lives in
  * `cardBadge` so every render site drops the demoted tier at once.
  *
- * COLOUR COMES OFF `--tier` / `--edn`, which an ancestor sets. Both the details
- * page and the full-screen viewer do; anything else mounting this has to, or the
- * pill draws in whatever the last screen left behind.
+ * COLOUR COMES OFF `--tier` / `--edn`: mount it inside a `TierScope`.
  */
 export function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
   const badge = badgeFor(rarity, edition);
