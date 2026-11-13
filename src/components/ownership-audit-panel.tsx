@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ChevronDown, RefreshCw, SearchCheck } from "lucide-react";
 import { attachDeviceToPlayer, getOwnershipAudit } from "@/lib/ownership-audit.functions";
 import type { OwnershipAudit, OwnershipRow } from "@/lib/ownership-audit.functions";
+import { useAdminAction } from "@/components/admin/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
   const qc = useQueryClient();
   const auditFn = useServerFn(getOwnershipAudit);
   const attachFn = useServerFn(attachDeviceToPlayer);
-  const [busy, setBusy] = useState<string | null>(null);
+  const { busyKey: busy, run } = useAdminAction();
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [openDevice, setOpenDevice] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("devices");
@@ -53,17 +54,16 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
     }
     const name = players.find((p) => p.participantId === participantId)?.name ?? "that player";
     if (!confirm(`Move this device's cards onto ${name}? This can't be undone.`)) return;
-    setBusy(guestId);
-    try {
-      const res = await attachFn({ data: { eventId, guestId, participantId } });
-      toast.success(`${res.name} now holds ${res.secrets} secret${res.secrets === 1 ? "" : "s"}`);
-      setOpenDevice(null);
-      await qc.invalidateQueries();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not move those cards");
-    } finally {
-      setBusy(null);
-    }
+    await run(
+      "Could not move those cards",
+      async () => {
+        const res = await attachFn({ data: { eventId, guestId, participantId } });
+        toast.success(`${res.name} now holds ${res.secrets} secret${res.secrets === 1 ? "" : "s"}`);
+        setOpenDevice(null);
+        await qc.invalidateQueries();
+      },
+      guestId,
+    );
   }
 
   const tabs: { id: Tab; label: string; count: number }[] = [

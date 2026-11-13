@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { PanelBottom } from "lucide-react";
-import { toast } from "sonner";
+import { useAdminAction } from "@/components/admin/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -53,7 +53,7 @@ export function NavRowsPanel({
 }) {
   const qc = useQueryClient();
   const setFn = useServerFn(setNavHidden);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
 
   // Filtered to the ids this deploy knows, which is what stops the panel wedging
   // itself. navHidden and navTabs both tolerate an unknown id — a set written by
@@ -97,18 +97,13 @@ export function NavRowsPanel({
     ) {
       return;
     }
-    setBusy(true);
-    try {
+    await run("Could not change that", async () => {
       await setFn({ data: { eventId, hidden: [...draft] as NavRowId[] } });
       // The list rides on the active event, which is the query the bar reads and
       // the one this panel is seeded from — one key refreshes both.
       await qc.invalidateQueries({ queryKey: ["active-event"] });
-      toast.success(`Nav saved — ${preview.length} row${preview.length === 1 ? "" : "s"}`);
-    } catch {
-      toast.error("Could not change that");
-    } finally {
-      setBusy(false);
-    }
+      return `Nav saved — ${preview.length} row${preview.length === 1 ? "" : "s"}`;
+    });
   }
 
   return (

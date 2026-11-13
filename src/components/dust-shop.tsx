@@ -529,7 +529,7 @@ export function DustShopPanel({
                       <div className="min-w-0 basis-full">
                         <SetChip
                           collection={s.collection}
-                         
+
                           className="block w-fit max-w-full"
                         />
                       </div>

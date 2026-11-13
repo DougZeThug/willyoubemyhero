@@ -7,6 +7,7 @@ import { uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions"
 import { urlFromSet } from "@/lib/media";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
+import { useAdminAction } from "@/components/admin/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
   const uploadFn = useServerFn(uploadEventCardBack);
   const deleteFn = useServerFn(deleteEventCardBack);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
   const [dragging, setDragging] = useState(false);
 
   // Shared with the sealed pack on /players/pack, which wears this same image.
@@ -43,8 +44,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
       toast.error("Card back is over 8.8 MB");
       return;
     }
-    setBusy(true);
-    try {
+    await run("Upload failed", async () => {
       const dataUrls = await encodeUploadImageVariants(file);
       await uploadFn({ data: { eventId, dataUrls } });
       await Promise.all([
@@ -52,30 +52,21 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
         // Every player's back resolves through this query.
         qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
       ]);
-      toast.success("Universal card back set for every player");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setBusy(false);
-    }
+      return "Universal card back set for every player";
+    });
   }
 
   async function onRemove() {
     if (!confirm("Remove the universal card back? Cards fall back to the generated stats back."))
       return;
-    setBusy(true);
-    try {
+    await run("Remove failed", async () => {
       await deleteFn({ data: { eventId } });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
         qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
       ]);
-      toast.success("Universal card back removed");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Remove failed");
-    } finally {
-      setBusy(false);
-    }
+      return "Universal card back removed";
+    });
   }
 
   const url = urlFromSet(back.data?.urls);

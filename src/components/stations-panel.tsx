@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Flag, Pencil, Plus, Trash2 } from "luc
 import { upsertStation, deleteStation, swapStationOrder } from "@/lib/admin-write.functions";
 import { formatTime, parseTime } from "@/lib/format";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useAdminAction } from "@/components/admin/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,7 +92,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
     { name: string; short_name: string }
   > | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
 
   const stations = useMemo(
     () =>
@@ -167,34 +168,24 @@ export function StationsPanel({ eventId }: { eventId: string }) {
       toast.error("Penalty must be a time like 2.5 or 1:05");
       return;
     }
-    setBusy(true);
-    try {
+    await run("Could not save that station", async () => {
       await save(draft);
       await refresh();
       toast.success(draft.id ? "Station saved" : "Station added");
       setDraft(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save that station");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function move(index: number, dir: -1 | 1) {
     const a = stations[index];
     const b = stations[index + dir];
     if (!a || !b) return;
-    setBusy(true);
-    try {
+    await run("Could not reorder stations", async () => {
       // One RPC swaps both sort values in a single transaction — two separate
       // writes could half-apply and leave the pair sharing a station_order.
       await swapFn({ data: { eventId, aId: a.id, bId: b.id } });
       await refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not reorder stations");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   function startRenaming() {
@@ -219,8 +210,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
       setRenames(null);
       return;
     }
-    setBusy(true);
-    try {
+    await run("Could not save those names", async () => {
       // One write per changed row: a failure halfway leaves the earlier renames
       // saved, so the message names the station that stopped the batch.
       for (const s of changed) {
@@ -236,11 +226,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
       await refresh();
       toast.success(`Renamed ${changed.length} station${changed.length === 1 ? "" : "s"}`);
       setRenames(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save those names");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function onDelete(s: StationRow) {
@@ -253,17 +239,12 @@ export function StationsPanel({ eventId }: { eventId: string }) {
       return;
     }
     if (!confirm(`Delete ${s.name}?`)) return;
-    setBusy(true);
-    try {
+    await run("Could not delete that station", async () => {
       await removeFn({ data: { eventId, id: s.id } });
       await refresh();
       toast.success("Station deleted");
       setDraft(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not delete that station");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   function onAdd() {

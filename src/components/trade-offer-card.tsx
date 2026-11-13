@@ -141,9 +141,7 @@ export function TradeItemTile({
             scoped to the card's NAME. A set is a different fact: it says which
             shelf of yours has something missing from it, which is the one thing
             the whole feature withholds. So the tile gates it here as well. */}
-        {!concealed && item.kind === "secret" && (
-          <SetChip collection={item.collection} />
-        )}
+        {!concealed && item.kind === "secret" && <SetChip collection={item.collection} />}
         {/* Any secret copy is tradeable now, single or not, so this is the only
             thing standing between somebody and giving away their only mythic.
             A marker rather than a dialog: visible, not in the way. */}
