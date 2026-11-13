@@ -28,6 +28,7 @@ import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
 import { settleDustMutation, useDustSpares } from "@/components/dust-cache";
 import { ListError } from "@/components/list-error";
+import { useIdSet } from "@/components/use-id-set";
 import { useMarketListings, useMyStall } from "@/hooks/use-market";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
@@ -188,7 +189,7 @@ export function MarketPanel({
   // A set, not an id: the shelf is a grid of tiles and a second tap lands while
   // the first buy is still on the wire. `buy.isPending` only describes the latest
   // `mutate()`, so each tile has to answer for its own listing.
-  const [buying, setBuying] = useState<ReadonlySet<string>>(new Set());
+  const buying = useIdSet();
   const [pulling, setPulling] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [staged, setStaged] = useState<{ item: TradeItemView; floor: number } | null>(null);
@@ -261,13 +262,7 @@ export function MarketPanel({
     },
     onError: () => toast("Could not buy that just now"),
     // Only the listing that settled; the others are still in flight.
-    onSettled: (_data, _error, listing) =>
-      setBuying((prev) => {
-        if (!prev.has(listing.id)) return prev;
-        const next = new Set(prev);
-        next.delete(listing.id);
-        return next;
-      }),
+    onSettled: (_data, _error, listing) => buying.remove(listing.id),
   });
 
   const putUp = useMutation({
@@ -444,7 +439,7 @@ export function MarketPanel({
                       disabled={broke || busy || offline}
                       {...offlineReason(offline)}
                       onClick={() => {
-                        setBuying((prev) => new Set(prev).add(listing.id));
+                        buying.add(listing.id);
                         buy.mutate(listing);
                       }}
                     >
