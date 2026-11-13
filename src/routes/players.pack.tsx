@@ -91,10 +91,10 @@ import {
   COMPLETION_BEAT_MS,
   DAY_TICK_MS,
   OPEN_TIMEOUT_MS,
+  wait,
 } from "@/lib/pack-ceremony";
 import { PackDealingSlot } from "@/components/pack-dealing-slot";
 import { buildStandSlots, type SoldSlot } from "@/lib/pack-stand-slots";
-import { wait } from "@/lib/wait";
 
 export const Route = createFileRoute("/players/pack")({
   head: () => ({

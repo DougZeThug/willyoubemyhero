@@ -4,6 +4,7 @@
 // season used to drop to guest on day 91 without a word. Renewing inside the
 // last month leaves plenty of visits to land it on, and nobody who has stopped
 // opening the app gets a session extended for them.
+import { readStored, writeStored, removeStored } from "./device-store";
 import { STORAGE_KEYS } from "./storage-keys";
 import { getMemberToken, refreshMemberToken } from "./member-token";
 
@@ -27,21 +28,12 @@ function expiryOf(token: string): number {
 export const REFUSED_KEY = STORAGE_KEYS.memberRenewalRefused;
 const PERMANENT = new Set(["rotated", "no_player"]);
 
-function readRefused(): string | null {
-  try {
-    return window.localStorage.getItem(REFUSED_KEY);
-  } catch {
-    return null;
-  }
-}
+// A lost write costs one more refused request next hour.
+const readRefused = () => readStored(REFUSED_KEY);
 
 function writeRefused(token: string | null) {
-  try {
-    if (token === null) window.localStorage.removeItem(REFUSED_KEY);
-    else window.localStorage.setItem(REFUSED_KEY, token);
-  } catch {
-    // Storage full or blocked: the cost is one more refused request next hour.
-  }
+  if (token === null) removeStored(REFUSED_KEY);
+  else writeStored(REFUSED_KEY, token);
 }
 
 let inFlight: Promise<boolean> | null = null;

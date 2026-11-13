@@ -23,29 +23,21 @@
 // would cancel the confetti import the same pass had just started. A cue is an
 // event, not state.
 
+import { readStored, writeStored } from "./device-store";
 import { STORAGE_KEYS } from "./storage-keys";
 
 const PREFIX = STORAGE_KEYS.revealSeenPrefix;
 
 /** The acquisition already celebrated for this card, or null for none. */
 export function readRevealedAt(eventParticipantId: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(PREFIX + eventParticipantId);
-  } catch {
-    // Blocked storage. "Never celebrated" means the cue fires once more, which is
-    // the harmless direction to fail.
-    return null;
-  }
+  // Blocked storage reads as "never celebrated": the cue fires once more, which is
+  // the harmless direction to fail.
+  return readStored(PREFIX + eventParticipantId);
 }
 
 export function markRevealed(eventParticipantId: string, acquiredAt: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(PREFIX + eventParticipantId, acquiredAt);
-  } catch {
-    /* private mode with storage blocked still holds the cue for this page load */
-  }
+  // Blocked storage still holds the cue for this page load.
+  writeStored(PREFIX + eventParticipantId, acquiredAt);
 }
 
 /**

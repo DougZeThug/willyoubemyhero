@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from "@/lib/storage-keys";
+import { readStored, writeStored } from "@/lib/device-store";
 import { eventSocialKey } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { prefersReducedMotionNow } from "@/lib/motion";
@@ -29,22 +30,9 @@ const BURST = [
 
 const GUEST_NAME_KEY = STORAGE_KEYS.guestName;
 
-function readGuestName(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(GUEST_NAME_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-function writeGuestName(name: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(GUEST_NAME_KEY, name);
-  } catch {
-    /* private mode, or the quota is full — the name only lives for this session */
-  }
-}
+const readGuestName = () => readStored(GUEST_NAME_KEY) ?? "";
+// A lost write means the name only lives for this session.
+const writeGuestName = (name: string) => writeStored(GUEST_NAME_KEY, name);
 
 export function CardSocial({
   eventId,

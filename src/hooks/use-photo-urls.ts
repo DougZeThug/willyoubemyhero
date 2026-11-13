@@ -1,4 +1,5 @@
 import { signedUrlSnapshotKey } from "@/lib/storage-keys";
+import { readStored, writeStored } from "@/lib/device-store";
 import { eventCardBackKey, signedUrlsKey, type SignedUrlKind } from "@/lib/query-keys";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,9 +30,8 @@ const SNAPSHOT_VERSION = 2;
 type Snapshot<T> = { at: number; data: T };
 
 function readSnapshot<T>(key: string): Snapshot<T> | undefined {
-  if (typeof window === "undefined") return undefined;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = readStored(key);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Snapshot<T>;
     if (!parsed?.at || Date.now() - parsed.at > SNAPSHOT_MAX_AGE_MS) return undefined;
@@ -42,12 +42,8 @@ function readSnapshot<T>(key: string): Snapshot<T> | undefined {
 }
 
 function writeSnapshot(key: string, data: unknown) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
-  } catch {
-    /* private mode, or the quota is full — the query just refetches instead */
-  }
+  // A lost write means the query just refetches instead.
+  writeStored(key, JSON.stringify({ at: Date.now(), data }));
 }
 
 /** Shared wiring for the two URL queries: same caching, same reload snapshot. */

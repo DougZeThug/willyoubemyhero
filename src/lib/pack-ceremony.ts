@@ -351,3 +351,8 @@ export const AUTO_MOUNT_MS = 300;
  * one.
  */
 export const CARRY_GRACE_MS = 20_000;
+
+/** Resolve after `ms`. For the ceremony's beats, which are awaited in sequence. */
+export function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
