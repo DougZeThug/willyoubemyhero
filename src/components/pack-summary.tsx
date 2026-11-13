@@ -20,6 +20,7 @@ import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { urlFromSet } from "@/lib/media";
+import { StreakClaim } from "@/components/streak-claim";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { SellSpareDialog } from "@/components/sell-spare-dialog";
 import { cn } from "@/lib/utils";
@@ -467,41 +468,17 @@ export function PackSummary({
           )}
 
           {claimable ? (
-            canClaim ? (
-              <>
-                <button
-                  onClick={onClaim}
-                  disabled={claiming || offline}
-                  {...offlineReason(offline)}
-                  data-testid="streak-claim"
-                  className="neon-btn-sm disabled:opacity-55"
-                >
-                  {claiming ? "Opening…" : `Claim ${claimable.label}`}
-                </button>
-                {/* Never a toast, for the same reason the failed secret slot
-                    avoids one: it announces the reward to whoever is glancing at
-                    the phone over your shoulder. */}
-                {claimError && (
-                  <span className="text-meta leading-snug text-muted-foreground">{claimError}</span>
-                )}
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/auth"
-                  search={{ mode: "signup", next: "/players/pack" }}
-                  className="neon-btn-sm"
-                >
-                  Sign in to claim
-                </Link>
-                {/* Deliberately not "claim your player": thirteen people are on
-                    the roster and everyone else is here to watch. An account is
-                    something anybody can have, and it is what keeps the card. */}
-                <span className="text-meta leading-snug text-muted-foreground">
-                  {claimable.label} is waiting. An account keeps it on every phone you play from.
-                </span>
-              </>
-            )
+            <StreakClaim
+              claimable={claimable}
+              canClaim={canClaim}
+              claiming={claiming}
+              error={claimError}
+              offline={offline}
+              onClaim={onClaim}
+              testId="streak-claim"
+              next="/players/pack"
+              waitingNote=" An account keeps it on every phone you play from."
+            />
           ) : (
             <>
               <span className="text-meta leading-snug text-muted-foreground">
