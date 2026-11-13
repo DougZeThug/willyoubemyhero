@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { useTransientId } from "@/hooks/use-transient-id";
 import {
   claimRosterKey,
@@ -329,7 +330,7 @@ function TradePage() {
         toast("That offer was already settled");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not accept");
+      toast.error(errorMessage(e, "Could not accept"));
     } finally {
       // In `finally` because a dropped connection AFTER the server moved the
       // cards throws here, and skipping the refresh would leave the vault, the
@@ -369,7 +370,7 @@ function TradePage() {
       else if (res.reason === "expired") toast("Too late to undo that one");
       else toast("That offer was already settled");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not undo that");
+      toast.error(errorMessage(e, "Could not undo that"));
     } finally {
       // Whatever happened, both screens are now wrong about this offer.
       await refreshMine();
@@ -395,7 +396,7 @@ function TradePage() {
       } else toast("That offer was already settled");
       await refreshMine();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not do that");
+      toast.error(errorMessage(e, "Could not do that"));
     } finally {
       setPending(null);
     }
@@ -431,7 +432,7 @@ function TradePage() {
       await refreshMine();
       return res.offerId ?? null;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not send that offer");
+      toast.error(errorMessage(e, "Could not send that offer"));
       return null;
     } finally {
       setPending(null);

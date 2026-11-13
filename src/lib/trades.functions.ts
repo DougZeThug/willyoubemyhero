@@ -27,6 +27,7 @@ import { uuid as zuuid } from "./zod-uuid";
 import { sqlNull } from "./rpc-null";
 import { adminDb } from "./admin-db.server";
 import { activeEventId } from "./active-event.server";
+import { nudge } from "./send-nudge";
 import { secretFaces, viewerSecretCardIds } from "./secret-visibility.server";
 import { noStore } from "./no-store.server";
 
@@ -54,26 +55,6 @@ import { noStore } from "./no-store.server";
  * ids, which are only useful to somebody who already owns the row: every one of
  * them is checked against the giver by `trade_item_is_spare` inside the RPC.
  */
-
-/**
- * Tell the other side something moved. Dynamic import for the same reason as the
- * two above: nudge.server.ts reaches for node:crypto, and a top-level import here
- * would drag it into the client bundle.
- *
- * Awaited, but it cannot fail — sendTradeNudge swallows everything and gives up
- * after two seconds. A trade must never fail because Realtime did.
- */
-async function nudge(participantId: string) {
-  try {
-    const { sendTradeNudge } = await import("./nudge.server");
-    await sendTradeNudge(participantId);
-  } catch {
-    // Belt and braces on top of sendTradeNudge already swallowing its own
-    // failures. This is the layer that holds if that ever stops being true, and
-    // it is what makes "a broken nudge does not break a trade" a fact rather
-    // than a promise about another module.
-  }
-}
 
 const itemSchema = z.discriminatedUnion("kind", [
   // A COPY, not a card. Which of your three Alices you are handing over is the

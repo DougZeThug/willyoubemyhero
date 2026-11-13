@@ -1,16 +1,11 @@
 import { ToolError } from "@lovable.dev/mcp-js";
 import { supabaseAnon } from "./supabase";
+import { queryActiveEvent } from "../active-event-query";
 
 /** Every tool takes an optional event id and defaults to the live combine. */
 export async function resolveEventId(eventId?: string): Promise<string> {
   if (eventId) return eventId;
-  const { data, error } = await supabaseAnon()
-    .from("events_public")
-    .select("id")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await queryActiveEvent(supabaseAnon());
   if (error) throw new ToolError(error.message);
   if (!data?.id) throw new ToolError("No active event. Pass an explicit event_id.");
   return data.id;

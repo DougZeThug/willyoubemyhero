@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { eventBundleKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -80,7 +81,7 @@ function OrderPage() {
       try {
         await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to shuffle");
+        toast.error(errorMessage(e, "Failed to shuffle"));
         return;
       }
 

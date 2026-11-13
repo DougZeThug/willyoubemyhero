@@ -83,6 +83,14 @@ import { urlFromSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
 import { universalBack } from "@/lib/collection-view";
+import {
+  AUTO_MOUNT_MS,
+  AUTO_STEP_MS,
+  CARRY_GRACE_MS,
+  COMPLETION_BEAT_MS,
+  DAY_TICK_MS,
+  OPEN_TIMEOUT_MS,
+} from "@/lib/pack-ceremony";
 import { PackDealingSlot } from "@/components/pack-dealing-slot";
 import { buildStandSlots, type SoldSlot } from "@/lib/pack-stand-slots";
 import { wait } from "@/lib/wait";
@@ -108,48 +116,8 @@ const PACK_SIZE = 3;
 /** Nothing sold from this pack. Shared so the stand memo does not rebuild every render. */
 const EMPTY_SOLD: Record<number, SoldSlot> = {};
 
-/**
- * The gap between a secret's own burst and the set closing behind it.
- *
- * Long enough that the two read as consequence rather than as one noise: the
- * card's confetti is still in the air when this starts, and the ear has to have
- * finished the secret chime before the resolving one lands on top of it.
- */
-const COMPLETION_BEAT_MS = 900;
-/**
- * How long the deal is allowed to take before the screen admits it has stalled.
- *
- * Short on purpose: staring at a sealed wrapper while your friends look at their
- * cards is worse than a retry tap. Giving up does not cancel the request — the
- * row may still land — which is exactly why the server answers the same pack
- * back on the retry rather than dealing a second one.
- */
-const OPEN_TIMEOUT_MS = 8_000;
 /** Full ceremony for the first few duplicate secrets; after that it is a tax. */
 const DUPE_CEREMONY_LIMIT = 3;
-/** How often to notice the date changed under a tab nobody closed. */
-const DAY_TICK_MS = 60_000;
-/** Beat between cards when the sequence is driving itself. */
-const AUTO_STEP_MS = 420;
-/**
- * How long a card sits face-down on the stand before the sequence turns it.
- *
- * Load-bearing, not decoration: it is what forces the cursor move and the reveal
- * into separate renders. Batched together, the stand mounts the card with its
- * transform already face-up and there is no flip to see.
- */
-const AUTO_MOUNT_MS = 300;
-/**
- * How long to hold a guest's pack while a claim in another tab carries it.
- *
- * The token lands a whole network round trip before `carryPackToIdentity` does,
- * and re-sealing in between is what lets a second pack be dealt over the one
- * being carried. Generous, because the wait costs nothing but a pack staying on
- * screen — and bounded, because a claim on a tab running an older bundle never
- * carries anything at all, and a pack that waits forever is worse than a second
- * one.
- */
-const CARRY_GRACE_MS = 20_000;
 
 /** Why the screen is asking the server for a pack. */
 type OpenRequest = {

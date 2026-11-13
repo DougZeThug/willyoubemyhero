@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
@@ -29,7 +30,7 @@ export function useCardExport<T extends HTMLElement = HTMLDivElement>() {
       await waitForPaint(node);
       await exportCardPng(node, filename);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : fallback);
+      toast.error(errorMessage(e, fallback));
     } finally {
       setBusy(false);
     }

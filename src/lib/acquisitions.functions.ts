@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
-import { signPath } from "./media.functions";
+import { signPath } from "./media-sign.server";
 import { VARIANT_WIDTHS } from "./media";
 import type { CardCopyRow } from "./trades-rows";
 import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";

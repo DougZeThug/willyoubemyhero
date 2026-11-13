@@ -305,3 +305,49 @@ export function deckTransform(i: number, n: number): CardPose {
     scale: 1 - depth * DEPTH_SHRINK,
   };
 }
+
+/**
+ * The gap between a secret's own burst and the set closing behind it.
+ *
+ * Long enough that the two read as consequence rather than as one noise: the
+ * card's confetti is still in the air when this starts, and the ear has to have
+ * finished the secret chime before the resolving one lands on top of it.
+ */
+export const COMPLETION_BEAT_MS = 900;
+
+/**
+ * How long the deal is allowed to take before the screen admits it has stalled.
+ *
+ * Short on purpose: staring at a sealed wrapper while your friends look at their
+ * cards is worse than a retry tap. Giving up does not cancel the request — the
+ * row may still land — which is exactly why the server answers the same pack
+ * back on the retry rather than dealing a second one.
+ */
+export const OPEN_TIMEOUT_MS = 8_000;
+
+/** How often to notice the date changed under a tab nobody closed. */
+export const DAY_TICK_MS = 60_000;
+
+/** Beat between cards when the sequence is driving itself. */
+export const AUTO_STEP_MS = 420;
+
+/**
+ * How long a card sits face-down on the stand before the sequence turns it.
+ *
+ * Load-bearing, not decoration: it is what forces the cursor move and the reveal
+ * into separate renders. Batched together, the stand mounts the card with its
+ * transform already face-up and there is no flip to see.
+ */
+export const AUTO_MOUNT_MS = 300;
+
+/**
+ * How long to hold a guest's pack while a claim in another tab carries it.
+ *
+ * The token lands a whole network round trip before `carryPackToIdentity` does,
+ * and re-sealing in between is what lets a second pack be dealt over the one
+ * being carried. Generous, because the wait costs nothing but a pack staying on
+ * screen — and bounded, because a claim on a tab running an older bundle never
+ * carries anything at all, and a pack that waits forever is worse than a second
+ * one.
+ */
+export const CARRY_GRACE_MS = 20_000;

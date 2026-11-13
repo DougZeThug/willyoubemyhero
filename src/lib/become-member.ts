@@ -12,6 +12,21 @@ import { clearMemberToken, setMemberToken } from "./member-token";
 import { carryTrophySeen } from "./trophy-seen";
 
 /**
+ * Run `fn`, and once more if it throws and `stillWanted` still holds. The second
+ * failure is the one that propagates. One retry, because the usual failure is a
+ * flaky first request on a phone in a garden; more would hold the claim screen
+ * hostage to a connection that is not coming back.
+ */
+async function retryOnce<T>(fn: () => Promise<T>, stillWanted: () => boolean): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!stillWanted()) throw error;
+    return await fn();
+  }
+}
+
+/**
  * A guest handset becomes a member: the one order-sensitive sequence behind both
  * doors, redeeming a code and signing in to an account.
  *
@@ -78,17 +93,12 @@ export async function becomeMember(args: {
   }
   setMemberToken(token, name);
   try {
-    await adoptLocalCollection(held);
-  } catch {
+    await retryOnce(() => adoptLocalCollection(held), isCurrent);
+  } catch (error) {
     if (!isCurrent()) return { status: "stale" };
-    try {
-      await adoptLocalCollection(held);
-    } catch (error) {
-      if (!isCurrent()) return { status: "stale" };
-      clearMemberToken();
-      await releaseAdoptionHold(participantId, held);
-      return { status: "failed", error };
-    }
+    clearMemberToken();
+    await releaseAdoptionHold(participantId, held);
+    return { status: "failed", error };
   }
   if (!isCurrent()) return { status: "stale" };
   void releaseAdoptionHold(participantId, held, qc).catch(() => {

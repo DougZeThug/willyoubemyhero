@@ -2,11 +2,13 @@
 // separate storage key so claiming a player and unlocking admin are independent.
 import { useSyncExternalStore } from "react";
 import { MEMBER_PREFIX, parsePrefixedToken } from "./token-format";
+import { readStored } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
-const KEY = "wwbh:member-token";
-const NAME_KEY = "wwbh:member-name";
+const KEY = STORAGE_KEYS.memberToken;
+const NAME_KEY = STORAGE_KEYS.memberName;
 /** Breadcrumb that outlives the token. See setMemberToken. */
-export const WAS_MEMBER_KEY = "wwbh:was-member";
+export const WAS_MEMBER_KEY = STORAGE_KEYS.wasMember;
 
 export type MemberSession = {
   participantId: string;
@@ -25,7 +27,7 @@ function parse(token: string | null, name: string | null, now = Date.now()): Mem
 
 export function getMemberToken(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(KEY);
+  const raw = readStored(KEY);
   const parsed = parse(raw, null);
   if (!parsed) {
     if (raw) clearMemberToken();
@@ -81,7 +83,7 @@ export function refreshMemberToken(token: string, renewed?: string): boolean {
   const next = memberTokenParticipant(token);
   if (!next) return false;
   if (renewed !== undefined) {
-    if (window.localStorage.getItem(KEY) !== renewed) return false;
+    if (readStored(KEY) !== renewed) return false;
     if (memberTokenParticipant(renewed) !== next) return false;
   } else if (next !== memberTokenParticipant(getMemberToken())) {
     return false;
@@ -104,8 +106,8 @@ let cached: MemberSession | null = null;
 let cachedKey: string | null = null;
 
 function snapshot(): MemberSession | null {
-  const raw = window.localStorage.getItem(KEY);
-  const name = window.localStorage.getItem(NAME_KEY);
+  const raw = readStored(KEY);
+  const name = readStored(NAME_KEY);
   // Parsed fresh every time rather than keyed on the raw strings alone: expiry
   // makes the result time-dependent, and the hourly tick below relies on the
   // same token starting to parse to null.

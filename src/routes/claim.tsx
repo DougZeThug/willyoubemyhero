@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { claimRosterKey } from "@/lib/query-keys";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -126,7 +127,7 @@ function ClaimPage() {
       toast.success(`Welcome, ${res.name}`);
       navigate({ to: "/players" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not claim");
+      toast.error(errorMessage(err, "Could not claim"));
     } finally {
       setBusy(false);
     }
@@ -177,7 +178,7 @@ function ClaimPage() {
                         user ? "Signed out of your account" : "Signed out on this device",
                       );
                     } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Could not sign out");
+                      toast.error(errorMessage(e, "Could not sign out"));
                     } finally {
                       setSigningOut(false);
                     }

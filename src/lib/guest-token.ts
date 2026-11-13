@@ -7,8 +7,10 @@
 // card *is* at stake, so its identity has to be one the server issued and signed.
 import { useEffect, useState } from "react";
 import { GUEST_PREFIX, parsePrefixedToken } from "./token-format";
+import { readStored } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
-const KEY = "wwbh:guest-token";
+const KEY = STORAGE_KEYS.guestToken;
 
 export type GuestSession = { guestId: string; expiresAt: number; token: string };
 
@@ -21,7 +23,7 @@ function parse(token: string | null): GuestSession | null {
 
 export function getGuestToken(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(KEY);
+  const raw = readStored(KEY);
   const parsed = parse(raw);
   if (!parsed) {
     if (raw) clearGuestToken();
@@ -44,7 +46,7 @@ export function clearGuestToken() {
 
 function read(): GuestSession | null {
   if (typeof window === "undefined") return null;
-  return parse(window.localStorage.getItem(KEY));
+  return parse(readStored(KEY));
 }
 
 export function useGuestSession(): GuestSession | null {

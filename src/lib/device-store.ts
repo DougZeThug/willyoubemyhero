@@ -116,3 +116,13 @@ export function parseIdList(raw: string): readonly string[] {
 
 /** True for a string-valued boolean flag stored as "1". */
 export const parseFlag = (raw: string) => raw === "1";
+
+/** `localStorage.getItem` that reads as absent where storage is blocked or there is no window. */
+export function readStored(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}

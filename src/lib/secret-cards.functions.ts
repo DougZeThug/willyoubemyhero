@@ -1,8 +1,10 @@
+import { errorMessage } from "@/lib/errors";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { optionalActor } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
-import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
+import { decodeImageDataUrl } from "./media.functions";
+import { forgetSignedPath, signPath } from "./media-sign.server";
 import { VARIANT_WIDTHS } from "./media";
 import type { SecretCardRow, SecretCollectionRow, SecretPullRow } from "./secret-cards-rows";
 import type { CollectionTrophy, CompletedCollection } from "./collection-trophies";
@@ -588,7 +590,7 @@ export const createSecretCards = createServerFn({ method: "POST" })
         results.push({
           name: input.name,
           ok: false as const,
-          error: e instanceof Error ? e.message : "upload failed",
+          error: errorMessage(e, "upload failed"),
         });
       }
     }
