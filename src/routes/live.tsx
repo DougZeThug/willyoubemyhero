@@ -10,8 +10,15 @@ import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher, type FinishPayload } from "@/hooks/use-finish-watcher";
 import { currentAthlete, idleFieldState } from "@/lib/current-athlete";
-import { outOfContention, standings } from "@/lib/standings";
-import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { standingsRows } from "@/hooks/use-standings-rows";
+import { outOfContention } from "@/lib/standings";
+import {
+  FeedDegradedBanner,
+  FeedError,
+  FeedLoading,
+  feedReadError,
+  readFailedMessage,
+} from "@/components/feed-state";
 import { hudStatus, onClockElapsedMs, type HudStatus, type OnClockEntry } from "@/lib/live-clock";
 import { useLiveHud } from "@/hooks/use-live-hud";
 import { LiveTimingBar } from "@/components/live-timing-bar";
@@ -63,6 +70,7 @@ type Leader = { run: Bundle["runs"][number]; place: number; ep: EventParticipant
 function LivePage() {
   const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
     useEventBundle();
+  const read = feedReadError(failedTables);
   const eventId = event?.id ?? null;
   const photos = useEventPhotoUrls(eventId);
   const cards = useEventCardUrls(eventId);
@@ -87,11 +95,7 @@ function LivePage() {
     // in a Top 5 of five, beside a counter that had already learned to count them
     // once -- the screen contradicting itself.
     const excluded = outOfContention(bundle ?? { participants: [], runs: [] });
-    const placed = standings(bundle).map((s) => ({
-      run: s.run,
-      place: s.place,
-      ep: parts.find((p) => p.participant_id === s.participantId),
-    }));
+    const placed = standingsRows(bundle);
     return {
       current: slot.athlete,
       onClock: slot.onClock,
@@ -119,11 +123,11 @@ function LivePage() {
   // "Everyone is done" is only true when there was somebody to be done. It used
   // to be what the page said before the first fetch had even returned.
   const emptyReason = {
-    "roster-failed": "Couldn't read the roster just now — retrying.",
+    "roster-failed": readFailedMessage("roster"),
     "no-roster": "No roster yet. The commissioner sets the field.",
     "all-done": "Every athlete is done. Nice work.",
     waiting: "Nobody on the clock right now.",
-  }[idleFieldState(done, total, failedTables.includes("event_participants"))];
+  }[idleFieldState(done, total, read.roster)];
 
   if (loading && !bundle) {
     return (
@@ -174,7 +178,7 @@ function LivePage() {
 
         <LiveTopFive
           leaderboard={leaderboard}
-          runsFailed={failedTables.includes("runs")}
+          runsFailed={read.runs}
           done={done}
           total={total}
           cards={cards}
@@ -365,9 +369,7 @@ function LiveTopFive({
         </div>
         {leaderboard.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            {runsFailed
-              ? "Couldn't read the results just now — retrying."
-              : "No official times yet."}
+            {runsFailed ? readFailedMessage("results") : "No official times yet."}
           </p>
         ) : (
           <ol className="space-y-1.5">

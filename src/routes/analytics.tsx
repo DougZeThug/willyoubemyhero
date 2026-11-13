@@ -8,12 +8,14 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
-import { standings } from "@/lib/standings";
+import { standingsRows } from "@/hooks/use-standings-rows";
 import {
   FeedDegradedBanner,
   FeedError,
   FeedLoading,
   FeedPartialBanner,
+  feedReadError,
+  readFailedMessage,
 } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
@@ -35,6 +37,7 @@ export const Route = createFileRoute("/analytics")({
 
 function AnalyticsPage() {
   const { bundle, loading, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
+  const read = feedReadError(failedTables);
   const listFn = useServerFn(listArchives);
   const archives = useQuery({ queryKey: ["archives"], queryFn: () => listFn(), staleTime: 60_000 });
 
@@ -97,14 +100,13 @@ function AnalyticsPage() {
   // bundle. It also kept somebody whose only official run has no time yet, parked
   // at Infinity with an em dash where their time belongs.
   const bests = useMemo(() => {
-    const parts = bundle?.participants ?? [];
-    return standings(bundle)
+    return standingsRows(bundle)
       .slice(0, 10)
-      .map((s) => ({
-        participantId: s.participantId,
-        place: s.place,
-        name: parts.find((p) => p.participant_id === s.participantId)?.participant?.name ?? "?",
-        bestMs: s.run.official_time_ms,
+      .map(({ run, place, ep }) => ({
+        participantId: run.participant_id,
+        place,
+        name: ep?.participant?.name ?? "?",
+        bestMs: run.official_time_ms,
       }));
   }, [bundle]);
 
@@ -153,9 +155,7 @@ function AnalyticsPage() {
           <CardContent className="pt-0">
             {stationAverages.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                {failedTables.includes("splits") || failedTables.includes("stations")
-                  ? "Couldn't read the splits just now — retrying."
-                  : "No split data yet."}
+                {read.splits ? readFailedMessage("splits") : "No split data yet."}
               </p>
             ) : (
               <div className="h-56 w-full">
@@ -194,8 +194,8 @@ function AnalyticsPage() {
           <CardContent className="pt-0">
             {bests.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                {failedTables.includes("runs") || failedTables.includes("event_participants")
-                  ? "Couldn't read the results just now — retrying."
+                {read.runs || read.roster
+                  ? readFailedMessage("results")
                   : "No official finishes yet."}
               </p>
             ) : (

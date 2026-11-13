@@ -13,13 +13,15 @@ import {
   FeedError,
   FeedLoading,
   FeedPartialBanner,
+  feedReadError,
+  readFailedMessage,
 } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { ResultCard, type ResultCardData } from "@/components/result-card";
 import { toResultCardData } from "@/lib/result-card-data";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { toast } from "sonner";
-import { standings } from "@/lib/standings";
+import { useStandingsRows } from "@/hooks/use-standings-rows";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({
@@ -63,14 +65,7 @@ function LeaderboardPage() {
   // official *runs* put a re-timed athlete on the board twice, kept a scratched
   // one's place, and numbered a dead heat 1 and 2 beside two champion cards —
   // the board contradicting the card on the same screen.
-  const rows = useMemo(() => {
-    const parts = bundle?.participants ?? [];
-    return standings(bundle).map((s) => ({
-      run: s.run,
-      place: s.place,
-      ep: parts.find((p) => p.participant_id === s.participantId),
-    }));
-  }, [bundle]);
+  const rows = useStandingsRows(bundle);
 
   /**
    * The roster read failed while the runs read did not.
@@ -82,7 +77,7 @@ function LeaderboardPage() {
    * below is the only other place this screen reads `failedTables`, and it can
    * never fire on that board, which is the one it most needed to.
    */
-  const rosterFailed = failedTables.includes("event_participants");
+  const read = feedReadError(failedTables);
 
   async function handleShare(runId: string) {
     const row = rows.find((r) => r.run.id === runId);
@@ -133,13 +128,10 @@ function LeaderboardPage() {
     <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-4xl px-page-x py-6">
         {(realtimeDegraded || Boolean(error)) && <FeedDegradedBanner className="mb-4" />}
-        {rosterFailed && (
+        {read.roster && (
           // The same sentence /live and /order use for this exact read, rather
           // than a fourth phrasing of it.
-          <FeedPartialBanner
-            className="mb-4"
-            message="Couldn't read the roster just now — retrying."
-          />
+          <FeedPartialBanner className="mb-4" message={readFailedMessage("roster")} />
         )}
         <PageHeader
           eyebrow="Standings"
@@ -166,8 +158,8 @@ function LeaderboardPage() {
                     above already names that read. Saying the results were
                     unreadable over a combine that simply has not started is the
                     same lie in the other direction. */}
-                {failedTables.includes("runs")
-                  ? "Couldn't read the results just now — retrying."
+                {read.runs
+                  ? readFailedMessage("results")
                   : "No official times yet — check back after the first athlete crosses."}
               </div>
             ) : (

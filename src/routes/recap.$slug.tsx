@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getArchivedRecap } from "@/lib/media.functions";
 import { formatTime } from "@/lib/format";
 import { jsonLd } from "@/lib/json-ld";
-import { standings } from "@/lib/standings";
+import { standingsRows } from "@/hooks/use-standings-rows";
 
 export const Route = createFileRoute("/recap/$slug")({
   head: ({ params }) => ({
@@ -78,11 +78,7 @@ function RecapPage() {
   // one row per athlete, a dead heat sharing its number, anybody out of contention
   // off it. An archive carrying no statuses keeps everybody, which is the old
   // behaviour exactly.
-  const results = standings(snap).map((s) => ({
-    run: s.run,
-    place: s.place,
-    ep: snap.participants.find((p) => p.participant_id === s.participantId),
-  }));
+  const results = standingsRows(snap);
   const drafts = [...snap.drafts].sort((a, b) => a.draft_position - b.draft_position);
 
   return (
