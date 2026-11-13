@@ -42,7 +42,7 @@ Every feature document follows the same skeleton so that documents are comparabl
 1. **Summary.** One paragraph describing the feature abstractly. For example: "{one-sentence summary of the pilot feature}."
 2. **The simple case.** The common path in prose.
 3. **The interaction, event by event.** The five phases of {the product's unit of interaction: a gesture / a page or form lifecycle / an invocation / a turn}: {name them in the product's words: starting; ending at once; becoming extended; while extended; finishing}. What starts it and what is captured, what happens if it ends at once, what is decided the moment it becomes extended, what updates live, and what is committed at the end. Include a small state diagram (Mermaid `stateDiagram-v2`) of the states the user passes through.
-4. **Modifiers.** A table of {Shift, Alt/Option, Ctrl/Cmd, and Space / the product's variant axis: roles, record states, flags, modes}, and what each one does when set at the start and when changed *during* the interaction.
+4. **Modifiers.** A table of {Shift, Alt/Option, Ctrl/Cmd, and Space / the product's variant axis: roles, record states, flags, modes}, and what each one does when set at the start and when changed _during_ the interaction.
 5. **Cancel and interrupt.** The same checklist in every document:
    - {The user's explicit abort: Escape, Stop, Ctrl+C, a Cancel button}
    - {The user doing something else mid-way: switching tools, modes, tabs, or conversations; navigating away; sending another message}
@@ -51,7 +51,7 @@ Every feature document follows the same skeleton so that documents are comparabl
    - {The page or process going away: reload, tab closed, terminal closed, app backgrounded}
    - {Something else changing the target: deleted, locked, edited by another user or tab, changed on disk}
    - {The input channel changing: a second input device, autofill, a pipe closing, touch cancel}
-   {Rewrite this list for the product, drawing on the five families in the skill's product-kinds.md: the user's explicit abort, the user doing something else mid-way, the environment failing, something else changing the target, the input channel changing. It must be identical, and in the same order, in every document.}
+     {Rewrite this list for the product, drawing on the five families in the skill's product-kinds.md: the user's explicit abort, the user doing something else mid-way, the environment failing, something else changing the target, the input channel changing. It must be identical, and in the same order, in every document.}
 6. **Interactions with other systems.** {The product's cross-cutting concerns, in a fixed order: permissions, history or undo, containers or parents, locked or readonly state, offline, collaboration or multi-device, notifications, configuration and preferences.}
 7. **Edge cases.** Anything a user could notice that is not covered above.
 8. **Open questions and verification.** The {source repo} commit the document was verified against, and any behavior that could not be confirmed.
@@ -124,13 +124,13 @@ cross-cutting/
 
 Status is one of `not started`, `drafted`, or `verified`.
 
-| Document | Status |
-| --- | --- |
-| glossary.md | not started |
-| bug-triage.md | not started |
+| Document                       | Status      |
+| ------------------------------ | ----------- |
+| glossary.md                    | not started |
+| bug-triage.md                  | not started |
 | verification/ ({n} checklists) | not started |
-| foundations/{name}.md | not started |
-| ... | not started |
+| foundations/{name}.md          | not started |
+| ...                            | not started |
 
 ## Reference
 

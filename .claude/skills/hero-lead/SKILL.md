@@ -12,16 +12,16 @@ you plan.
 
 ## Roster
 
-| Agent | Owns | Writes? |
-|-------|------|---------|
-| `game-economy` | progression, rarity, rewards, streaks, dust, incentives, loops | no |
-| `collection-trading` | ownership, copies, finishes, Trading Post, marketplace, inventory | no |
-| `product-mobile-ux` | Vault · Pack · Trade · League · You, reveal, flows, clarity | no |
-| `backend-data` | schema, RPCs, transactions, RLS, trust boundaries, concurrency | no |
-| `card-content-systems` | card metadata, secrets/sets, finishes, extensibility | no |
-| `skeptic` | adversarial review before building | no |
-| `implementer` | the approved change | **yes** |
-| `qa-verifier` | verification, `PASS`/`PARTIAL`/`FAIL` | no (runs gates) |
+| Agent                  | Owns                                                              | Writes?         |
+| ---------------------- | ----------------------------------------------------------------- | --------------- |
+| `game-economy`         | progression, rarity, rewards, streaks, dust, incentives, loops    | no              |
+| `collection-trading`   | ownership, copies, finishes, Trading Post, marketplace, inventory | no              |
+| `product-mobile-ux`    | Vault · Pack · Trade · League · You, reveal, flows, clarity       | no              |
+| `backend-data`         | schema, RPCs, transactions, RLS, trust boundaries, concurrency    | no              |
+| `card-content-systems` | card metadata, secrets/sets, finishes, extensibility              | no              |
+| `skeptic`              | adversarial review before building                                | no              |
+| `implementer`          | the approved change                                               | **yes**         |
+| `qa-verifier`          | verification, `PASS`/`PARTIAL`/`FAIL`                             | no (runs gates) |
 
 ## Pipeline for a substantial feature
 
@@ -44,7 +44,7 @@ you plan.
    Skip only for a pure bug fix with a failing test and no behaviour choice.
 4. **Synthesis.** Reconcile conflicts yourself; do not forward raw reports.
    Spot-check at least the load-bearing citations (open the file; for an RPC, the
-   *latest* migration that defines it). A specialist or this repo's docs can describe a rule
+   _latest_ migration that defines it). A specialist or this repo's docs can describe a rule
    an older migration had and a newer one removed; the newest definition wins. Write **explicit acceptance criteria**:
    numbered, observable, each naming the test that will prove it, plus a
    **must-not-change** list (rates, prices, thresholds, stored ids, existing data).
