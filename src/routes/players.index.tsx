@@ -14,7 +14,13 @@ import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession } from "@/lib/member-token";
 import { useWasMember } from "@/hooks/use-was-member";
 import { useTransientId } from "@/hooks/use-transient-id";
-import { collectionSettled, dustHolder, idOf, summaryLine } from "@/lib/collection-view";
+import {
+  collectionSettled,
+  dustHolder,
+  idOf,
+  summaryLine,
+  universalBack,
+} from "@/lib/collection-view";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { usePackStatus } from "@/hooks/use-pack-status";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
@@ -87,7 +93,6 @@ import {
 } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -149,11 +154,6 @@ function useVaultStreak(actor: string | null) {
   // a milestone cannot pay twice or show its reveal on two screens at once.
   const milestone = useMilestoneClaim(actor, streak);
   return { streak, streakPending, milestone };
-}
-
-/** The deck back to show on a secret, or null when the event has none. */
-function universalBack(urls: ImageUrlSet | null | undefined) {
-  return urlFromSet(urls) ? (urls ?? null) : null;
 }
 
 /**
@@ -672,7 +672,7 @@ function PlayersPage() {
         });
       });
     },
-    [collapsed, toggle, reducedMotion],
+    [collapsed, toggle, reducedMotion, setFlashed],
   );
 
   // The sheet swipes what is on screen, in the order it is on screen. It used to

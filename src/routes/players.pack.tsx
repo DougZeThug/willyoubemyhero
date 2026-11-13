@@ -71,9 +71,9 @@ import { usePackSell } from "@/hooks/use-pack-sell";
 import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
-import { urlFromSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
+import { universalBack } from "@/lib/collection-view";
 import { PackDealingSlot } from "@/components/pack-dealing-slot";
 import { buildStandSlots, type SoldSlot } from "@/lib/pack-stand-slots";
 import { wait } from "@/lib/wait";
@@ -1247,7 +1247,7 @@ function PackPage() {
           card={milestoneReveal.card}
           tierFloor={milestoneReveal.tierFloor}
           duplicate={milestoneReveal.duplicate}
-          universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+          universalBack={universalBack(packBack.data?.urls)}
           onDone={dismissMilestone}
         />
       )}
@@ -1385,7 +1385,7 @@ function PackPage() {
               cursor={cursor}
               cards={cards.data}
               revealed={revealed}
-              universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+              universalBack={universalBack(packBack.data?.urls)}
               pullCounts={pullCounts.data}
               peeking={peeking === cursor}
               busy={autoRunning}
@@ -1426,7 +1426,7 @@ function PackPage() {
             cards={cards.data}
             revealed={revealed}
             pullCounts={pullCounts.data}
-            universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+            universalBack={universalBack(packBack.data?.urls)}
             collected={collectedCount}
             total={total}
             eventYear={event?.year ?? null}

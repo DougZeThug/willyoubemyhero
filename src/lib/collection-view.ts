@@ -1,6 +1,7 @@
 // View-model rules the vault (/players) and /you share, so the two screens can
 // never answer "is the collection known yet?" or "does this phone hold dust?"
 // differently.
+import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 
 export function idOf(event: { id?: string | null } | null | undefined) {
@@ -24,4 +25,9 @@ export function summaryLine(
   counts: Parameters<typeof vaultSummaryLine>[0],
 ) {
   return summaryReady(ready, roster) ? vaultSummaryLine(counts) : null;
+}
+
+/** The deck back to show on a secret, or null when the event has none. */
+export function universalBack(urls: ImageUrlSet | null | undefined) {
+  return urlFromSet(urls) ? (urls ?? null) : null;
 }
