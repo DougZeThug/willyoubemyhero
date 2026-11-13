@@ -77,7 +77,6 @@ export function hydrateHapticsOff() {
   hapticsStore.load();
 }
 
-/** Reactive view of the haptics preference. */
 export function useHaptics() {
   const off = hapticsStore.useValue();
   const toggle = useCallback(() => setHapticsOff(!isHapticsOff()), []);

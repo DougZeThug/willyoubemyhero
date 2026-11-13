@@ -181,7 +181,6 @@ export function useFinishSave({
     [send],
   );
 
-  /** Send a stopped run again, unchanged. */
   const retry = useCallback(
     async (run: FinishedRun) => {
       if (busy.current) return;

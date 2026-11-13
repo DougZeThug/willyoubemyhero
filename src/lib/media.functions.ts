@@ -17,8 +17,6 @@ import type { Database } from "@/integrations/supabase/types";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
 
-// ------- Signed URL cache -------
-
 const SIGNED_TTL_S = 8 * 60 * 60;
 /** Re-sign well before expiry so a URL handed out now stays valid for hours. */
 const SIGNED_REUSE_MS = 6 * 60 * 60_000;
@@ -103,7 +101,6 @@ async function signSet(paths: {
   return { thumb, medium, large };
 }
 
-// Return signed URLs for all event participants that have a photo_path.
 export const getEventPhotoUrls = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
@@ -128,8 +125,6 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
     );
     return out;
   });
-
-// ------- Player trading cards -------
 
 const cardSide = z.enum(["front", "back"]);
 
@@ -626,8 +621,6 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
     return { ok: true, urls: await signSet(paths), paths };
   });
 
-// ------- Backfill existing images -------
-
 export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
@@ -815,7 +808,6 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ------- Archive / recap -------
 function slugify(s: string) {
   return s
     .toLowerCase()

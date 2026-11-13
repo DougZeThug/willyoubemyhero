@@ -174,7 +174,6 @@ export function useCollectionTrophyWatcher() {
 
   return {
     queue,
-    /** Drop the one on screen and move to the next. */
     shift: () => setQueue((q) => q.slice(1)),
   };
 }

@@ -26,7 +26,6 @@ const BURST = [
   { x: 16, y: -20 },
 ];
 
-/** Local storage key for the guest display name — one per browser. */
 const GUEST_NAME_KEY = STORAGE_KEYS.guestName;
 
 function readGuestName(): string {
@@ -57,7 +56,6 @@ export function CardSocial({
   eventParticipantId: string;
   reactions: ReactionRow[];
   comments: CommentRow[];
-  /** Resolve a participant id to a display name. */
   nameOf: (participantId: string) => string;
 }) {
   const me = useMemberSession();
@@ -178,7 +176,6 @@ export function CardSocial({
     if (next) next();
   }
 
-  /** Display label for a reaction/comment row, falling back to guest name. */
   function labelFor(row: { participant_id: string | null; guest_name?: string | null }): string {
     if (row.participant_id) return nameOf(row.participant_id);
     return row.guest_name?.trim() || "Guest";

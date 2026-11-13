@@ -50,7 +50,6 @@ export function toggleFavourite(ids: readonly string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
 }
 
-/** The pinned ids, reactive. */
 export function useVaultFavourites() {
   const ids = store.useValue();
 

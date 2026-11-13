@@ -206,8 +206,6 @@ export const deleteComment = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ---------- Superlative voting ----------
-
 /** Your own ballot. Only ever returns the requesting member's votes. */
 export const getMyAwardVotes = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))

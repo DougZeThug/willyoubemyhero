@@ -37,7 +37,6 @@ const store = createDeviceStore<string | null>({
 
 export const readVaultLastSeen = store.load;
 
-/** Mark everything up to now as looked at. */
 export function markVaultSeen(at: string = new Date().toISOString()) {
   store.set(at);
 }
