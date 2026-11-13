@@ -5,6 +5,20 @@ export function isBrowser() {
 }
 
 /**
+ * Run a device write and swallow whatever it throws.
+ *
+ * For persistence that is a convenience, where a blocked or full store means
+ * "this device just doesn't remember". The call site says why that is acceptable.
+ */
+export async function bestEffort(write: () => unknown): Promise<void> {
+  try {
+    await write();
+  } catch {
+    /* the caller's comment says why losing this write is fine */
+  }
+}
+
+/**
  * A lazily opened database whose open promise is shared by every caller.
  *
  * A rejected open is dropped rather than cached: one transient failure (a

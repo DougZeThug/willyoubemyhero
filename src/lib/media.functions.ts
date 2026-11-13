@@ -86,7 +86,7 @@ export type SizedDataUrls = {
 
 // Client-resized images are well under this; the cap stops an admin token (or a
 // stolen one) from filling storage with arbitrarily large files.
-export const MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
+const MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
 
 export function decodeImageDataUrl(dataUrl: string) {
   if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("Image is too large");

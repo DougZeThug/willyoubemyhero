@@ -67,12 +67,9 @@ export function createDeviceStore<T>(config: {
     if (equals?.(current, next)) return;
     current = next;
     if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(key, serialize(next));
-    } catch {
-      /* private mode with storage blocked still holds the value for this page load */
-    }
-    window.dispatchEvent(new Event(changed));
+    // Blocked storage still holds the value for this page load, in `current`.
+    writeStored(key, serialize(next));
+    emitLocal(changed);
   }
 
   function useValue(options: { afterLoad?: (value: T) => void } = {}) {
@@ -83,21 +80,13 @@ export function createDeviceStore<T>(config: {
       // would visibly undo itself under the thumb that changed it.
       const mine = () => setValue(current);
       const reread = () => setValue(load());
-      // Another tab, and only if it touched OUR key. `storage` fires for every key
-      // the other tab writes, and re-reading clobbers the in-memory hold with
-      // whatever storage holds. A null key is localStorage.clear(), which does
-      // concern us.
-      const theirs = (e: StorageEvent) => {
-        if (e.key !== null && e.key !== key) return;
-        reread();
-      };
       reread();
       options.afterLoad?.(current);
-      window.addEventListener(changed, mine);
-      window.addEventListener("storage", theirs);
+      const offHere = onLocal(changed, mine);
+      const offTheirs = onOtherTab([key], reread);
       return () => {
-        window.removeEventListener(changed, mine);
-        window.removeEventListener("storage", theirs);
+        offHere();
+        offTheirs();
       };
     }, []);
 
@@ -124,4 +113,52 @@ export function readStored(key: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Guarded `localStorage.setItem`: where storage is blocked the write is simply lost. */
+export function writeStored(key: string, value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* private mode with storage blocked: nothing to persist to */
+  }
+}
+
+/** Guarded `localStorage.removeItem`. */
+export function removeStored(key: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* private mode with storage blocked: nothing to remove */
+  }
+}
+
+// `storage` only fires in OTHER tabs, so a write needs a window event of its own
+// to reach this tab's listeners. This pair is that convention, in one place.
+export function emitLocal(name: string) {
+  window.dispatchEvent(new Event(name));
+}
+
+export function onLocal(name: string, listener: () => void): () => void {
+  window.addEventListener(name, listener);
+  return () => window.removeEventListener(name, listener);
+}
+
+/**
+ * Another tab changed one of `keys`.
+ *
+ * `storage` fires for every key the other tab writes, so a listener that does not
+ * filter re-reads (and re-notifies) on unrelated writes -- and, for a store that
+ * holds a value in memory, clobbers that hold with whatever storage says. A null
+ * key is localStorage.clear(), which concerns every store.
+ */
+export function onOtherTab(keys: readonly string[], listener: () => void): () => void {
+  const handler = (e: StorageEvent) => {
+    if (e.key !== null && !keys.includes(e.key)) return;
+    listener();
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
 }

@@ -2,10 +2,18 @@
 // separate storage key so claiming a player and unlocking admin are independent.
 import { useSyncExternalStore } from "react";
 import { MEMBER_PREFIX, parsePrefixedToken } from "./token-format";
-import { readStored } from "./device-store";
-import { STORAGE_KEYS } from "./storage-keys";
+import {
+  emitLocal,
+  onLocal,
+  onOtherTab,
+  readStored,
+  removeStored,
+  writeStored,
+} from "./device-store";
+import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
 const KEY = STORAGE_KEYS.memberToken;
+const CHANGED = STORAGE_EVENTS.memberToken;
 const NAME_KEY = STORAGE_KEYS.memberName;
 /** Breadcrumb that outlives the token. See setMemberToken. */
 export const WAS_MEMBER_KEY = STORAGE_KEYS.wasMember;
@@ -38,14 +46,14 @@ export function getMemberToken(): string | null {
 
 export function setMemberToken(token: string, name: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, token);
-  window.localStorage.setItem(NAME_KEY, name);
+  writeStored(KEY, token);
+  writeStored(NAME_KEY, name);
   // Deliberately never cleared, including on sign-out. A member's secret cards
   // live on their name rather than on the phone, so somebody arriving on a new
   // handset to an empty vault needs to be told where their collection went — and
   // by then the token that would have proved they had one is gone.
-  window.localStorage.setItem(WAS_MEMBER_KEY, "1");
-  window.dispatchEvent(new Event("wwbh:member-token-changed"));
+  writeStored(WAS_MEMBER_KEY, "1");
+  emitLocal(CHANGED);
 }
 
 /**
@@ -88,16 +96,16 @@ export function refreshMemberToken(token: string, renewed?: string): boolean {
   } else if (next !== memberTokenParticipant(getMemberToken())) {
     return false;
   }
-  window.localStorage.setItem(KEY, token);
-  window.dispatchEvent(new Event("wwbh:member-token-changed"));
+  writeStored(KEY, token);
+  emitLocal(CHANGED);
   return true;
 }
 
 export function clearMemberToken() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
-  window.localStorage.removeItem(NAME_KEY);
-  window.dispatchEvent(new Event("wwbh:member-token-changed"));
+  removeStored(KEY);
+  removeStored(NAME_KEY);
+  emitLocal(CHANGED);
 }
 
 // useSyncExternalStore re-renders whenever getSnapshot returns a new reference,
@@ -132,25 +140,19 @@ function snapshot(): MemberSession | null {
  * spanning more than one key -- the name rides beside the token and the
  * breadcrumb outlives it.
  */
-const WATCHED = new Set<string>([KEY, NAME_KEY, WAS_MEMBER_KEY]);
+const WATCHED = [KEY, NAME_KEY, WAS_MEMBER_KEY];
 
 function subscribe(onStoreChange: () => void) {
-  // Filtered, unlike the custom event beside it. `storage` fires for every key
-  // the other tab writes, and this is a useSyncExternalStore subscribe -- so an
-  // unrelated wwbh: write re-read and re-notified every component holding a
-  // member session. A null key is localStorage.clear(), which is a sign-out and
-  // very much does concern us.
-  const theirs = (e: StorageEvent) => {
-    if (e.key !== null && !WATCHED.has(e.key)) return;
-    onStoreChange();
-  };
-  window.addEventListener("storage", theirs);
-  window.addEventListener("wwbh:member-token-changed", onStoreChange);
+  // Filtered, unlike a bare `storage` listener: this is a useSyncExternalStore
+  // subscribe, so an unrelated wwbh: write would re-notify every component
+  // holding a member session.
+  const offTheirs = onOtherTab(WATCHED, onStoreChange);
+  const offHere = onLocal(CHANGED, onStoreChange);
   // Tokens last 90 days, so an hourly expiry check is plenty.
   const iv = window.setInterval(onStoreChange, 60 * 60_000);
   return () => {
-    window.removeEventListener("storage", theirs);
-    window.removeEventListener("wwbh:member-token-changed", onStoreChange);
+    offTheirs();
+    offHere();
     window.clearInterval(iv);
   };
 }

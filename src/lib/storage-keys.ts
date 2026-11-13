@@ -34,6 +34,16 @@ export const STORAGE_KEYS = {
   revealSeenPrefix: "wwbh:reveal-seen:",
 } as const;
 
+/**
+ * Window events announcing this tab's own write to a token (`storage` only fires
+ * in other tabs). Like the keys, the values are fixed text other code listens for.
+ */
+export const STORAGE_EVENTS = {
+  adminToken: "wwbh:admin-token-changed",
+  memberToken: "wwbh:member-token-changed",
+  guestToken: "wwbh:guest-token-changed",
+} as const;
+
 /** The signed-URL snapshot for one event (use-photo-urls.ts); bump `version` with its strategy. */
 export const signedUrlSnapshotKey = (
   version: number,

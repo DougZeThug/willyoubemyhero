@@ -4,7 +4,8 @@
 // that database holds an in-progress timed run, which is the most safety-critical
 // client state in the app. Card data has no business forcing a version upgrade on it.
 
-import { cachedDb, isBrowser } from "./idb";
+import { emitLocal } from "./device-store";
+import { bestEffort, cachedDb, isBrowser } from "./idb";
 import { STORAGE_KEYS } from "./storage-keys";
 import { bestEdition, type Edition } from "./card-edition";
 import { leagueDay } from "./league-day";
@@ -240,7 +241,8 @@ export async function collectCard(
   edition: Edition = "standard",
 ): Promise<void> {
   if (!isBrowser()) return;
-  try {
+  // A device with IndexedDB blocked simply doesn't collect.
+  await bestEffort(async () => {
     const db = await getDb();
     // Read and write inside one transaction, for the reason given in
     // addUnrecorded: this is a read-modify-write against a single row, and a
@@ -260,9 +262,7 @@ export async function collectCard(
       : { eventParticipantId, pulledAt: Date.now(), count: 1, tier, edition };
     await tx.store.put(next, eventParticipantId);
     await tx.done;
-  } catch {
-    /* a device with IndexedDB blocked simply doesn't collect */
-  }
+  });
 }
 
 /**
@@ -278,7 +278,8 @@ export async function forgetCards(
   heldBy?: string,
 ): Promise<void> {
   if (!isBrowser() || eventParticipantIds.length === 0) return;
-  try {
+  // A device with IndexedDB blocked has nothing to forget.
+  await bestEffort(async () => {
     const db = await getDb();
     // `heldBy` is the identity whose unrecorded row has to be honoured, and the
     // row is read in the SAME transaction as the delete. A hold written between a
@@ -294,9 +295,7 @@ export async function forgetCards(
       ...eventParticipantIds.filter((id) => !held.has(id)).map((id) => store.delete(id)),
       tx.done,
     ]);
-  } catch {
-    /* a device with IndexedDB blocked has nothing to forget */
-  }
+  });
 }
 
 /** A single row, so today's state simply overwrites yesterday's. */
@@ -317,18 +316,17 @@ export async function loadPackState(): Promise<PackState | null> {
 
 export async function savePackState(state: PackState): Promise<void> {
   if (!isBrowser()) return;
-  try {
+  // Losing a pack-state write only costs the resume; it must never break the pack screen.
+  await bestEffort(async () => {
     const db = await getDb();
     await db.put(PACK_STATE, state, PACK_STATE_KEY);
     // Only once the row is actually down. The mirror is what stops a second tab
     // dealing over this pack, so a mirror written for a row that never landed
     // would lock a device with IndexedDB blocked out of the pack entirely —
     // the exact opposite of the call `loadPackState` makes above.
-    markPackDealt(state);
+    packDealt.record(state);
     announcePackState();
-  } catch {
-    /* ignore */
-  }
+  });
 }
 
 /**
@@ -349,67 +347,82 @@ export async function savePackState(state: PackState): Promise<void> {
  */
 const PACK_DEALT_KEY = STORAGE_KEYS.packDealt;
 
-/** The last value written, for the no-op guard. See setTrophySeen's `current`. */
-let dealtMirror: string | null = null;
-
 function mirrorValue(dayKey: string, identity: string | undefined): string {
   return `${dayKey}:${identity ?? ""}`;
 }
 
-function markPackDealt(state: PackState) {
-  const next = mirrorValue(state.dayKey, state.identity);
-  try {
-    // Seeded from storage on the first write of a page load, so resuming a pack
-    // this browser already holds is a genuine no-op. Without it the first save
-    // after a reload rewrites the same value, and a browser that fires `storage`
-    // on an unchanged write would wake every other tab for nothing.
-    dealtMirror ??= window.localStorage.getItem(PACK_DEALT_KEY);
-    if (next === dealtMirror) return;
-    dealtMirror = next;
-    window.localStorage.setItem(PACK_DEALT_KEY, next);
-  } catch {
-    /* private mode still gets the in-tab half, which is the re-entrancy guard */
-  }
-}
-
 /**
- * Does this identity already hold today's pack, as far as any tab knows?
+ * The mirror, with its last-written value held inside it for the no-op guard
+ * (see setTrophySeen's `current`).
  *
- * Read straight from storage rather than from the module value: the whole point
- * is the tab that did NOT do the writing.
+ * Call-order convention: `record` after the pack row is down, `clear` only for
+ * the identity whose row the caller just judged stale; `clear` also forgets the
+ * remembered value, or the next `record` of the same pack would no-op against a
+ * key that is no longer in storage.
  */
-export function packDealtElsewhere(dayKey: string, identity: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(PACK_DEALT_KEY) === mirrorValue(dayKey, identity);
-  } catch {
-    return false;
-  }
-}
+const packDealt = (() => {
+  let last: string | null = null;
 
-/**
- * Forget the mirror, but only this identity's.
- *
- * Called where the route decides the stored row is not this person's pack for
- * today, which is also the only way a mirror that has outlived its row is ever
- * cleaned up. IDENTITY-AWARE, because a blind `removeItem` is a hole: a tab
- * still holding the guest identity re-runs its resume the moment a claim in
- * another tab carries the pack, finds a row that is now the member's, and would
- * delete the mirror the member's own tabs are relying on — after which a tap in
- * one of them deals a second pack. A mirror for another day or identity blocks
- * nothing anyway, so leaving it costs nothing.
- */
-export function clearPackDealt(dayKey: string, identity: string | undefined): void {
-  const mine = mirrorValue(dayKey, identity);
-  if (dealtMirror === mine) dealtMirror = null;
-  if (typeof window === "undefined") return;
-  try {
-    if (window.localStorage.getItem(PACK_DEALT_KEY) !== mine) return;
-    window.localStorage.removeItem(PACK_DEALT_KEY);
-  } catch {
-    /* nothing to forget */
-  }
-}
+  return {
+    record(state: PackState) {
+      const next = mirrorValue(state.dayKey, state.identity);
+      try {
+        // Seeded from storage on the first write of a page load, so resuming a pack
+        // this browser already holds is a genuine no-op. Without it the first save
+        // after a reload rewrites the same value, and a browser that fires `storage` on an
+        // unchanged write would wake every other tab for nothing.
+        last ??= window.localStorage.getItem(PACK_DEALT_KEY);
+        if (next === last) return;
+        last = next;
+        window.localStorage.setItem(PACK_DEALT_KEY, next);
+      } catch {
+        /* private mode still gets the in-tab half, which is the re-entrancy guard */
+      }
+    },
+
+    /**
+     * Does this identity already hold today's pack, as far as any tab knows?
+     *
+     * Read straight from storage rather than from the module value: the whole
+     * point is the tab that did NOT do the writing.
+     */
+    elsewhere(dayKey: string, identity: string): boolean {
+      if (typeof window === "undefined") return false;
+      try {
+        return window.localStorage.getItem(PACK_DEALT_KEY) === mirrorValue(dayKey, identity);
+      } catch {
+        return false;
+      }
+    },
+
+    /**
+     * Forget the mirror, but only this identity's.
+     *
+     * Called where the route decides the stored row is not this person's pack for
+     * today, which is also the only way a mirror that has outlived its row is ever
+     * cleaned up. IDENTITY-AWARE, because a blind `removeItem` is a hole: a tab
+     * still holding the guest identity re-runs its resume the moment a claim in
+     * another tab carries the pack, finds a row that is now the member's, and would
+     * delete the mirror the member's own tabs are relying on -- after which a tap in
+     * one of them deals a second pack. A mirror for another day or identity blocks
+     * nothing anyway, so leaving it costs nothing.
+     */
+    clear(dayKey: string, identity: string | undefined): void {
+      const mine = mirrorValue(dayKey, identity);
+      if (last === mine) last = null;
+      if (typeof window === "undefined") return;
+      try {
+        if (window.localStorage.getItem(PACK_DEALT_KEY) !== mine) return;
+        window.localStorage.removeItem(PACK_DEALT_KEY);
+      } catch {
+        /* nothing to forget */
+      }
+    },
+  };
+})();
+
+export const packDealtElsewhere = packDealt.elsewhere;
+export const clearPackDealt = packDealt.clear;
 
 /**
  * Fired after any write to this store.
@@ -424,7 +437,7 @@ export const PACK_STATE_CHANGED = "wwbh:pack-state-changed";
 
 function announcePackState() {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(PACK_STATE_CHANGED));
+  emitLocal(PACK_STATE_CHANGED);
 }
 
 /**
@@ -493,7 +506,8 @@ export async function loadUnrecorded(): Promise<UnrecordedPulls | null> {
  */
 export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
   if (!isBrowser()) return;
-  try {
+  // A filing that fails leaves the pull unprotected, which is how it was before it existed; never break the pack screen over it.
+  await bestEffort(async () => {
     const db = await getDb();
     // Read and write inside one transaction, like `forgetCards` above. Both of
     // these are read-modify-write against the same row, and a record that lands
@@ -506,9 +520,7 @@ export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
     await tx.store.put({ ...state, ids }, UNRECORDED_KEY);
     await tx.done;
     announceUnrecordedChanged();
-  } catch {
-    /* ignore */
-  }
+  });
 }
 
 /**
@@ -523,7 +535,8 @@ export async function retireUnrecorded(
   identity?: string,
 ): Promise<void> {
   if (!isBrowser()) return;
-  try {
+  // A retire that fails leaves a stale hold, which only protects cards for longer.
+  await bestEffort(async () => {
     const db = await getDb();
     // One transaction, for the reason given in `addUnrecorded`.
     const tx = db.transaction(PACK_STATE, "readwrite");
@@ -552,9 +565,7 @@ export async function retireUnrecorded(
     // cannot drop a card the league now lists — and every caller retires AFTER the
     // server has taken the cards.
     announceUnrecordedChanged();
-  } catch {
-    /* ignore */
-  }
+  });
 }
 
 /**
@@ -626,7 +637,7 @@ export async function carryPackToIdentity(
     await tx.done;
     // The mirror moves with the row, which is also what wakes a pack screen open
     // in another tab: it is watching this key, and the identity has changed.
-    markPackDealt(carried);
+    packDealt.record(carried);
     announceUnrecordedChanged();
     return true;
   } catch {

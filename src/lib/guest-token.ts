@@ -7,10 +7,18 @@
 // card *is* at stake, so its identity has to be one the server issued and signed.
 import { useEffect, useState } from "react";
 import { GUEST_PREFIX, parsePrefixedToken } from "./token-format";
-import { readStored } from "./device-store";
-import { STORAGE_KEYS } from "./storage-keys";
+import {
+  emitLocal,
+  onLocal,
+  onOtherTab,
+  readStored,
+  removeStored,
+  writeStored,
+} from "./device-store";
+import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
 const KEY = STORAGE_KEYS.guestToken;
+const CHANGED = STORAGE_EVENTS.guestToken;
 
 export type GuestSession = { guestId: string; expiresAt: number; token: string };
 
@@ -34,14 +42,14 @@ export function getGuestToken(): string | null {
 
 export function setGuestToken(token: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, token);
-  window.dispatchEvent(new Event("wwbh:guest-token-changed"));
+  writeStored(KEY, token);
+  emitLocal(CHANGED);
 }
 
 export function clearGuestToken() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
-  window.dispatchEvent(new Event("wwbh:guest-token-changed"));
+  removeStored(KEY);
+  emitLocal(CHANGED);
 }
 
 function read(): GuestSession | null {
@@ -58,19 +66,12 @@ export function useGuestSession(): GuestSession | null {
     function refresh() {
       setSession(read());
     }
-    // `storage` fires for every key the other tab writes, so the listener needs
-    // its own; the custom event beside it is this tab's write. A null key is
-    // localStorage.clear(), which does concern us -- that is a sign-out.
-    function theirs(e: StorageEvent) {
-      if (e.key !== null && e.key !== KEY) return;
-      refresh();
-    }
     refresh();
-    window.addEventListener("storage", theirs);
-    window.addEventListener("wwbh:guest-token-changed", refresh);
+    const offTheirs = onOtherTab([KEY], refresh);
+    const offHere = onLocal(CHANGED, refresh);
     return () => {
-      window.removeEventListener("storage", theirs);
-      window.removeEventListener("wwbh:guest-token-changed", refresh);
+      offTheirs();
+      offHere();
     };
   }, []);
   return session;
