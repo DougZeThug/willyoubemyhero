@@ -694,7 +694,7 @@ function StallLine({
  * What each refusal says on a button.
  *
  * Every one of these is something a person can act on, which is why the RPCs
- * return them rather than raising — see the header of dust-db.server.ts.
+ * return them rather than raising — see the header of dust-rows.ts.
  */
 const BUY_REFUSALS: Record<string, string> = {
   resolved: "Somebody got there first",

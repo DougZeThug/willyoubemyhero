@@ -4,6 +4,7 @@ import { hashCode, memberTokenIssuedAt, signMemberToken } from "./session.server
 import { optionalGuest, requireAdmin, requireMemberSession } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
+import { clearAuthAttempts, noteAuthAttempt } from "./auth-attempts.server";
 
 // Codes get read off paper and typed on a phone, so the alphabet drops every
 // character pair people confuse: 0/O, 1/I/L, 2/Z, 5/S, 8/B.
@@ -54,11 +55,6 @@ export const getClaimRoster = createServerFn({ method: "GET" }).handler(async ()
   }));
 });
 
-// Ten tries per player per ten minutes — same shape as the PIN limiter in
-// admin.functions.ts, keyed by the participant being claimed.
-const CLAIM_ATTEMPT_WINDOW_S = 600;
-const CLAIM_ATTEMPT_MAX = 10;
-
 /**
  * Exchange a commissioner-issued code for a 90-day member token.
  *
@@ -77,20 +73,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Counted before the row is even looked up, so a player with no code issued
-    // rate-limits exactly like one with a wrong code — the limiter must not
-    // become the enumeration channel the generic bad_code below closes. Fails
-    // OPEN on a counter error: see verifyEventPin for the reasoning.
-    // note_auth_attempt / clear_auth_attempts are still unknown to the generated
-    // types, so this one call needs the widened client. See auth-attempts-db.server.ts.
-    const { authAttemptsDb } = await import("./auth-attempts-db.server");
-    const { data: allowed } = await authAttemptsDb().rpc("note_auth_attempt", {
-      _kind: "claim",
-      _key: data.participantId,
-      _window_seconds: CLAIM_ATTEMPT_WINDOW_S,
-      _max: CLAIM_ATTEMPT_MAX,
-    });
-    if (allowed === false) {
+    if (!(await noteAuthAttempt("claim", data.participantId))) {
       return { ok: false as const, reason: "too_many_attempts" as const };
     }
     const { data: row } = await supabaseAdmin
@@ -107,7 +90,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
     }
     // A right code clears the counter — codes stay valid forever (see above), so
     // a family of re-claims across the day must not stack into a lockout.
-    await authAttemptsDb().rpc("clear_auth_attempts", { _kind: "claim", _key: data.participantId });
+    await clearAuthAttempts("claim", data.participantId);
 
     const now = new Date().toISOString();
     const { error: stampError } = await supabaseAdmin

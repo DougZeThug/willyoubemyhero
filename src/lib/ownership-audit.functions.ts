@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
+import { SECRET_PLACEHOLDER_NAME } from "./secret-visibility.server";
+import { adminDb } from "./admin-db.server";
 
 /**
  * The commissioner's answer to "why can't I see my card in trades?".
@@ -13,17 +15,6 @@ import { uuid as zuuid } from "./zod-uuid";
  * behave unowned, which is the exact shape of every "it's not in my available
  * cards" report. This file makes that split visible and repairable.
  */
-
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function tradesClient() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
 
 export type OwnershipRow = {
   participantId: string;
@@ -162,7 +153,9 @@ function buildStranded(
           lastSeen: days[days.length - 1] ?? null,
           signedIn: accountGuests.has(guestId),
           sample: [
-            ...new Set(rows.map((r) => nameOfCard.get(r.secret_card_id) ?? "Secret card")),
+            ...new Set(
+              rows.map((r) => nameOfCard.get(r.secret_card_id) ?? SECRET_PLACEHOLDER_NAME),
+            ),
           ].slice(0, 4),
         };
       })
@@ -184,8 +177,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<OwnershipAudit> => {
     await requireAdmin(data.eventId);
-    const sb = await admin();
-    const trades = await tradesClient();
+    const sb = await adminDb();
 
     const [{ data: participants }, { data: codes }, { data: accounts }, { data: pulls }] =
       await Promise.all([
@@ -205,7 +197,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
           >(),
       ]);
 
-    const { data: copies } = await trades
+    const { data: copies } = await sb
       .from("card_copies")
       .select("participant_id, event_participant_id")
       .returns<{ participant_id: string; event_participant_id: string }[]>();

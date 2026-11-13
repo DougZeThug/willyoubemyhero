@@ -4,11 +4,14 @@ import {
   isAdminFor,
   optionalGuest,
   optionalMember,
+  requireActor,
   requireAdmin,
   requireMember,
+  type Actor,
 } from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
 import { uuid as zuuid } from "./zod-uuid";
+import { adminDb } from "./admin-db.server";
 
 /**
  * Reactions, trash talk, and superlative voting.
@@ -21,12 +24,6 @@ import { uuid as zuuid } from "./zod-uuid";
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
 const reactionEmoji = z.enum(REACTIONS);
-export const REACTION_EMOJIS: readonly string[] = REACTIONS;
-
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
 
 /**
  * Display name a guest typed for themselves. The identity itself is NOT taken
@@ -53,23 +50,24 @@ const guestSchema = z
   .optional();
 type GuestInput = z.infer<typeof guestSchema>;
 
-// Discriminated on `kind` so each branch narrows to the identity it actually has.
-type Who =
-  { kind: "member"; member: string } | { kind: "guest"; guest: { key: string; name: string } };
+const JOIN_IN_MESSAGE = "Claim your player or add a name to join in";
 
-function actor(input: GuestInput): Who {
-  const member = optionalMember();
-  if (member) return { kind: "member", member };
-  const guestId = optionalGuest();
-  if (!guestId) throw new Error("Claim your player or add a name to join in");
-  return { kind: "guest", guest: { key: guestId, name: input?.name?.trim() || "Guest" } };
+/** The author columns of a reaction or comment row; a guest's name is what they typed, if anything. */
+function authorColumns(actor: Actor, input: GuestInput) {
+  return actor.kind === "member"
+    ? { participant_id: actor.id }
+    : {
+        participant_id: null,
+        guest_key: actor.id,
+        guest_name: input?.name?.trim() || "Guest",
+      };
 }
 
 /** Every reaction and comment for one event, in a single round trip. */
 export const getEventSocial = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
-    const sb = await admin();
+    const sb = await adminDb();
     const { data: eps } = await sb
       .from("event_participants")
       .select("id")
@@ -124,37 +122,27 @@ export const toggleReaction = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const who = actor(data.guest);
-    const sb = await admin();
+    const actor = requireActor(JOIN_IN_MESSAGE);
+    const sb = await adminDb();
     const reactionQuery = sb
       .from("card_reactions")
       .select("id")
       .eq("event_participant_id", data.eventParticipantId)
       .eq("emoji", data.emoji);
     const { data: existing } =
-      who.kind === "member"
-        ? await reactionQuery.eq("participant_id", who.member).maybeSingle()
-        : await reactionQuery.eq("guest_key", who.guest.key).maybeSingle();
+      actor.kind === "member"
+        ? await reactionQuery.eq("participant_id", actor.id).maybeSingle()
+        : await reactionQuery.eq("guest_key", actor.id).maybeSingle();
 
     if (existing) {
       await sb.from("card_reactions").delete().eq("id", existing.id);
       return { ok: true as const, reacted: false as const };
     }
-    const { error } = await sb.from("card_reactions").insert(
-      who.kind === "member"
-        ? {
-            event_participant_id: data.eventParticipantId,
-            participant_id: who.member,
-            emoji: data.emoji,
-          }
-        : {
-            event_participant_id: data.eventParticipantId,
-            participant_id: null,
-            guest_key: who.guest.key,
-            guest_name: who.guest.name,
-            emoji: data.emoji,
-          },
-    );
+    const { error } = await sb.from("card_reactions").insert({
+      event_participant_id: data.eventParticipantId,
+      emoji: data.emoji,
+      ...authorColumns(actor, data.guest),
+    });
     if (error) throw error;
     return { ok: true as const, reacted: true as const };
   });
@@ -170,25 +158,15 @@ export const postComment = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const who = actor(data.guest);
-    const sb = await admin();
+    const actor = requireActor(JOIN_IN_MESSAGE);
+    const sb = await adminDb();
     const { data: row, error } = await sb
       .from("card_comments")
-      .insert(
-        who.kind === "member"
-          ? {
-              event_participant_id: data.eventParticipantId,
-              participant_id: who.member,
-              body: data.body,
-            }
-          : {
-              event_participant_id: data.eventParticipantId,
-              participant_id: null,
-              guest_key: who.guest.key,
-              guest_name: who.guest.name,
-              body: data.body,
-            },
-      )
+      .insert({
+        event_participant_id: data.eventParticipantId,
+        body: data.body,
+        ...authorColumns(actor, data.guest),
+      })
       .select()
       .single();
     if (error) throw error;
@@ -199,7 +177,7 @@ export const postComment = createServerFn({ method: "POST" })
 export const deleteComment = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ commentId: zuuid(), guest: guestSchema }).parse(d))
   .handler(async ({ data }) => {
-    const sb = await admin();
+    const sb = await adminDb();
     const { data: row } = await sb
       .from("card_comments")
       .select("id, participant_id, guest_key, event_participant:event_participants!inner(event_id)")
@@ -235,7 +213,7 @@ export const getMyAwardVotes = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await admin();
+    const sb = await adminDb();
     const { data: rows } = await sb
       .from("award_votes")
       .select("category, target_participant_id")
@@ -262,7 +240,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     if (!isAwardCategory(data.category)) throw new Error("Unknown award category");
-    const sb = await admin();
+    const sb = await adminDb();
 
     // The RPC locks the event row, re-checks awards_locked, verifies the
     // nominee is on the roster, and upserts the vote in one transaction —
@@ -298,7 +276,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
 export const getAwards = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
-    const sb = await admin();
+    const sb = await adminDb();
     const { data: ev } = await sb
       .from("events")
       .select("awards_locked")
@@ -316,7 +294,7 @@ export const getAwardTally = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const sb = await admin();
+    const sb = await adminDb();
     const { data: rows } = await sb
       .from("award_votes")
       .select("category, target_participant_id")
@@ -340,7 +318,7 @@ export const closeAwardVoting = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const sb = await admin();
+    const sb = await adminDb();
     // Tally + publish + lock happen inside close_award_voting, which takes a
     // row lock on the event so an in-flight cast_award_vote either finishes
     // first (and is counted) or waits until we're done (and then sees
@@ -358,7 +336,7 @@ export const reopenAwardVoting = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const sb = await admin();
+    const sb = await adminDb();
     const { error } = await sb.rpc("reopen_award_voting", { _event_id: data.eventId });
     if (error) throw new Error(error.message);
     return { ok: true };

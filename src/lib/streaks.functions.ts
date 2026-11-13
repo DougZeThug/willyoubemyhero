@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { optionalActor, requireActor } from "./require-auth.server";
+import { actorColumn, actorRpcArgs, optionalActor, requireActor } from "./require-auth.server";
 import { signSecretCard } from "./secret-cards.functions";
 import type { SecretCardRow, SecretPullRow, PackOpenRow } from "./secret-cards-rows";
 import type { ClaimStreakMilestoneResult, StreakClaimRow } from "./streaks-rows";
@@ -18,6 +17,9 @@ import {
 
 import { leagueDay } from "./trades";
 import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { activeEventId } from "./active-event.server";
+import { noStore } from "./no-store.server";
 
 /**
  * Streaks, and the milestones they pay out.
@@ -32,16 +34,6 @@ import { sqlNull } from "./rpc-null";
  * The identity is never read from a payload in either direction. There is no
  * parameter for it, which is the same reason secret-cards.functions.ts has none.
  */
-
-/** Typed client, for tables the generated types already know about. */
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
 
 export type StreakMilestoneStatus = {
   days: number;
@@ -96,23 +88,22 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
     const today = leagueDay();
     if (!actor) return { ...NO_STREAK, today };
 
-    const sb = await admin();
+    const sb = await adminDb();
     // One column per actor kind rather than an `.or()` filter: PostgREST would
     // take the or, but it is not a thing the test double models, and a query
     // whose only coverage is production is not covered.
     const { data: opens, error } = await sb
       .from("pack_opens")
       .select("opened_on")
-      .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
+      .eq(actorColumn(actor), actor.id)
       .order("opened_on", { ascending: true })
       .returns<Pick<PackOpenRow, "opened_on">[]>();
     if (error) throw error;
 
-    const streaks = await admin();
-    const { data: claims, error: claimError } = await streaks
+    const { data: claims, error: claimError } = await sb
       .from("streak_milestone_claims")
       .select("milestone, streak_started_on, claimed_on")
-      .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
+      .eq(actorColumn(actor), actor.id)
       .returns<{ milestone: number; streak_started_on: string; claimed_on: string }[]>();
     if (claimError) throw claimError;
 
@@ -133,7 +124,6 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
       resetOn,
     );
 
-    const sbAdmin = await admin();
     // An existence check, deliberately not maybeSingle(): account_identities
     // indexes participant_id and guest_id NON-uniquely, so two accounts adopting
     // the same identity is a state the schema permits. maybeSingle() answers
@@ -142,10 +132,10 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
     // gate lets through — a button that never appears for a claim the server
     // would authorise. The error is rethrown rather than swallowed for the same
     // reason: a silent false here is indistinguishable from "no account".
-    const { data: accounts, error: accountError } = await sbAdmin
+    const { data: accounts, error: accountError } = await sb
       .from("account_identities")
       .select("user_id")
-      .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
+      .eq(actorColumn(actor), actor.id)
       .limit(1);
     if (accountError) throw accountError;
 
@@ -201,24 +191,16 @@ export const claimStreakMilestone = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const actor = requireActor();
     noStore();
-    const sb = await admin();
+    const sb = await adminDb();
 
     // Stamped on the claim for flavour only, and resolved here rather than taken
     // from the payload. A streak out of season is fine.
-    const { data: event } = await sb
-      .from("events")
-      .select("id")
-      .eq("active", true)
-      .order("year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const eventId = await activeEventId();
 
-    const streaks = await admin();
-    const { data: raw, error } = await streaks.rpc("claim_streak_milestone", {
-      _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
-      _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
+    const { data: raw, error } = await sb.rpc("claim_streak_milestone", {
+      ...actorRpcArgs(actor),
       _milestone: data.milestone,
-      _event_id: sqlNull(event?.id ?? null),
+      _event_id: sqlNull(eventId),
     });
     if (error) throw new Error(error.message);
 
@@ -230,8 +212,7 @@ export const claimStreakMilestone = createServerFn({ method: "POST" })
       return { ok: false as const, reason: result?.reason ?? ("unavailable" as const) };
     }
 
-    const sbSecrets = await admin();
-    const { data: card } = await sbSecrets
+    const { data: card } = await sb
       .from("secret_cards")
       .select("*")
       .eq("id", result.reward.cardId)
@@ -298,14 +279,14 @@ export const getStreakHistory = createServerFn({ method: "GET" }).handler(
     const actor = optionalActor();
     if (!actor) return [];
 
-    const sb = await admin();
+    const sb = await adminDb();
     // One column per actor kind rather than an `.or()` filter, same as the walk
     // above: PostgREST would take the or, but the test double does not model it,
     // and a query whose only coverage is production is not covered.
     const { data: claims, error } = await sb
       .from("streak_milestone_claims")
       .select("milestone, streak_started_on, claimed_on, reward_ref, reward_tier")
-      .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
+      .eq(actorColumn(actor), actor.id)
       .order("claimed_on", { ascending: false })
       .limit(HISTORY_LIMIT)
       .returns<Pick<StreakClaimRow, "milestone" | "streak_started_on" | "claimed_on" | "reward_ref" | "reward_tier">[]>(); // prettier-ignore

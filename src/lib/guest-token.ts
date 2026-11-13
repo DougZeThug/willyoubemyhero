@@ -6,6 +6,7 @@
 // dealt — a purely client-side determinism that nothing is at stake in. A secret
 // card *is* at stake, so its identity has to be one the server issued and signed.
 import { useEffect, useState } from "react";
+import { GUEST_PREFIX, parsePrefixedToken } from "./token-format";
 
 const KEY = "wwbh:guest-token";
 
@@ -13,16 +14,9 @@ export type GuestSession = { guestId: string; expiresAt: number; token: string }
 
 function parse(token: string | null): GuestSession | null {
   if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [prefix, guestId, expStr] = parts;
-  // A member token is also four parts. The prefix is what tells them apart, here
-  // and in the signed payload server-side.
-  if (prefix !== "g") return null;
-  const expiresAt = Number(expStr);
-  if (!guestId || !Number.isFinite(expiresAt)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { guestId, expiresAt, token };
+  const parsed = parsePrefixedToken(GUEST_PREFIX, token);
+  if (!parsed || Date.now() > parsed.expiresAt) return null;
+  return { guestId: parsed.id, expiresAt: parsed.expiresAt, token };
 }
 
 export function getGuestToken(): string | null {
