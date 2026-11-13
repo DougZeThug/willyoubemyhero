@@ -49,7 +49,6 @@ export const TROPHY_CHIME = "collectionComplete";
 
 /** How a set got finished. Mirrors the CHECK in 20260825120000. */
 export const TROPHY_VIA = ["pull", "trade", "grant", "claim", "backfill"] as const;
-export type TrophyVia = (typeof TROPHY_VIA)[number];
 
 /**
  * A set finished by THIS action, as it comes back on the acquiring response.

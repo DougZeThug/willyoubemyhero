@@ -1,4 +1,4 @@
-import type { StandSlot } from "@/components/pack-stand";
+import type { StandSlot } from "./stand-view";
 import { rarityStyle, type rarityMap } from "@/lib/card-rarity";
 import { toEdition } from "@/lib/card-edition";
 import { MILL_BY_EDITION, secretSellValue } from "@/lib/dust";

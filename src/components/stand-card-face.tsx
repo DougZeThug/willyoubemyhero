@@ -3,7 +3,7 @@ import { HoloCard, NO_FLICK, type HoloGestures } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
-import type { StandParticipant } from "@/components/pack-stand";
+import type { StandParticipant } from "@/lib/stand-view";
 import type { Rarity } from "@/lib/card-rarity";
 import type { Edition } from "@/lib/card-edition";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";

@@ -15,7 +15,7 @@ import { EASE_OUT } from "@/lib/motion";
 import { upgradeLabel } from "@/lib/pack-outcome";
 import { nextMilestoneLine, type Streak } from "@/lib/streaks";
 import { secretTierCaption, secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
-import type { StandSlot } from "@/components/pack-stand";
+import type { StandSlot } from "@/lib/stand-view";
 import { copiesAfterSale, nextPackLabel, packResetAt } from "@/lib/pack";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";

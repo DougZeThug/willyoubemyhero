@@ -79,6 +79,8 @@ export async function becomeMember(args: {
   qc: QueryClient;
   isCurrent?: () => boolean;
   mayCarryPack?: () => boolean;
+  /** Fires the moment the token is on the device, so a caller's cleanup knows it is the author. */
+  onTokenWritten?: () => void;
 }): Promise<{ status: "adopted" | "stale" } | { status: "failed"; error: unknown }> {
   const { participantId, token, name, held, device, qc } = args;
   const isCurrent = args.isCurrent ?? (() => true);
@@ -92,6 +94,7 @@ export async function becomeMember(args: {
     return { status: "stale" };
   }
   setMemberToken(token, name);
+  args.onTokenWritten?.();
   try {
     await retryOnce(() => adoptLocalCollection(held), isCurrent);
   } catch (error) {

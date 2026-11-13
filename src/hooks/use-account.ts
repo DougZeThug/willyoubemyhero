@@ -167,7 +167,6 @@ export function useAccountSync(user: User | null) {
         // nothing about which identity localStorage holds). By participant: a
         // renewal landing mid-sync swaps the string for the same person, and must
         // not cost them their pack.
-        wrote = res.token;
         const became = await becomeMember({
           participantId: res.id,
           token: res.token,
@@ -176,6 +175,9 @@ export function useAccountSync(user: User | null) {
           device: deviceId(),
           qc,
           isCurrent: () => !cancelled,
+          onTokenWritten: () => {
+            wrote = res.token;
+          },
           mayCarryPack: () =>
             memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote),
         });

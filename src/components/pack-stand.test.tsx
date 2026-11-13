@@ -10,7 +10,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PackStand, type StandSlot } from "./pack-stand";
+import { PackStand } from "./pack-stand";
+import type { StandSlot } from "@/lib/stand-view";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import type { PackRosterSlot, PackSecretSlot } from "@/lib/pack";

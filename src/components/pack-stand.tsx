@@ -20,6 +20,8 @@ import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { useStandSwipe } from "@/hooks/use-stand-swipe";
 import {
   BEAT_MS,
+  type StandSlot,
+  type StandParticipant,
   FACE_LANDS_AT,
   SLAM_MS,
   type StandBeat,
@@ -34,50 +36,6 @@ import { cn } from "@/lib/utils";
 // Exported from here as they always have been; the numbers themselves live in
 // stand-view.ts, beside the helpers that share them.
 export { FLIP_MS, SECRET_FLIP_MS } from "@/lib/stand-view";
-
-export type StandParticipant = {
-  id: string;
-  participant_id: string;
-  running_order: number;
-  bib_number: number | null;
-  selected_draft_position: number | null;
-  participant?: { name?: string | null; trash_talk_quote?: string | null } | null;
-};
-
-/**
- * One slot of the pack, resolved for the stand and the summary.
- *
- * The route builds these: it is the only thing that holds the roster bundle,
- * the reconciled collection, the dust switch and the secrets query together,
- * and every number here is a decision it has already made. The stand prints
- * and never guesses — a slot missing a count gets no ribbon rather than NEW.
- */
-export type StandSlot = {
-  slot: PackSlot;
-  /** The tier for a roster card; `secretFoil(...)` for a secret. */
-  rarity: Rarity;
-  /** The finish Postgres minted. Null is "not decided", never "standard". */
-  edition: Edition | null;
-  outcome: PackOutcome;
-  /**
-   * Copies held once this one lands, or null when nobody can say. What the ribbon
-   * prints: a fact about THIS pull, which a later sale or trade does not undo, so a
-   * duplicate is never shown as a first.
-   */
-  copies: number | null;
-  /**
-   * Copies held right now, or null when that is not known (or not worth asking, as
-   * for a roster card, whose recorded count is the one to use). What the sell
-   * dialog quotes as "you'll still have" and the receipt records — facts about
-   * the vault, which is where a sale and a trade move the number. Absent, `copies`
-   * is quoted instead; null stays unknown.
-   */
-  held?: number | null;
-  /** What a spare copy would fetch, or null for nothing to say. */
-  sellValue: number | null;
-  /** The roster row behind a roster slot. Null on a secret. */
-  ep: StandParticipant | null;
-};
 
 /**
  * Whether what is on the stand has earned a second beat.
