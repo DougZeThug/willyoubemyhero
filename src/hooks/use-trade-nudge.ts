@@ -2,11 +2,10 @@
 // server pokes it.
 import {
   dustBalanceKey,
-  dustSparesKey,
+  invalidateSpares,
   marketListingsKey,
   myStallKey,
   tradeOffersKey,
-  tradeSparesKey,
 } from "./query-keys";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -59,12 +58,11 @@ export function useTradeNudge(topic: string | null, participantId: string | null
       qc.invalidateQueries({ queryKey: myStallKey(participantId) });
       // A sale moved it, and the seller was not the one who tapped anything.
       qc.invalidateQueries({ queryKey: dustBalanceKey(participantId) });
-      // Both caches of your spares, because either nudge means a card of yours
-      // left. useTradeFeed covers this on the trade route only; this is the
-      // listener the shop mounts, and without it a card traded or sold away
-      // from under an open shop stayed on its burn and sell counters.
-      qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-      qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
+      // Either nudge means a card of yours left. useTradeFeed covers this on the
+      // trade route only; this is the listener the shop mounts, and without it a
+      // card traded or sold away from under an open shop stayed on its burn and
+      // sell counters.
+      void invalidateSpares(qc, participantId);
     });
   }, [topic, participantId, qc]);
 }

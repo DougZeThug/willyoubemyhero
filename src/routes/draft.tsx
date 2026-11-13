@@ -1,3 +1,4 @@
+import { eventBundleKey } from "@/hooks/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,7 +45,7 @@ function DraftPage() {
   // The board used to wait on the realtime subscription alone. With the socket
   // down — a blocked websocket, a throttled tab — a pick landed in the database
   // and the picker was still staring at their own name.
-  const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", event?.id] });
+  const refresh = () => qc.invalidateQueries({ queryKey: eventBundleKey(event?.id) });
 
   const isAdmin = useEventAdmin(event?.id);
 

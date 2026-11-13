@@ -1,3 +1,4 @@
+import { cardUrlsKey } from "@/hooks/query-keys";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -192,7 +193,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         })),
       );
       const res = await bulkFn({ data: { eventId, items: payload } });
-      await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      await qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
       const failed = res.results.filter((r) => !r.ok);
       if (failed.length === 0) {
         toast.success(`Uploaded ${res.results.length} card${res.results.length === 1 ? "" : "s"}`);

@@ -1,3 +1,4 @@
+import { claimRosterKey } from "@/hooks/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -82,7 +83,7 @@ function ShopPage() {
   // two-source lookup the Trading Post builds.
   const rosterFn = useServerFn(getClaimRoster);
   const roster = useQuery({
-    queryKey: ["claim-roster"],
+    queryKey: claimRosterKey(),
     queryFn: () => rosterFn(),
     staleTime: 5 * 60_000,
     // Not gated on the switch: the stall still renders while dust is off, and a

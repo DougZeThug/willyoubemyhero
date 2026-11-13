@@ -1,3 +1,4 @@
+import { claimRosterKey } from "@/hooks/query-keys";
 import { deviceIdentity, memberIdentity } from "@/lib/identity";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -50,7 +51,7 @@ function ClaimPage() {
   const qc = useQueryClient();
 
   const roster = useQuery({
-    queryKey: ["claim-roster"],
+    queryKey: claimRosterKey(),
     queryFn: () => rosterFn(),
     staleTime: 60_000,
   });

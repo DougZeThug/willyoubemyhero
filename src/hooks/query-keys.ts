@@ -87,6 +87,7 @@ export const dustSparesKey = (participantId: string | null | undefined) =>
 export const tradeFeedKey = (eventId: string | null | undefined) =>
   ["trade-feed", eventId] as const;
 
+export const claimRosterKey = () => ["claim-roster"] as const;
 export const activeEventKey = () => ["active-event"] as const;
 export const eventBundleKey = (eventId: string | null | undefined) =>
   ["event-bundle", eventId] as const;
@@ -98,16 +99,25 @@ export const eventAwardsKey = (eventId: string | null | undefined) =>
   ["event-awards", eventId] as const;
 
 /** Signed-URL maps, one per kind of art an event serves. */
-export type PhotoUrlKind = "photo-urls" | "card-urls";
-export const photoUrlsKey = (kind: PhotoUrlKind, eventId: string | null | undefined) =>
+export type SignedUrlKind = "photo-urls" | "card-urls";
+export const signedUrlsKey = (kind: SignedUrlKind, eventId: string | null | undefined) =>
   [kind, eventId] as const;
+export const photoUrlsKey = (eventId: string | null | undefined) =>
+  signedUrlsKey("photo-urls", eventId);
+export const cardUrlsKey = (eventId: string | null | undefined) =>
+  signedUrlsKey("card-urls", eventId);
 export const eventCardBackKey = (eventId: string | null | undefined) =>
   ["event-card-back", eventId] as const;
 
 /** The two spares caches of one member's list; either one stale shows a card already gone. */
-export function invalidateSpares(qc: QueryClient, participantId: string | null | undefined) {
-  void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-  void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
+export function invalidateSpares(
+  qc: QueryClient,
+  participantId: string | null | undefined,
+): Promise<unknown> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) }),
+    qc.invalidateQueries({ queryKey: dustSparesKey(participantId) }),
+  ]);
 }
 
 /**
@@ -125,8 +135,7 @@ export function invalidateCardsMoved(
 ): Promise<unknown> {
   const { eventId, participantId, actor } = who;
   return Promise.all([
-    qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) }),
-    qc.invalidateQueries({ queryKey: dustSparesKey(participantId) }),
+    invalidateSpares(qc, participantId),
     qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) }),
     qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) }),
     qc.invalidateQueries({ queryKey: mySecretsKey(actor) }),

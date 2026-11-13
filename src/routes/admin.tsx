@@ -1,3 +1,4 @@
+import { cardUrlsKey, photoUrlsKey } from "@/hooks/query-keys";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -692,7 +693,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     try {
       const dataUrls = await encodeUploadImageVariants(file);
       await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrls } });
-      await qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
+      await qc.invalidateQueries({ queryKey: photoUrlsKey(eventId) });
       toast.success("Photo uploaded");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
@@ -706,7 +707,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     try {
       const dataUrls = await encodeUploadImageVariants(file);
       await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrls } });
-      await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      await qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
       toast.success(`Card ${side} uploaded`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
@@ -719,7 +720,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     if (!confirm(`Remove this player's ${side} card image?`)) return;
     try {
       await deleteCardFn({ data: { eventId, eventParticipantId: epId, side } });
-      await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      await qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
       toast.success("Card removed");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Remove failed");
@@ -783,8 +784,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
         setRegenState({ running: true, done, total: needs.length, failed });
       }
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["photo-urls", eventId] }),
-        qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
+        qc.invalidateQueries({ queryKey: photoUrlsKey(eventId) }),
+        qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) }),
       ]);
       setRegenState({ running: false, done, total: needs.length, failed });
       if (failed === 0) {

@@ -1,3 +1,4 @@
+import { cardUrlsKey, eventCardBackKey } from "@/hooks/query-keys";
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -48,9 +49,9 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
       const dataUrls = await encodeUploadImageVariants(file);
       await uploadFn({ data: { eventId, dataUrls } });
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
+        qc.invalidateQueries({ queryKey: eventCardBackKey(eventId) }),
         // Every player's back resolves through this query.
-        qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
+        qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) }),
       ]);
       toast.success("Universal card back set for every player");
     } catch (e) {
@@ -67,8 +68,8 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
     try {
       await deleteFn({ data: { eventId } });
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
-        qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
+        qc.invalidateQueries({ queryKey: eventCardBackKey(eventId) }),
+        qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) }),
       ]);
       toast.success("Universal card back removed");
     } catch (e) {

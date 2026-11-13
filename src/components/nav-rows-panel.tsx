@@ -1,3 +1,4 @@
+import { activeEventKey } from "@/hooks/query-keys";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -102,7 +103,7 @@ export function NavRowsPanel({
       await setFn({ data: { eventId, hidden: [...draft] as NavRowId[] } });
       // The list rides on the active event, which is the query the bar reads and
       // the one this panel is seeded from — one key refreshes both.
-      await qc.invalidateQueries({ queryKey: ["active-event"] });
+      await qc.invalidateQueries({ queryKey: activeEventKey() });
       toast.success(`Nav saved — ${preview.length} row${preview.length === 1 ? "" : "s"}`);
     } catch {
       toast.error("Could not change that");

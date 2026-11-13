@@ -1,12 +1,9 @@
 import {
-  cardPullCountsKey,
+  claimRosterKey,
   collectionTrophiesKey,
-  dustSparesKey,
-  myCardStatsKey,
-  mySecretsKey,
+  invalidateCardsMoved,
   tradeFeedKey,
   tradeOffersKey,
-  tradeSparesKey,
 } from "@/hooks/query-keys";
 import { memberIdentityOrNull } from "@/lib/identity";
 import {
@@ -166,7 +163,7 @@ function TradePage() {
   // same test, so the picker and the server agree about who can be offered to.
   const rosterFn = useServerFn(getClaimRoster);
   const roster = useQuery({
-    queryKey: ["claim-roster"],
+    queryKey: claimRosterKey(),
     queryFn: () => rosterFn(),
     staleTime: 5 * 60_000,
   });
@@ -256,23 +253,19 @@ function TradePage() {
   async function refreshMine() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: tradeOffersKey(myId) }),
-      // The viewer prefix: theirs and mine alike.
-      qc.invalidateQueries({ queryKey: tradeSparesKey(myId) }),
-      // The shop's copy of the same list. Missing it left a card you had just
-      // traded away on the burn and sell counters until the cache aged out.
-      qc.invalidateQueries({ queryKey: dustSparesKey(myId) }),
       qc.invalidateQueries({ queryKey: tradeFeedKey(event?.id) }),
       // The collection caches too, rather than leaving them to the realtime
       // handler in useTradeFeed. That handler is what updates everybody ELSE, and
       // it is the wrong thing to depend on for the person who just pressed
       // accept: the channel may still be subscribing when they arrive from the
       // vault and act immediately, and realtime may be unavailable entirely.
-      // Their own answer is already in hand here. `my-card-stats` holds for 60s
-      // and `my-secrets` for five minutes, so getting this wrong shows somebody
-      // their pre-trade collection for minutes after the trade landed.
-      qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
-      qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, myId) }),
-      qc.invalidateQueries({ queryKey: mySecretsKey(memberIdentityOrNull(myId)) }),
+      // `my-card-stats` holds for 60s and `my-secrets` for five minutes, so
+      // getting this wrong shows somebody their pre-trade collection for minutes.
+      invalidateCardsMoved(qc, {
+        eventId: event?.id,
+        participantId: myId,
+        actor: memberIdentityOrNull(myId),
+      }),
     ]);
   }
 

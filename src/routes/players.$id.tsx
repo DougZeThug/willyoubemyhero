@@ -1,3 +1,4 @@
+import { cardUrlsKey } from "@/hooks/query-keys";
 import {
   createFileRoute,
   Link,
@@ -516,7 +517,7 @@ function PlayerCardPage() {
     setSharing(true);
     try {
       // Signed storage URLs expire after an hour; a stale one rasterises blank.
-      await qc.refetchQueries({ queryKey: ["card-urls", event?.id] });
+      await qc.refetchQueries({ queryKey: cardUrlsKey(event?.id) });
       const node = shareRef.current;
       if (!node) throw new Error("Share card not ready");
       // Waited on rather than guessed at: a fixed delay is either too long

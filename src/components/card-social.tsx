@@ -1,3 +1,4 @@
+import { eventSocialKey } from "@/hooks/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -227,7 +228,7 @@ export function CardSocial({
     return map;
   }, [reactions]);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["event-social", eventId] });
+  const refresh = () => qc.invalidateQueries({ queryKey: eventSocialKey(eventId) });
 
   async function onReact(emoji: string) {
     const who = ensureIdentity(() => void onReact(emoji));

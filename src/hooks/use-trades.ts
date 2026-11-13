@@ -1,12 +1,4 @@
-import {
-  cardPullCountsKey,
-  dustSparesKey,
-  myCardStatsKey,
-  mySecretsKey,
-  tradeFeedKey,
-  tradeOffersKey,
-  tradeSparesKey,
-} from "./query-keys";
+import { invalidateCardsMoved, tradeFeedKey, tradeOffersKey, tradeSparesKey } from "./query-keys";
 import { memberIdentityOrNull } from "@/lib/identity";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -115,14 +107,10 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
         // it, whose "Packed by N" counts have genuinely moved.
         qc.invalidateQueries({ queryKey: tradeFeedKey(eventId) });
         qc.invalidateQueries({ queryKey: tradeOffersKey(participantId) });
-        qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-        qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-        qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) });
-        qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
-        // The secrets cache is keyed on an actor, which for a claimed member is
-        // `m:<participantId>` — see useSecretActor.
-        qc.invalidateQueries({
-          queryKey: mySecretsKey(memberIdentityOrNull(participantId)),
+        void invalidateCardsMoved(qc, {
+          eventId,
+          participantId,
+          actor: memberIdentityOrNull(participantId),
         });
       })
       .subscribe();
