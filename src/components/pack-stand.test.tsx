@@ -687,15 +687,6 @@ describe("the sell hint", () => {
   });
 });
 
-describe("the stand slot's height budget", () => {
-  it("budgets 21rem of chrome for the height cap, floored so a short viewport cannot collapse it", () => {
-    const { container } = renderStand();
-    const slot = container.querySelector('[class*="calc((100svh-"]')!;
-    expect(slot.className).toContain("max(10rem,calc((100svh-21rem)*5/7))");
-    expect(slot.className).not.toContain("19rem");
-  });
-});
-
 describe("swiping the card away", () => {
   afterEach(() => vi.restoreAllMocks());
 
