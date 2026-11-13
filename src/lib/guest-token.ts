@@ -6,28 +6,32 @@
 // dealt — a purely client-side determinism that nothing is at stake in. A secret
 // card *is* at stake, so its identity has to be one the server issued and signed.
 import { useEffect, useState } from "react";
+import { GUEST_PREFIX, parsePrefixedToken } from "./token-format";
+import {
+  emitLocal,
+  onLocal,
+  onOtherTab,
+  readStored,
+  removeStored,
+  writeStrict,
+} from "./device-store";
+import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
-const KEY = "wwbh:guest-token";
+const KEY = STORAGE_KEYS.guestToken;
+const CHANGED = STORAGE_EVENTS.guestToken;
 
 export type GuestSession = { guestId: string; expiresAt: number; token: string };
 
 function parse(token: string | null): GuestSession | null {
   if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [prefix, guestId, expStr] = parts;
-  // A member token is also four parts. The prefix is what tells them apart, here
-  // and in the signed payload server-side.
-  if (prefix !== "g") return null;
-  const expiresAt = Number(expStr);
-  if (!guestId || !Number.isFinite(expiresAt)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { guestId, expiresAt, token };
+  const parsed = parsePrefixedToken(GUEST_PREFIX, token);
+  if (!parsed || Date.now() > parsed.expiresAt) return null;
+  return { guestId: parsed.id, expiresAt: parsed.expiresAt, token };
 }
 
 export function getGuestToken(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(KEY);
+  const raw = readStored(KEY);
   const parsed = parse(raw);
   if (!parsed) {
     if (raw) clearGuestToken();
@@ -38,19 +42,19 @@ export function getGuestToken(): string | null {
 
 export function setGuestToken(token: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, token);
-  window.dispatchEvent(new Event("wwbh:guest-token-changed"));
+  writeStrict(KEY, token);
+  emitLocal(CHANGED);
 }
 
 export function clearGuestToken() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
-  window.dispatchEvent(new Event("wwbh:guest-token-changed"));
+  removeStored(KEY);
+  emitLocal(CHANGED);
 }
 
 function read(): GuestSession | null {
   if (typeof window === "undefined") return null;
-  return parse(window.localStorage.getItem(KEY));
+  return parse(readStored(KEY));
 }
 
 export function useGuestSession(): GuestSession | null {
@@ -62,19 +66,12 @@ export function useGuestSession(): GuestSession | null {
     function refresh() {
       setSession(read());
     }
-    // `storage` fires for every key the other tab writes, so the listener needs
-    // its own; the custom event beside it is this tab's write. A null key is
-    // localStorage.clear(), which does concern us -- that is a sign-out.
-    function theirs(e: StorageEvent) {
-      if (e.key !== null && e.key !== KEY) return;
-      refresh();
-    }
     refresh();
-    window.addEventListener("storage", theirs);
-    window.addEventListener("wwbh:guest-token-changed", refresh);
+    const offTheirs = onOtherTab([KEY], refresh);
+    const offHere = onLocal(CHANGED, refresh);
     return () => {
-      window.removeEventListener("storage", theirs);
-      window.removeEventListener("wwbh:guest-token-changed", refresh);
+      offTheirs();
+      offHere();
     };
   }, []);
   return session;

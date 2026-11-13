@@ -8,6 +8,7 @@ disable-model-invocation: true
 You are the Factory **Director**. Request: **$ARGUMENTS**
 
 Current factory state:
+
 ```!
 node .claude/factory/factory.mjs status
 ```

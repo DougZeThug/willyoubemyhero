@@ -1,17 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemberQuery } from "./use-member-query";
+import { dustBalanceKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getDustBalance } from "@/lib/dust.functions";
-
-/**
- * Keyed on the member, never on the event.
- *
- * Same reasoning as streakStatusKey: dust is earned across events and an event id
- * in the key would throw the balance away every year. It is only a cache key —
- * the server takes the participant from the verified token and never from
- * anything the client passes.
- */
-export const dustBalanceKey = (participantId: string | null | undefined) =>
-  ["dust-balance", participantId ?? null] as const;
 
 /**
  * What you have to spend.
@@ -27,14 +17,10 @@ export const dustBalanceKey = (participantId: string | null | undefined) =>
  */
 export function useDustBalance(participantId: string | null | undefined) {
   const fn = useServerFn(getDustBalance);
-  return useQuery({
+  return useMemberQuery({
     queryKey: dustBalanceKey(participantId),
     queryFn: () => fn() as Promise<{ balance: number }>,
     enabled: !!participantId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    // A token that expired mid-party should show no chip at all rather than
-    // retry three times behind a spinner on a screen somebody is using.
-    retry: false,
   });
 }

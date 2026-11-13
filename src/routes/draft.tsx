@@ -1,3 +1,5 @@
+import { errorMessage } from "@/lib/errors";
+import { eventBundleKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,10 +13,11 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/format";
-import { standings } from "@/lib/standings";
+import { standingsRows } from "@/hooks/use-standings-rows";
 import { ClipboardList, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 
 export const Route = createFileRoute("/draft")({
   head: () => ({
@@ -34,6 +37,7 @@ export const Route = createFileRoute("/draft")({
 function DraftPage() {
   const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
     useEventBundle();
+  const read = feedReadError(failedTables);
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const recordFn = useServerFn(recordDraftSelection);
@@ -44,7 +48,7 @@ function DraftPage() {
   // The board used to wait on the realtime subscription alone. With the socket
   // down — a blocked websocket, a throttled tab — a pick landed in the database
   // and the picker was still staring at their own name.
-  const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", event?.id] });
+  const refresh = () => qc.invalidateQueries({ queryKey: eventBundleKey(event?.id) });
 
   const isAdmin = useEventAdmin(event?.id);
 
@@ -66,12 +70,9 @@ function DraftPage() {
     // `parts` is empty too, so every `ep` here is undefined and the unguarded
     // dereference in `ranking.find` below took the whole screen down with a
     // TypeError -- on the one code path that has a degraded state to show.
-    const ranking = standings(bundle)
-      .map((s) => ({ run: s.run, ep: parts.find((p) => p.participant_id === s.participantId) }))
-      .filter(
-        (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
-          row.ep != null,
-      );
+    const ranking = standingsRows(bundle).filter(
+      (row): row is typeof row & { ep: NonNullable<(typeof row)["ep"]> } => row.ep != null,
+    );
     const takenSet = new Set(
       parts.filter((p) => p.selected_draft_position != null).map((p) => p.selected_draft_position!),
     );
@@ -95,7 +96,7 @@ function DraftPage() {
       await refresh();
       toast.success(`${currentPicker.ep.participant?.name} picks #${pos}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
+      toast.error(errorMessage(e, "Failed"));
     } finally {
       setBusy(false);
     }
@@ -112,7 +113,7 @@ function DraftPage() {
       if (res.ok) toast.success("Undid last pick");
       else toast.info("No picks to undo yet");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
+      toast.error(errorMessage(e, "Failed"));
     } finally {
       setBusy(false);
     }
@@ -205,8 +206,8 @@ function DraftPage() {
                   a failed splits or stations read cannot empty the clock, and
                   counting it put a retry alarm over a draft that was visibly
                   finished. Same narrowing the leaderboard and /tv make. */}
-              {failedTables.includes("event_participants") || failedTables.includes("runs")
-                ? "Couldn't read the combine just now — retrying."
+              {read.roster || read.runs
+                ? readFailedMessage("combine")
                 : rankings.length === 0
                   ? "No combine results yet. Draft board opens once athletes finish."
                   : "All picks are in. Congrats on a clean draft."}

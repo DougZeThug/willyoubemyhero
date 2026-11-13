@@ -1,13 +1,20 @@
 import { useMemo, useRef, useState } from "react";
+import { cardPromptRunsKey, cardPromptTemplatesKey } from "@/lib/query-keys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Textarea } from "./ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { Checkbox } from "./ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   CARD_SERIES,
   CARD_SERIES_OPTIONS,
@@ -26,7 +33,20 @@ import {
   updateCardPromptTemplate,
 } from "@/lib/card-prompt.functions";
 import { urlFromSet, type ImageUrlSet } from "@/lib/media";
-import type { PromptStudioBundle } from "./card-prompt-studio";
+import type { StatsBundle } from "@/lib/card-stats";
+import { errorMessage } from "@/lib/errors";
+
+export type PromptStudioBundle = StatsBundle & {
+  participants: Array<{
+    id: string;
+    participant_id: string;
+    participant: {
+      name: string;
+      nickname: string | null;
+      profile_image_url?: string | null;
+    } | null;
+  }>;
+};
 
 export type PromptTemplateRow = { id: string; slug: string; name: string; master_prompt: string };
 export type PromptHistoryRow = {
@@ -43,23 +63,31 @@ export type PromptHistoryRow = {
   created_at: string;
 };
 
+/** The saved master prompt for a series, or the one that shipped when none is saved (or it is blank). */
+export function resolveMasterPrompt(
+  templates: readonly { slug: string; master_prompt?: string | null }[] | undefined,
+  series: CardSeriesId,
+): string {
+  const saved = templates?.find((row) => row.slug === series)?.master_prompt;
+  return saved?.trim() ? saved : CARD_SERIES[series].prompt;
+}
+
 export function CardPromptTemplateManager({ templates }: { templates: PromptTemplateRow[] }) {
   const updateFn = useServerFn(updateCardPromptTemplate);
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [slug, setSlug] = useState<CardSeriesId>("draft_combine_player");
-  const persisted = templates.find((row) => row.slug === slug);
-  const effective = persisted?.master_prompt || CARD_SERIES[slug].prompt;
+  const effective = resolveMasterPrompt(templates, slug);
   const [drafts, setDrafts] = useState<Partial<Record<CardSeriesId, string>>>({});
   const draft = drafts[slug] ?? effective;
   async function save(value = draft) {
     try {
       await updateFn({ data: { slug, masterPrompt: value } });
-      await qc.invalidateQueries({ queryKey: ["card-prompt-templates"] });
+      await qc.invalidateQueries({ queryKey: cardPromptTemplatesKey() });
       setDrafts((d) => ({ ...d, [slug]: value }));
       toast.success("Series prompt saved");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save prompt");
+      toast.error(errorMessage(e, "Could not save prompt"));
     }
   }
   return (
@@ -128,7 +156,7 @@ export function CardPromptHistory({
 }) {
   const listFn = useServerFn(listCardPromptRuns);
   const history = useQuery({
-    queryKey: ["card-prompt-runs", eventId],
+    queryKey: cardPromptRunsKey(eventId),
     queryFn: () => listFn({ data: { eventId, limit: 30 } }),
     staleTime: 10_000,
   });
@@ -247,8 +275,7 @@ export function CardPromptBatch({
     () => players.filter((participant) => participant.participant),
     [players],
   );
-  const masterPrompt =
-    templates.find((row) => row.slug === series)?.master_prompt || CARD_SERIES[series].prompt;
+  const masterPrompt = resolveMasterPrompt(templates, series);
   const standaloneRowsValid = standaloneBatchRowsValid(subjects);
   const batchReady =
     templatesReady &&
@@ -340,7 +367,7 @@ export function CardPromptBatch({
           if (buildEpoch.current === epoch) {
             saved.set(item.key, row.id);
           }
-          void qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
+          void qc.invalidateQueries({ queryKey: cardPromptRunsKey(eventId) });
         } catch {
           toast.warning("Prompt copied, but history could not be saved");
         }

@@ -9,11 +9,11 @@ import {
 } from "@/components/ui/drawer";
 import { TradeOfferCard, type RosterCardLookup } from "@/components/trade-offer-card";
 import { SectionTitle } from "@/components/section-title";
-import { tradeSwapPrompt, type TradeOfferView } from "@/lib/trades";
+import { offerPerspective, tradeSwapPrompt, type TradeOfferView } from "@/lib/trades";
 import type { ImageUrlSet } from "@/lib/media";
-import { offlineReason } from "@/hooks/use-online";
+import { OfferButton } from "@/components/offer-button";
 
-export type TradeOffersPanelProps = {
+type TradeOffersPanelProps = {
   /** The viewer's participant id, which decides which side of each offer reads as "you". */
   me: string;
   inbox: TradeOfferView[];
@@ -105,24 +105,24 @@ export function TradeOffersPanel({
                 backUrl={backUrl}
                 actions={
                   <>
-                    <button
-                      type="button"
+                    <OfferButton
+                      tone="primary"
+                      inline
                       onClick={() => setConfirming(offer)}
-                      disabled={pending === offer.id || offline}
-                      {...offlineReason(offline)}
-                      className="neon-btn-lg neon-btn-hero w-full disabled:opacity-50 sm:w-auto"
+                      disabled={pending === offer.id}
+                      offline={offline}
                     >
                       Accept
-                    </button>
-                    <button
-                      type="button"
+                    </OfferButton>
+                    <OfferButton
+                      tone="decline"
+                      inline
                       onClick={() => onDecline(offer.id)}
-                      disabled={pending === offer.id || offline}
-                      {...offlineReason(offline)}
-                      className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-50 sm:w-auto"
+                      disabled={pending === offer.id}
+                      offline={offline}
                     >
                       Decline
-                    </button>
+                    </OfferButton>
                   </>
                 }
               />
@@ -152,15 +152,15 @@ export function TradeOffersPanel({
                 backUrl={backUrl}
                 highlighted={offer.id === highlightId}
                 actions={
-                  <button
-                    type="button"
+                  <OfferButton
+                    tone="retract"
+                    inline
                     onClick={() => onCancel(offer.id)}
-                    disabled={pending === offer.id || offline}
-                    {...offlineReason(offline)}
-                    className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-primary/40 px-6 text-label font-bold uppercase tracking-[0.08em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50 sm:w-auto"
+                    disabled={pending === offer.id}
+                    offline={offline}
                   >
                     Take it back
-                  </button>
+                  </OfferButton>
                 }
               />
             ))}
@@ -242,13 +242,12 @@ function ConfirmAcceptSheet({
   onConfirm: (offerId: string) => void;
   onCancel: () => void;
 }) {
-  const iAmProposer = offer ? offer.proposerId === me : false;
-  const theirId = offer ? (iAmProposer ? offer.recipientId : offer.proposerId) : null;
-  const question = offer
+  const view = offer ? offerPerspective(offer, me) : null;
+  const question = view
     ? tradeSwapPrompt({
-        give: iAmProposer ? offer.proposerGives : offer.recipientGives,
-        get: iAmProposer ? offer.recipientGives : offer.proposerGives,
-        theirName: nameOf(theirId!),
+        give: view.iGive,
+        get: view.iGet,
+        theirName: nameOf(view.theirId),
         rosterName: (id) => lookup(id).name,
       })
     : "";
@@ -263,22 +262,17 @@ function ConfirmAcceptSheet({
           </DrawerDescription>
         </DrawerHeader>
         <div className="flex flex-col gap-2 px-4 pb-8">
-          <button
-            type="button"
-            disabled={busy || offline}
-            {...offlineReason(offline)}
+          <OfferButton
+            tone="primary"
+            disabled={busy}
+            offline={offline}
             onClick={() => offer && onConfirm(offer.id)}
-            className="neon-btn-lg neon-btn-hero w-full disabled:opacity-50"
           >
             Confirm
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
-          >
+          </OfferButton>
+          <OfferButton tone="dismiss" onClick={onCancel}>
             Cancel
-          </button>
+          </OfferButton>
         </div>
       </DrawerContent>
     </Drawer>

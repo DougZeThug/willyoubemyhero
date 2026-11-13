@@ -1,23 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { notInEventMessage, OUT_OF_FIELD_MESSAGE } from "./current-athlete";
+import { adminDb } from "./admin-db.server";
 import { requireAdmin } from "./require-auth.server";
 import { OUT_OF_CONTENTION_STATUSES } from "./standings";
 import { uuid as zuuid } from "./zod-uuid";
-
-/**
- * Stamp the crowd-clock column onto a participant status update.
- *
- * The cast is the only way to write `on_clock_since` today: the column landed
- * in supabase/migrations/20260821120000_on_clock_since.sql but the checked-in
- * generated types have not been regenerated since, the same drift card_rarity
- * already has. Regenerating types.ts makes this a plain object again.
- */
-type ParticipantStatusPatch = { participation_status: string };
-
-function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | null) {
-  return { ...patch, on_clock_since: since ? since.toISOString() : null } as T;
-}
 
 /**
  * Escape a value that is about to be handed to `ilike` as a whole-string match.
@@ -48,8 +35,6 @@ function likeLiteral(value: string): string {
 function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
   if (!rows || rows.length === 0) throw new Error(notInEventMessage(what));
 }
-
-// ---------- Participants (global) ----------
 
 /**
  * Put somebody on this event's roster, creating the person only if the league
@@ -248,8 +233,8 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
       data.status === "running"
         ? alreadyOnClock
           ? { participation_status: data.status }
-          : withOnClock({ participation_status: data.status }, new Date())
-        : withOnClock({ participation_status: data.status }, null);
+          : { participation_status: data.status, on_clock_since: new Date().toISOString() }
+        : { participation_status: data.status, on_clock_since: null };
 
     const { error } = await supabaseAdmin
       .from("event_participants")
@@ -294,7 +279,7 @@ export const takeOffClock = createServerFn({ method: "POST" })
     // them between the two, and the write must lose that race, not win it.
     const { data: cleared, error } = await supabaseAdmin
       .from("event_participants")
-      .update(withOnClock({ participation_status: "waiting" }, null))
+      .update({ participation_status: "waiting", on_clock_since: null })
       .eq("id", data.eventParticipantId)
       .eq("event_id", data.eventId)
       .eq("participation_status", "running")
@@ -330,7 +315,7 @@ export const resetCombine = createServerFn({ method: "POST" })
     }
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update(withOnClock({ participation_status: "waiting" }, null))
+      .update({ participation_status: "waiting", on_clock_since: null })
       .eq("event_id", data.eventId)
       .neq("participation_status", "scratched");
     if (statusError) throw statusError;
@@ -363,7 +348,7 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
     }
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update(withOnClock({ participation_status: "waiting" }, null))
+      .update({ participation_status: "waiting", on_clock_since: null })
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId)
       .neq("participation_status", "scratched");
@@ -371,7 +356,6 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
     return { ok: true, clearedRuns: runIds.length };
   });
 
-// ---------- Running order ----------
 export const setRunningOrder = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -445,7 +429,6 @@ export const recordRandomization = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ---------- Stations ----------
 export const upsertStation = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -544,7 +527,6 @@ export const deleteStation = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ---------- Runs ----------
 /**
  * The admin token is scoped to one event, and the privileged client trusts
  * whatever athlete id it is handed — so the roster check is what keeps a result
@@ -692,10 +674,9 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
       if (penaltiesError) throw penaltiesError;
     }
 
-    // Mark participant finished
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update(withOnClock({ participation_status: "finished" }, null))
+      .update({ participation_status: "finished", on_clock_since: null })
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
     if (statusError) throw statusError;
@@ -703,30 +684,12 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     return { runId: run.id };
   });
 
-export const deleteRun = createServerFn({ method: "POST" })
-  .validator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
-  .handler(async ({ data }) => {
-    await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: removed, error } = await supabaseAdmin
-      .from("runs")
-      .delete()
-      .eq("id", data.runId)
-      .eq("event_id", data.eventId)
-      .select("id");
-    if (error) throw error;
-    assertInEvent(removed, "run");
-    return { ok: true };
-  });
-
 /**
  * Delete one result and put the athlete back where they belong.
  *
- * `deleteRun` above drops the row and nothing else, which leaves the
- * participant sitting in `finished` with no time — invisible on the ladder and
- * missing from the queue. This is the version the admin UI uses: it removes the
- * run and, when it was their last one, returns them to `waiting` so they can be
- * timed again.
+ * Removes the run and, when it was their last one, returns the participant to
+ * `waiting` so they can be timed again. Dropping the row alone would leave them
+ * in `finished` with no time — invisible on the ladder and missing from the queue.
  */
 export const deleteRunResult = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
@@ -775,7 +738,7 @@ export const deleteRunResult = createServerFn({ method: "POST" })
     if (remaining === 0) {
       const { error: statusError } = await supabaseAdmin
         .from("event_participants")
-        .update(withOnClock({ participation_status: "waiting" }, null))
+        .update({ participation_status: "waiting", on_clock_since: null })
         .eq("event_id", data.eventId)
         .eq("participant_id", run.participant_id)
         .neq("participation_status", "scratched");
@@ -896,7 +859,7 @@ export const createManualRun = createServerFn({ method: "POST" })
 
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update(withOnClock({ participation_status: "finished" }, null))
+      .update({ participation_status: "finished", on_clock_since: null })
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
     if (statusError) throw statusError;
@@ -985,8 +948,9 @@ export const updateRunResult = createServerFn({ method: "POST" })
     const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
     const startMs = run.started_at ? Date.parse(run.started_at) : Date.now();
 
-    const { runResultDb } = await import("./run-result-db.server");
-    const { error } = await runResultDb().rpc("update_run_result", {
+    const { error } = await (
+      await adminDb()
+    ).rpc("update_run_result", {
       _run_id: run.id,
       _event_id: data.eventId,
       _raw_time_ms: data.raw_time_ms,
@@ -1012,8 +976,6 @@ export const updateRunResult = createServerFn({ method: "POST" })
     return { ok: true, official_time_ms: data.raw_time_ms + penaltyTotal };
   });
 
-// ---------- Draft selections ----------
-
 export const recordDraftSelection = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -1031,8 +993,9 @@ export const recordDraftSelection = createServerFn({ method: "POST" })
     // used to leave a square reading Open that UNIQUE(event_id, draft_position)
     // then refused forever, and selection_order was count + 1 with no
     // constraint, so two picks landing together shared a number.
-    const { draftDb } = await import("./draft-db.server");
-    const { data: order, error } = await draftDb().rpc("record_draft_selection", {
+    const { data: order, error } = await (
+      await adminDb()
+    ).rpc("record_draft_selection", {
       _event_id: data.eventId,
       _participant_id: data.participantId,
       _draft_position: data.draftPosition,
@@ -1045,8 +1008,9 @@ export const undoLastDraftSelection = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const { draftDb } = await import("./draft-db.server");
-    const { data: undone, error } = await draftDb().rpc("undo_last_draft_selection", {
+    const { data: undone, error } = await (
+      await adminDb()
+    ).rpc("undo_last_draft_selection", {
       _event_id: data.eventId,
     });
     if (error) throw new Error(error.message);
@@ -1056,7 +1020,6 @@ export const undoLastDraftSelection = createServerFn({ method: "POST" })
     return { ok: true as const, participantId: undone as string };
   });
 
-// ---------- Event ----------
 export const updateEvent = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion } from "motion/react";
 import { Flame } from "lucide-react";
@@ -7,9 +7,10 @@ import { RevealAmbience } from "@/components/reveal-ambience";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { useCountUp } from "@/hooks/use-count-up";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { celebrateSecret } from "@/lib/card-confetti";
-import { cue, playReveal, playSecretRiser } from "@/lib/card-sfx";
-import { SECRET_CHIME, SECRET_DUPE_CHIME, secretFoil } from "@/lib/secret-cards";
+import { prefersReducedMotionNow } from "@/lib/motion";
+import { useSecretRevealTurn } from "@/components/secret-reveal-turn";
+import { playSecretRiser } from "@/lib/card-sfx";
+import { secretFoil } from "@/lib/secret-cards";
 import { EASE_OUT } from "@/lib/motion";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTierFloorLabel, secretTierStyle, type SecretTier } from "@/lib/secret-rarity";
@@ -30,23 +31,6 @@ import type { ImageUrlSet } from "@/lib/media";
 
 const FLARE_MS = 1100;
 const COUNT_MS = 900;
-const TURN_DELAY_MS = 260;
-
-/**
- * The preference, read synchronously.
- *
- * `usePrefersReducedMotion` deliberately starts false and settles in an effect,
- * so that hydration matches — which is right for a component that chooses a
- * duration, and useless to one that has to decide whether to start at all on its
- * very first frame. Same inline read card-sfx.ts and card-confetti.ts do, for the
- * same reason.
- */
-function reducedNow(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 type Phase = "flare" | "card";
 
@@ -79,11 +63,10 @@ export function MilestoneReveal({
   const [phase, setPhase] = useState<Phase>("flare");
   // The card lands face-down and turns onto its ART. `flipped` is only the
   // tap-to-read stats panel afterwards, exactly like the daily pull.
-  const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const rarity = secretFoil(card.foil, card.borderFx, card.tier);
   const days = useCountUp(phase === "flare" ? streak : null, COUNT_MS);
-  const celebratedRef = useRef(false);
+  const revealed = useSecretRevealTurn(duplicate, rarity, phase === "card");
 
   // Driven by timeouts rather than motion callbacks, for the same reason
   // pack-ceremony.ts is: motion does not tick under jsdom, and a ceremony nobody
@@ -92,7 +75,7 @@ export function MilestoneReveal({
     if (phase !== "flare") return;
     // Straight to the card. The flare is pure flourish, and a count-up nobody
     // asked to watch is the exact thing that setting turns off.
-    if (reducedNow()) {
+    if (prefersReducedMotionNow()) {
       setPhase("card");
       return;
     }
@@ -100,24 +83,6 @@ export function MilestoneReveal({
     const t = setTimeout(() => setPhase("card"), FLARE_MS);
     return () => clearTimeout(t);
   }, [phase]);
-
-  useEffect(() => {
-    if (phase !== "card" || celebratedRef.current) return;
-    celebratedRef.current = true;
-    cue("secretImpact");
-    playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
-    // A duplicate is still a reward here — it was bought with a month of showing
-    // up — but it does not get the cannon. Same rule the daily pull follows.
-    if (!duplicate) void celebrateSecret(rarity);
-    // A beat face-down so the turn onto the art reads as a turn. Under reduced
-    // motion the card is simply there.
-    if (reducedNow()) {
-      setRevealed(true);
-      return;
-    }
-    const t = setTimeout(() => setRevealed(true), TURN_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [phase, duplicate, rarity]);
 
   // Same as BoughtPullReveal: role="dialog" alone still lets Tab fall through to
   // the nav behind the overlay, so the shared hook takes focus, keeps Tab inside

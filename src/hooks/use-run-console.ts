@@ -7,6 +7,8 @@
  * reads and writes the same record, and a run started on Live can be finished
  * on Admin.
  */
+import { onLocal } from "@/lib/device-store";
+import { errorMessage } from "@/lib/errors";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -42,7 +44,6 @@ export function useRunConsole() {
   const [run, setRun] = useState<ActiveRun | null>(null);
   const [selectedParticipantId, setSelected] = useState<string>("");
 
-  // Hydrate active run on mount.
   useEffect(() => {
     loadActiveRun().then((r) => {
       if (r) setRun(r);
@@ -55,8 +56,7 @@ export function useRunConsole() {
     function onCleared() {
       setRun(null);
     }
-    window.addEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
-    return () => window.removeEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
+    return onLocal(ACTIVE_RUN_CLEARED_EVENT, onCleared);
   }, []);
 
   useEffect(() => {
@@ -190,7 +190,7 @@ export function useRunConsole() {
         }
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "";
+      const message = errorMessage(e, "");
       // Both of the server's refusals, not just the scratch. The check above
       // reads this device's last bundle, so another phone scratching this
       // athlete — or deleting them off the roster outright — gets past it and
@@ -354,7 +354,7 @@ export function useRunConsole() {
       await qc.invalidateQueries();
       toast.success(`Reset — ${res.clearedRuns} run(s) cleared`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not reset that athlete");
+      toast.error(errorMessage(e, "Could not reset that athlete"));
     }
   }
 
@@ -378,7 +378,7 @@ export function useRunConsole() {
       }
       await qc.invalidateQueries();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not update the clock");
+      toast.error(errorMessage(e, "Could not update the clock"));
     }
   }
 

@@ -4,6 +4,7 @@
 // fetch that had not returned yet, a fetch that had failed, and a combine
 // nobody had started looked identical. On a phone in a garden the middle one is
 // the common case, and it is the one worth saying out loud.
+import type { ReactNode } from "react";
 import { RefreshCw, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,29 @@ export function FeedError({
   );
 }
 
+function WarnBanner({
+  role,
+  className,
+  children,
+}: {
+  role?: "status";
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role={role}
+      className={cn(
+        "flex items-center justify-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-1.5 text-meta font-semibold text-warn",
+        className,
+      )}
+    >
+      <WifiOff className="h-3.5 w-3.5 shrink-0" />
+      {children}
+    </div>
+  );
+}
+
 /**
  * One table of the bundle came back unreadable while the rest landed.
  *
@@ -73,19 +97,12 @@ export function FeedError({
  * already carries cannot reach that case, because the screen is not empty.
  */
 export function FeedPartialBanner({ message, className }: { message: string; className?: string }) {
+  // Polite rather than assertive: the screen is readable and the read is already
+  // being retried, so this is a caveat, not an interruption.
   return (
-    <div
-      // Polite rather than assertive: the screen is readable and the read is
-      // already being retried, so this is a caveat, not an interruption.
-      role="status"
-      className={cn(
-        "flex items-center justify-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-1.5 text-meta font-semibold text-warn",
-        className,
-      )}
-    >
-      <WifiOff className="h-3.5 w-3.5 shrink-0" />
+    <WarnBanner role="status" className={className}>
       {message}
-    </div>
+    </WarnBanner>
   );
 }
 
@@ -95,14 +112,6 @@ export function FeedPartialBanner({ message, className }: { message: string; cla
  */
 export function FeedDegradedBanner({ className }: { className?: string }) {
   return (
-    <div
-      className={cn(
-        "flex items-center justify-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-1.5 text-meta font-semibold text-warn",
-        className,
-      )}
-    >
-      <WifiOff className="h-3.5 w-3.5" />
-      Live feed down — refreshing every few seconds
-    </div>
+    <WarnBanner className={className}>Live feed down — refreshing every few seconds</WarnBanner>
   );
 }

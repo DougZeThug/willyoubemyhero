@@ -1,9 +1,10 @@
+import { errorMessage } from "@/lib/errors";
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { optionalActor } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
-import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
+import { decodeImageDataUrl } from "./media.functions";
+import { forgetSignedPath, signPath } from "./media-sign.server";
 import { VARIANT_WIDTHS } from "./media";
 import type { SecretCardRow, SecretCollectionRow, SecretPullRow } from "./secret-cards-rows";
 import type { CollectionTrophy, CompletedCollection } from "./collection-trophies";
@@ -17,6 +18,9 @@ import {
 import { bestSecretTier, toSecretTier } from "./secret-rarity";
 import { uuid as zuuid } from "./zod-uuid";
 import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { activeEventId } from "./active-event.server";
+import { noStore } from "./no-store.server";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
@@ -35,45 +39,6 @@ import { sqlNull } from "./rpc-null";
  * device with IndexedDB blocked ask for a pack every load; the server answers
  * the same one back, and that is what closes it.
  */
-
-/** Typed client, for tables the generated types already know about. */
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function secrets() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/**
- * Admin rights over a catalogue that has no event of its own.
- *
- * deleteComment authorizes a delete against the comment's own event, so an admin
- * for event A cannot touch event B. There is no row-side event here — the set is
- * league-wide by design — so the nearest honest equivalent is "admin of the
- * current combine", resolved server-side rather than taken from the payload. Last
- * year's PIN, still a valid 12-hour token if someone left a tab open, cannot edit
- * this year's set, and no handler in this file takes an eventId at all.
- *
- * What this is NOT: any holder of the active event's shared PIN can rewrite or
- * retire the league's permanent collection, including cards authored years
- * earlier. For a thirteen-person league that is the intended blast radius.
- *
- * Requires an active event, so out of season nobody can author secrets. That is a
- * real product constraint, stated here rather than discovered in a garden.
- */
-/**
- * These responses vary only by a request header, and a cache hit here is a
- * spoiler rather than a cosmetic bug. Latent today — Cloudflare does not cache
- * Worker responses by default — but this is the first endpoint in the app where
- * it would matter.
- */
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
 
 /** Storage path for a card's art. Never the name, never a slug — see below. */
 function artPath(cardId: string, ext: string) {
@@ -125,8 +90,6 @@ export async function signSecretCard(row: SecretCardRow, tier: string) {
   return toView(row, artUrl, backUrl, tier);
 }
 
-// ------- Member-facing -------
-
 /**
  * The secrets whoever is asking has pulled, and only those.
  *
@@ -140,7 +103,7 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
   // used to throw and blank the screen on the very first paint of the vault.
   const actor = optionalActor();
   if (!actor) return { cards: [], pulled: 0 };
-  const db = await secrets();
+  const db = await adminDb();
 
   const { data: pulls, error } = await db
     .from("secret_card_pulls")
@@ -216,8 +179,6 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
   return { cards, pulled: cards.length };
 });
 
-// ------- Admin -------
-
 /**
  * The whole catalogue, with how many people have found each card.
  *
@@ -229,8 +190,7 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
 export const listSecretCards = createServerFn({ method: "GET" }).handler(async () => {
   await requireLeagueAdmin();
   noStore();
-  const sb = await admin();
-  const db = await secrets();
+  const db = await adminDb();
 
   const [{ data: rows }, { data: pulls }, { data: claimedRows }] = await Promise.all([
     db
@@ -249,7 +209,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
     // The ids rather than a `head: true` count, because `exhausted` needs both
     // ends of its comparison drawn from the SAME population, and a bare number
     // cannot say who is in it. See `memberOwners` below.
-    sb
+    db
       .from("member_codes")
       .select("participant_id")
       .not("claimed_at", "is", null)
@@ -304,7 +264,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
   // Roster for the grant control: id + display name only, sorted for the picker.
   // Kept on this response so the panel needs no second round trip; the admin
   // already sees the whole set here, so exposing the roster is not a new leak.
-  const { data: rosterRows } = await sb
+  const { data: rosterRows } = await db
     .from("participants")
     .select("id, name, nickname")
     .eq("active", true)
@@ -369,7 +329,7 @@ const collectionLabel = z.string().trim().min(1).max(40);
 async function assertCollections(ids: readonly (string | null | undefined)[]) {
   const wanted = [...new Set(ids.filter((i): i is string => !!i))];
   if (wanted.length === 0) return;
-  const db = await secrets();
+  const db = await adminDb();
   const { data, error } = await db
     .from("secret_collections")
     .select("id")
@@ -383,7 +343,7 @@ async function assertCollections(ids: readonly (string | null | undefined)[]) {
 
 /** The sets, in the order the admin arranged them. Hidden ones are left out. */
 export const getSecretCollections = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await secrets();
+  const db = await adminDb();
   const { data, error } = await db
     .from("secret_collections")
     .select("id, label, accent, sort_order, active")
@@ -467,7 +427,7 @@ export const createSecretCollection = createServerFn({ method: "POST" })
     if (!SECRET_COLLECTION_ID_PATTERN.test(id)) {
       return { ok: false as const, reason: "bad_name" as const };
     }
-    const db = await secrets();
+    const db = await adminDb();
     const { data: existing } = await db
       .from("secret_collections")
       .select("id")
@@ -520,7 +480,7 @@ export const updateSecretCollection = createServerFn({ method: "POST" })
     if (data.accent !== undefined) patch.accent = data.accent;
     if (Object.keys(patch).length === 0) return { ok: true as const };
 
-    const db = await secrets();
+    const db = await adminDb();
     const { data: row, error } = await db
       .from("secret_collections")
       .update(patch)
@@ -543,7 +503,7 @@ export const deleteSecretCollection = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ id: cardCollection }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
-    const db = await secrets();
+    const db = await adminDb();
     const { count } = await db
       .from("secret_cards")
       .select("id", { count: "exact", head: true })
@@ -596,7 +556,7 @@ export const createSecretCards = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     await assertCollections(data.cards.map((c) => c.collection));
-    const db = await secrets();
+    const db = await adminDb();
 
     const results = [];
     for (const input of data.cards) {
@@ -626,7 +586,7 @@ export const createSecretCards = createServerFn({ method: "POST" })
         results.push({
           name: input.name,
           ok: false as const,
-          error: e instanceof Error ? e.message : "upload failed",
+          error: errorMessage(e, "upload failed"),
         });
       }
     }
@@ -638,7 +598,7 @@ async function storeArt(cardId: string, dataUrl: string) {
   const { contentType, ext, bytes } = decodeImageDataUrl(dataUrl);
   const path = artPath(cardId, ext);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const db = await secrets();
+  const db = await adminDb();
 
   const { data: prev } = await db
     .from("secret_cards")
@@ -694,7 +654,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     await assertCollections([data.collection]);
-    const db = await secrets();
+    const db = await adminDb();
     // Built as a literal rather than spread from `data`: supabase-js rejects an
     // index-signature object in .update(), and a spread would let a caller set id.
     const patch: {
@@ -754,7 +714,7 @@ export const updateSecretCollectionLook = createServerFn({ method: "POST" })
     if (data.borderFx !== undefined) patch.border_fx = data.borderFx;
     if (Object.keys(patch).length === 0) return { ok: true as const, updated: 0 };
 
-    const db = await secrets();
+    const db = await adminDb();
     const query = db.from("secret_cards").update(patch);
     const { data: rows, error } =
       data.collection === null
@@ -776,7 +736,7 @@ export const deleteSecretCard = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
-    const db = await secrets();
+    const db = await adminDb();
 
     const { count } = await db
       .from("secret_card_pulls")
@@ -828,22 +788,15 @@ export const grantSecretCard = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
-    const sb = await admin();
-    const db = await secrets();
+    const db = await adminDb();
 
-    const { data: event } = await sb
-      .from("events")
-      .select("id")
-      .eq("active", true)
-      .order("year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const eventId = await activeEventId();
 
     const { data: result, error } = await db.rpc("grant_secret_card_once", {
       _grant_key: data.grantKey,
       _participant_id: data.participantId,
       _secret_card_id: data.cardId,
-      _event_id: sqlNull(event?.id ?? null),
+      _event_id: sqlNull(eventId),
     });
     if (error) throw new Error(error.message);
     const row = result as {

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { prefersReducedMotionNow } from "@/lib/motion";
 import { HoloCard } from "@/components/holo-card";
 import { initialsOf } from "@/lib/format";
 import type { Rarity } from "@/lib/card-rarity";
@@ -52,7 +53,7 @@ export function RosterFilmstrip({
     const scroller = scrollRef.current;
     if (!el || !scroller) return;
     const target = el.offsetLeft - scroller.clientWidth / 2 + el.clientWidth / 2;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const reduced = prefersReducedMotionNow();
     // scrollTo on the scroller, not scrollIntoView: the latter also scrolls the
     // page vertically to bring the strip into view, which yanks the hero card
     // off screen every time you press an arrow key.

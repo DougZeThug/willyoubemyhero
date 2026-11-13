@@ -5,6 +5,7 @@
 // names BOTH caches of getTradeSpares: the Trading Post's and the shop's. The
 // shop's was missing, and a card traded away from the phone sat on the burn and
 // sell counters until the cache happened to age out.
+import { dustSparesKey, tradeSparesKey } from "@/lib/query-keys";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";
@@ -32,7 +33,7 @@ vi.mock("@/integrations/supabase/client", () => {
   return { supabase: { channel: () => channel, removeChannel: vi.fn() } };
 });
 
-import { dustSparesKey, tradeSparesKey, useTradeFeed } from "./use-trades";
+import { useTradeFeed } from "./use-trades";
 
 const ME = "me-1";
 const EVENT = "ev-1";

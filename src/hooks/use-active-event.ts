@@ -1,3 +1,4 @@
+import { activeEventKey } from "@/lib/query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getActiveEvent } from "@/lib/event.functions";
@@ -26,7 +27,7 @@ import { getActiveEvent } from "@/lib/event.functions";
 export function useActiveEvent() {
   const fn = useServerFn(getActiveEvent);
   return useQuery({
-    queryKey: ["active-event"],
+    queryKey: activeEventKey(),
     queryFn: () => fn(),
     staleTime: 60_000,
   });

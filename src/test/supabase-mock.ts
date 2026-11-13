@@ -200,5 +200,3 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
     },
   };
 }
-
-export type SupabaseMock = ReturnType<typeof createSupabaseMock>;

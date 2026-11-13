@@ -1,5 +1,17 @@
+import {
+  cardPullCountsKey,
+  collectionTrophiesKey,
+  dustBalanceKey,
+  dustSparesKey,
+  marketListingsKey,
+  myCardStatsKey,
+  mySecretsKey,
+  myStallKey,
+  packStatusKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -14,15 +26,10 @@ import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-c
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
+import { settleDustMutation, useDustSpares } from "@/hooks/use-dust-cache";
 import { ListError } from "@/components/list-error";
-import { dustBalanceKey } from "@/hooks/use-dust";
-import { marketListingsKey, myStallKey, useMarketListings, useMyStall } from "@/hooks/use-market";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { packStatusKey } from "@/hooks/use-pack-status";
-import { myCardStatsKey } from "@/hooks/use-my-collection";
-import { cardPullCountsKey } from "@/hooks/use-card-pulls";
-import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
+import { useIdSet } from "@/hooks/use-id-set";
+import { useMarketListings, useMyStall } from "@/hooks/use-market";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
@@ -30,10 +37,9 @@ import { secretTierStyle } from "@/lib/secret-rarity";
 import { houseFloor, marketStatusLabel, MARKET_PRICE_MAX, MARKET_PRICE_MIN } from "@/lib/market";
 import type { MarketListing, MarketListingItem, MyMarketListing } from "@/lib/market";
 import { buyMarketListing, cancelMarketListing, listCardForDust } from "@/lib/market.functions";
-import { getTradeSpares } from "@/lib/trades.functions";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
-import type { TradeItemView, TradeSpares } from "@/lib/trades";
+import type { TradeItemView } from "@/lib/trades";
 
 /**
  * The marketplace: a spare priced by the person selling it.
@@ -57,8 +63,6 @@ import type { TradeItemView, TradeSpares } from "@/lib/trades";
 export type MarketPanelProps = {
   balance: number | undefined;
   participantId: string;
-  /** `m:<participantId>` — the secret queries key on this, never the bare id. */
-  actor: string | null;
   eventId: string | null | undefined;
   nameFor: (eventParticipantId: string) => string;
   nameOf: (participantId: string) => string;
@@ -154,7 +158,6 @@ function itemMeta(
 export function MarketPanel({
   balance,
   participantId,
-  actor,
   eventId,
   nameFor,
   nameOf,
@@ -172,16 +175,8 @@ export function MarketPanel({
   const buyFn = useServerFn(buyMarketListing);
   const listFn = useServerFn(listCardForDust);
   const cancelFn = useServerFn(cancelMarketListing);
-  const sparesFn = useServerFn(getTradeSpares);
 
-  /** The same list the burn and sell sections read — your own spares. */
-  const spares = useQuery({
-    queryKey: dustSparesKey(participantId),
-    queryFn: () => sparesFn({ data: { participantId } }) as Promise<TradeSpares>,
-    enabled: dustOn && !!participantId,
-    staleTime: 15_000,
-    retry: false,
-  });
+  const spares = useDustSpares(participantId, dustOn);
 
   // Buying, listing and taking a card down all reach a server. Offline they can
   // only fail, and dust moving is the one thing on these screens nobody would
@@ -191,7 +186,7 @@ export function MarketPanel({
   // A set, not an id: the shelf is a grid of tiles and a second tap lands while
   // the first buy is still on the wire. `buy.isPending` only describes the latest
   // `mutate()`, so each tile has to answer for its own listing.
-  const [buying, setBuying] = useState<ReadonlySet<string>>(new Set());
+  const buying = useIdSet();
   const [pulling, setPulling] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [staged, setStaged] = useState<{ item: TradeItemView; floor: number } | null>(null);
@@ -224,22 +219,19 @@ export function MarketPanel({
 
   /**
    * Everything a sale moves, on the buyer's phone.
-   *
-   * The actor-keyed secret invalidations are the trap dust-shop.tsx carries a live
-   * comment about: those queries register as ["daily-secret", "m:<uuid>"], so a
-   * bare participant id here would match nothing and fail silently.
    */
-  function refreshAfterBuy(completedCollection: unknown) {
+  function refreshAfterBuy(balance: number, completedCollection: unknown) {
+    // Written straight in rather than refetched: the response already carries the
+    // new balance, and a refetch would race the invalidations.
+    settleDustMutation(qc, { participantId, eventId }, balance, {
+      secrets: true,
+      stats: true,
+    });
     void qc.invalidateQueries({ queryKey: marketListingsKey(participantId) });
     void qc.invalidateQueries({ queryKey: myStallKey(participantId) });
-    void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-    void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-    void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
     // A buyer who held none of that card now holds one, so the public "Packed by
     // N" has genuinely risen — the same reason a completed trade invalidates it.
     void qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) });
-    void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-    void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
     if (completedCollection) void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
   }
 
@@ -254,10 +246,7 @@ export function MarketPanel({
         void qc.invalidateQueries({ queryKey: marketListingsKey(participantId) });
         return;
       }
-      // Written straight in rather than refetched: the response already carries
-      // the new balance, and a refetch would race the invalidations below.
-      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      refreshAfterBuy(res.completedCollection);
+      refreshAfterBuy(res.balance, res.completedCollection);
       setRequestIds((prev) => {
         const { [listing.id]: _spent, ...rest } = prev;
         return rest;
@@ -270,13 +259,7 @@ export function MarketPanel({
     },
     onError: () => toast("Could not buy that just now"),
     // Only the listing that settled; the others are still in flight.
-    onSettled: (_data, _error, listing) =>
-      setBuying((prev) => {
-        if (!prev.has(listing.id)) return prev;
-        const next = new Set(prev);
-        next.delete(listing.id);
-        return next;
-      }),
+    onSettled: (_data, _error, listing) => buying.remove(listing.id),
   });
 
   const putUp = useMutation({
@@ -453,7 +436,7 @@ export function MarketPanel({
                       disabled={broke || busy || offline}
                       {...offlineReason(offline)}
                       onClick={() => {
-                        setBuying((prev) => new Set(prev).add(listing.id));
+                        buying.add(listing.id);
                         buy.mutate(listing);
                       }}
                     >
@@ -694,7 +677,7 @@ function StallLine({
  * What each refusal says on a button.
  *
  * Every one of these is something a person can act on, which is why the RPCs
- * return them rather than raising — see the header of dust-db.server.ts.
+ * return them rather than raising — see the header of dust-rows.ts.
  */
 const BUY_REFUSALS: Record<string, string> = {
   resolved: "Somebody got there first",

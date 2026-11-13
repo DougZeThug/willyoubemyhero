@@ -1,3 +1,4 @@
+import { streakStatusKey } from "@/lib/query-keys";
 import { describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";
@@ -8,7 +9,7 @@ vi.mock("@tanstack/react-start", async (importOriginal) => ({
   useServerFn: () => serverFnMock,
 }));
 
-import { streakStatusKey, useStreakStatus } from "./use-streak";
+import { useStreakStatus } from "./use-streak";
 
 describe("streakStatusKey", () => {
   it("is keyed on the actor, never on the event", () => {

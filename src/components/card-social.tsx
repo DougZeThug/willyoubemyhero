@@ -1,4 +1,8 @@
+import { STORAGE_KEYS } from "@/lib/storage-keys";
+import { readStored, writeStored } from "@/lib/device-store";
+import { eventSocialKey } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { prefersReducedMotionNow } from "@/lib/motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "motion/react";
@@ -11,6 +15,7 @@ import { EASE_OUT } from "@/lib/motion";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
 
@@ -23,25 +28,11 @@ const BURST = [
   { x: 16, y: -20 },
 ];
 
-/** Local storage key for the guest display name — one per browser. */
-const GUEST_NAME_KEY = "wwbh:guest-name";
+const GUEST_NAME_KEY = STORAGE_KEYS.guestName;
 
-function readGuestName(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(GUEST_NAME_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-function writeGuestName(name: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(GUEST_NAME_KEY, name);
-  } catch {
-    /* private mode, or the quota is full — the name only lives for this session */
-  }
-}
+const readGuestName = () => readStored(GUEST_NAME_KEY) ?? "";
+// A lost write means the name only lives for this session.
+const writeGuestName = (name: string) => writeStored(GUEST_NAME_KEY, name);
 
 export function CardSocial({
   eventId,
@@ -54,7 +45,6 @@ export function CardSocial({
   eventParticipantId: string;
   reactions: ReactionRow[];
   comments: CommentRow[];
-  /** Resolve a participant id to a display name. */
   nameOf: (participantId: string) => string;
 }) {
   const me = useMemberSession();
@@ -175,7 +165,6 @@ export function CardSocial({
     if (next) next();
   }
 
-  /** Display label for a reaction/comment row, falling back to guest name. */
   function labelFor(row: { participant_id: string | null; guest_name?: string | null }): string {
     if (row.participant_id) return nameOf(row.participant_id);
     return row.guest_name?.trim() || "Guest";
@@ -228,7 +217,7 @@ export function CardSocial({
     return map;
   }, [reactions]);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["event-social", eventId] });
+  const refresh = () => qc.invalidateQueries({ queryKey: eventSocialKey(eventId) });
 
   async function onReact(emoji: string) {
     const who = ensureIdentity(() => void onReact(emoji));
@@ -240,7 +229,7 @@ export function CardSocial({
       ...prev,
       [emoji]: { delta: (prev[emoji]?.delta ?? 0) + (adding ? 1 : -1), want: adding },
     }));
-    if (adding && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    if (adding && !prefersReducedMotionNow()) {
       setBursting(emoji);
       buzz([8]);
     }
@@ -262,7 +251,7 @@ export function CardSocial({
           Object.fromEntries(Object.entries(prev).filter(([key]) => key !== emoji)),
         );
       }
-      toast.error(e instanceof Error ? e.message : "Could not react");
+      toast.error(errorMessage(e, "Could not react"));
     } finally {
       // Only if this is still the card that sent it. Moving on does not cancel
       // a request in the air, and the reset above has already cleared this
@@ -301,7 +290,7 @@ export function CardSocial({
       if (shownCardRef.current === card) setDraft((d) => (d === typed ? "" : d));
       await refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not post");
+      toast.error(errorMessage(err, "Could not post"));
     } finally {
       // As above: card A's post finishing must not unlatch a post card B has in
       // flight, or the Post button comes back mid-submit and takes a second one.
@@ -321,7 +310,7 @@ export function CardSocial({
       });
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not delete");
+      toast.error(errorMessage(e, "Could not delete"));
     }
   }
 

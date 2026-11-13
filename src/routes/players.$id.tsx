@@ -1,3 +1,4 @@
+import { cardUrlsKey } from "@/lib/query-keys";
 import {
   createFileRoute,
   Link,
@@ -29,7 +30,8 @@ import {
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, NO_FLICK, type HoloGestures } from "@/components/holo-card";
+import { TierScope } from "@/components/tier-scope";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
@@ -64,7 +66,7 @@ import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
 import { playFlip, useCardSfx } from "@/lib/card-sfx";
-import { exportCardPng, waitForPaint } from "@/lib/share-card";
+import { useCardExport } from "@/hooks/use-card-export";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
@@ -72,6 +74,10 @@ import { acquisitionWindow } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
 import { useRevealCue } from "@/hooks/use-reveal-cue";
 import { setTradeIntent } from "@/lib/trade-intent";
+
+// The card sits on a page that still has to scroll under a thumb.
+const PAGE_CARD: HoloGestures = { ...NO_FLICK, pageScroll: true };
+const PAGE_CARD_GYRO: HoloGestures = { ...PAGE_CARD, gyro: true };
 
 export const Route = createFileRoute("/players/$id")({
   head: () => ({
@@ -160,13 +166,12 @@ function PlayerCardPage() {
     };
   }, [tiltWanted]);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
   // Seeded from the search parameter, which is the whole reason it exists:
   // `?vs=` is a link you drop in the group chat, and the recipient used to
   // land on the left card with the chip lit and have to tap it themselves.
   // The seed alone is not enough — see the lock effect below.
   const [comparing, setComparing] = useState(!!vs);
-  const shareRef = useRef<HTMLDivElement>(null);
+  const { ref: shareRef, busy: sharing, exportCard } = useCardExport();
 
   // Roster in running order gives prev/next a stable, meaningful sequence.
   const roster = useMemo(
@@ -512,23 +517,12 @@ function PlayerCardPage() {
     rank,
   };
 
-  async function onShare() {
-    setSharing(true);
-    try {
+  function onShare() {
+    return exportCard(`${name.replace(/\s+/g, "-").toLowerCase()}-card.png`, {
+      fallback: "Could not export card",
       // Signed storage URLs expire after an hour; a stale one rasterises blank.
-      await qc.refetchQueries({ queryKey: ["card-urls", event?.id] });
-      const node = shareRef.current;
-      if (!node) throw new Error("Share card not ready");
-      // Waited on rather than guessed at: a fixed delay is either too long
-      // on wifi or too short on a phone in a garden, and too short means a
-      // shared card showing initials where a face should be.
-      await waitForPaint(node);
-      await exportCardPng(node, `${name.replace(/\s+/g, "-").toLowerCase()}-card.png`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not export card");
-    } finally {
-      setSharing(false);
-    }
+      prepare: () => qc.refetchQueries({ queryKey: cardUrlsKey(event?.id) }),
+    });
   }
 
   async function onCopyLink() {
@@ -623,13 +617,12 @@ function PlayerCardPage() {
 
   return (
     <>
-      {/* Every tier-coloured thing below reads `--tier` off this node rather than
-          taking a prop, so one variable retints the whole page. */}
-      <div
+      {/* Every tier-coloured thing below reads its colour off this scope rather
+          than taking a prop, so one variable retints the whole page. */}
+      <TierScope
+        accent={rarity.accent}
+        edition={edition}
         className="card-bg relative min-h-[var(--page-min-h)]"
-        style={
-          { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
-        }
         // The details page is covered by the viewer, not gone: without this its
         // controls stay in the tab order and in the accessibility tree behind it,
         // which among other things puts a second "More actions" on the screen.
@@ -729,13 +722,11 @@ function PlayerCardPage() {
                         edition={edition}
                         flipped={flipped}
                         onFlippedChange={setFlipped}
-                        gyro={gyro}
                         tilt="hero"
-                        pageScroll
+                        gestures={gyro ? PAGE_CARD_GYRO : PAGE_CARD}
                         // While magnified the frame owns the pointer; a card leaning
                         // under a pan would make the thing you are reading move.
                         interactive={!zoomed}
-                        flickToFlip={false}
                         backContent={
                           <CardBackPanel
                             ep={ep}
@@ -1011,7 +1002,7 @@ function PlayerCardPage() {
             <ShareCard ref={shareRef} data={shareData} />
           </div>
         )}
-      </div>
+      </TierScope>
 
       {/* Over everything, and a SIBLING of the page rather than a child of it:
           the page is `inert` while this is up, and a viewer inside it would be

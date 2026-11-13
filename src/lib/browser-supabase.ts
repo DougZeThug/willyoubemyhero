@@ -24,8 +24,3 @@ export function browserSupabase(): BrowserSupabase | null {
   }
   return cached;
 }
-
-/** Tests only: forget the cached answer. */
-export function resetBrowserSupabaseForTests() {
-  cached = undefined;
-}

@@ -1,39 +1,17 @@
+import { useMemberQuery } from "./use-member-query";
+import {
+  invalidateCardsMoved,
+  tradeFeedKey,
+  tradeOffersKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
+import { memberIdentityOrNull } from "@/lib/identity";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { browserSupabase } from "@/lib/browser-supabase";
 import { getMyTradeOffers, getTradeFeed, getTradeSpares } from "@/lib/trades.functions";
 import type { TradeFeedEntry, TradeOfferView, TradeSpares } from "@/lib/trades";
-import { mySecretsKey } from "./use-daily-secret";
-import { myCardStatsKey } from "./use-my-collection";
-import { cardPullCountsKey } from "./use-card-pulls";
-
-export const tradeOffersKey = (participantId: string | null | undefined) =>
-  ["trade-offers", participantId] as const;
-/**
- * Keyed on the VIEWER first, then whose spares. The response is shaped for the
- * viewer — a counterparty's unowned secrets arrive with no name and no art — so a
- * device that changes identity must not read the last person's answer out of the
- * cache. Called with the viewer alone it is a prefix, which is what every
- * invalidation wants: everything this viewer has cached, theirs and others'.
- */
-export const tradeSparesKey = (
-  viewerId: string | null | undefined,
-  participantId?: string | null | undefined,
-) =>
-  participantId === undefined
-    ? (["trade-spares", viewerId] as const)
-    : (["trade-spares", viewerId, participantId] as const);
-/**
- * The SAME getTradeSpares answer as tradeSparesKey, cached a second time for the
- * shop and the market — your own list only, so keyed on you alone. Two keys for
- * one list means every place that moves a card has to name both; a trade landing
- * named only the first, and a card traded away stayed on the sell counter.
- */
-export const dustSparesKey = (participantId: string | null | undefined) =>
-  ["dust-spares", participantId] as const;
-export const tradeFeedKey = (eventId: string | null | undefined) =>
-  ["trade-feed", eventId] as const;
 
 export type MyTradeOffers = {
   inbox: TradeOfferView[];
@@ -66,15 +44,11 @@ export type MyTradeOffers = {
  */
 export function useTradeOffers(participantId: string | null | undefined) {
   const fn = useServerFn(getMyTradeOffers);
-  return useQuery({
+  return useMemberQuery({
     queryKey: tradeOffersKey(participantId),
     queryFn: () => fn() as Promise<MyTradeOffers>,
     enabled: !!participantId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    // A member-guarded read: a token that expired mid-party should surface the
-    // claim prompt, not retry three times on the way to it.
-    retry: false,
   });
 }
 
@@ -92,13 +66,11 @@ export function useTradeSpares(
   viewerId: string | null | undefined,
 ) {
   const fn = useServerFn(getTradeSpares);
-  return useQuery({
+  return useMemberQuery({
     queryKey: tradeSparesKey(viewerId, participantId),
     queryFn: () => fn({ data: { participantId: participantId! } }) as Promise<TradeSpares>,
     enabled: !!participantId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    retry: false,
   });
 }
 
@@ -119,7 +91,6 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<TradeFeedEntry[]>,
     enabled: !!eventId,
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -135,14 +106,10 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
         // it, whose "Packed by N" counts have genuinely moved.
         qc.invalidateQueries({ queryKey: tradeFeedKey(eventId) });
         qc.invalidateQueries({ queryKey: tradeOffersKey(participantId) });
-        qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-        qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-        qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) });
-        qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
-        // The secrets cache is keyed on an actor, which for a claimed member is
-        // `m:<participantId>` — see useSecretActor.
-        qc.invalidateQueries({
-          queryKey: mySecretsKey(participantId ? `m:${participantId}` : null),
+        void invalidateCardsMoved(qc, {
+          eventId,
+          participantId,
+          actor: memberIdentityOrNull(participantId),
         });
       })
       .subscribe();

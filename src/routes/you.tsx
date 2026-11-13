@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { streakHistoryKey } from "@/lib/query-keys";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -8,27 +9,24 @@ import { AccountPanel } from "@/components/account-panel";
 import { DustChip } from "@/components/dust-chip";
 import { SectionTitle } from "@/components/section-title";
 import { StreakLadder } from "@/components/streak-ladder";
-import { useActiveEvent } from "@/hooks/use-active-event";
 import { useCollectionTrophies } from "@/hooks/use-collection-trophies";
 import { useDustBalance } from "@/hooks/use-dust";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { streakHistoryKey, useStreakStatus } from "@/hooks/use-streak";
+import { useStreakStatus } from "@/hooks/use-streak";
 import { useAccountSyncState } from "@/lib/account-sync-state";
 import { packsOpenedLabel } from "@/lib/card-pulls";
 import { useCardSfx, useHaptics } from "@/lib/card-sfx";
 import { trophiesFor } from "@/lib/collection-trophies";
 import { dustLive } from "@/lib/dust";
 import { requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
-import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
-
-// Nothing in this tab writes the flag while /you is open; a read per render is enough.
-const noSubscribe = () => () => {};
+import { useMemberSession } from "@/lib/member-token";
+import { useWasMember } from "@/hooks/use-was-member";
+import { collectionSettled, dustHolder, idOf, summaryLine } from "@/lib/collection-view";
 import { groupBySecretCollection, type OwnedSecret } from "@/lib/secret-cards";
 import { getStreakHistory, type StreakHistoryEntry } from "@/lib/streaks.functions";
-import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/you")({
@@ -80,45 +78,6 @@ function trophiesOf(
   return trophiesFor(data?.trophies ?? [], member?.participantId ?? null);
 }
 
-function cardsOf(data: { cards?: OwnedSecret[] } | undefined) {
-  return data?.cards ?? [];
-}
-
-function pulledOf(data: { pulled?: number } | undefined) {
-  return data?.pulled ?? 0;
-}
-
-function idOf(event: { id?: string | null } | null | undefined) {
-  return event?.id ?? null;
-}
-
-/** Members only: a guest has no dust balance, so the hook is handed nothing to ask about. */
-function dustHolder(dustOn: boolean, member: { participantId: string } | null | undefined) {
-  return dustOn ? member?.participantId : null;
-}
-
-function historyLoading(isPending: boolean, actor: string | null) {
-  return isPending && Boolean(actor);
-}
-
-/** The vault's second gate, folded into one flag — see the comment where it is used. */
-function collectionSettled(
-  mineReady: boolean,
-  sync: ReturnType<typeof useAccountSyncState>,
-  wasMember: boolean,
-  isMember: boolean,
-) {
-  return mineReady && sync.status !== "syncing" && !(wasMember && !isMember);
-}
-
-function summaryLine(
-  ready: boolean,
-  roster: Parameters<typeof summaryReady>[1],
-  counts: Parameters<typeof vaultSummaryLine>[0],
-) {
-  return summaryReady(ready, roster) ? vaultSummaryLine(counts) : null;
-}
-
 function playerBlurb(isMember: boolean, wasMember: boolean) {
   if (isMember)
     return "Your player code is claimed on this phone. Your cards are filed under your name, so they follow you to another one.";
@@ -157,8 +116,7 @@ function YouPage() {
   const member = useMemberSession();
   const actor = useSecretActor();
   const { event, bundle, error, loading: eventLoading, failedTables } = useEventBundle();
-  const activeEvent = useActiveEvent().data;
-  const dustOn = dustLive(activeEvent ?? event);
+  const dustOn = dustLive(event);
   // Gated twice, the way the vault gates it: a balance nobody can hold and
   // nowhere to spend it is a round trip for a chip that will not render.
   const dust = useDustBalance(dustHolder(dustOn, member));
@@ -177,17 +135,10 @@ function YouPage() {
   // this screen counts your cards forever.
   const mine = useMyCollection(idOf(event), rosterIds, !event && !eventLoading);
 
-  // Set on claim and never cleared, so somebody reading this on a new phone is
-  // told where their cards went. SSR has no localStorage, so the server snapshot
-  // is `false` and the client re-reads after hydration.
-  const wasMember = useSyncExternalStore(
-    noSubscribe,
-    () => localStorage.getItem(WAS_MEMBER_KEY) === "1",
-    () => false,
-  );
+  const wasMember = useWasMember();
 
   const myTrophies = trophiesOf(allTrophies.data, member);
-  const ownedSecrets = cardsOf(secrets.data);
+  const ownedSecrets: OwnedSecret[] = secrets.data?.cards ?? [];
   // The vault's second gate, which this screen was written without. A phone with
   // no member token has nothing to adjudicate the local card store against, so
   // `useMyCollection` settles off that store alone — and it is per-device, not
@@ -204,7 +155,7 @@ function YouPage() {
   // claiming. A device that was NEVER a member is not in here on purpose — a
   // guest's store is a guest's own cards, and counting them is the right answer.
   const sync = useAccountSyncState();
-  const ready = collectionSettled(mine.ready, sync, wasMember, Boolean(member));
+  const ready = collectionSettled(mine.ready, sync) && !(wasMember && !member);
   //
   // And the roster's own answer, which `ready` does not cover: a bundle still in
   // the air or a failed roster read is an empty roster, and the line would say
@@ -215,7 +166,7 @@ function YouPage() {
     {
       rosterHeld: mine.collectedCount,
       rosterSize: rosterIds.length,
-      secrets: pulledOf(secrets.data),
+      secrets: secrets.data?.pulled ?? 0,
       // Its own grouping, exactly as the vault does it: how many sets your
       // cards came from, never how many sets there are.
       sets: groupBySecretCollection(ownedSecrets, collections).length,
@@ -292,7 +243,7 @@ function YouPage() {
               <StreakLadder
                 streak={actor ? streakQuery.data : undefined}
                 history={history.data ?? []}
-                historyLoading={historyLoading(history.isPending, actor)}
+                historyLoading={history.isPending && Boolean(actor)}
               />
             )}
           </section>

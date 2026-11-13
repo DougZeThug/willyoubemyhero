@@ -23,7 +23,6 @@ vi.mock("@/lib/card-collection", () => ({
   forgetCards: (...args: unknown[]) => forgetCards(...args),
   loadUnrecorded: () => loadUnrecorded(),
   PACK_STATE_CHANGED: "wwbh:pack-state-changed",
-  PACK_UNRECORDED_KEY: "wwbh:pack-unrecorded",
 }));
 vi.mock("@/lib/member-token", () => ({
   useMemberSession: () => useMemberSession(),

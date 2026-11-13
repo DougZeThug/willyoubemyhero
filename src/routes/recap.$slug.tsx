@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getArchivedRecap } from "@/lib/media.functions";
 import { formatTime } from "@/lib/format";
 import { jsonLd } from "@/lib/json-ld";
-import { standings } from "@/lib/standings";
+import { standingsRows } from "@/hooks/use-standings-rows";
 
 export const Route = createFileRoute("/recap/$slug")({
   head: ({ params }) => ({
@@ -78,11 +78,7 @@ function RecapPage() {
   // one row per athlete, a dead heat sharing its number, anybody out of contention
   // off it. An archive carrying no statuses keeps everybody, which is the old
   // behaviour exactly.
-  const results = standings(snap).map((s) => ({
-    run: s.run,
-    place: s.place,
-    ep: snap.participants.find((p) => p.participant_id === s.participantId),
-  }));
+  const results = standingsRows(snap);
   const drafts = [...snap.drafts].sort((a, b) => a.draft_position - b.draft_position);
 
   return (
@@ -105,7 +101,7 @@ function RecapPage() {
             {results.map((r) => (
               <li
                 key={r.run.id}
-                className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2"
+                className="flex items-center gap-3 rounded-md border border-primary/10 bg-panel px-3 py-2"
               >
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-[11px] font-black text-primary">
                   {r.place}
@@ -132,7 +128,7 @@ function RecapPage() {
                 return (
                   <li
                     key={d.selection_order}
-                    className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2"
+                    className="flex items-center gap-3 rounded-md border border-primary/10 bg-panel px-3 py-2"
                   >
                     <span className="grid h-7 w-7 place-items-center rounded-full bg-primary text-primary-foreground text-[11px] font-black">
                       {d.draft_position}

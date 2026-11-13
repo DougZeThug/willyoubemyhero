@@ -1,3 +1,5 @@
+import { collectionTrophiesKey } from "@/lib/query-keys";
+import { isDeviceIdentity, memberIdentity } from "@/lib/identity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -13,8 +15,6 @@ import {
   uncelebratedTrophies,
   useTrophySeen,
 } from "@/lib/trophy-seen";
-
-export const collectionTrophiesKey = () => ["collection-trophies"] as const;
 
 /**
  * Every finished set in the league.
@@ -36,7 +36,6 @@ export function useCollectionTrophies() {
     queryKey: collectionTrophiesKey(),
     queryFn: () => fn() as Promise<{ trophies: CollectionTrophy[] }>,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
   });
 }
 
@@ -123,7 +122,7 @@ export function useCollectionTrophyWatcher() {
     // complete and nothing marked it, on the one path where it is most earned.
     if (
       !identity ||
-      (participantId ? identity !== `m:${participantId}` : !identity.startsWith("d:"))
+      (participantId ? identity !== memberIdentity(participantId) : !isDeviceIdentity(identity))
     )
       return;
 
@@ -175,7 +174,6 @@ export function useCollectionTrophyWatcher() {
 
   return {
     queue,
-    /** Drop the one on screen and move to the next. */
     shift: () => setQueue((q) => q.slice(1)),
   };
 }

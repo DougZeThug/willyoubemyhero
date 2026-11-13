@@ -1,3 +1,6 @@
+import { signedUrlSnapshotKey } from "@/lib/storage-keys";
+import { readStored, writeStored } from "@/lib/device-store";
+import { eventCardBackKey, signedUrlsKey, type SignedUrlKind } from "@/lib/query-keys";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -27,9 +30,8 @@ const SNAPSHOT_VERSION = 2;
 type Snapshot<T> = { at: number; data: T };
 
 function readSnapshot<T>(key: string): Snapshot<T> | undefined {
-  if (typeof window === "undefined") return undefined;
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = readStored(key);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Snapshot<T>;
     if (!parsed?.at || Date.now() - parsed.at > SNAPSHOT_MAX_AGE_MS) return undefined;
@@ -40,21 +42,17 @@ function readSnapshot<T>(key: string): Snapshot<T> | undefined {
 }
 
 function writeSnapshot(key: string, data: unknown) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
-  } catch {
-    /* private mode, or the quota is full — the query just refetches instead */
-  }
+  // A lost write means the query just refetches instead.
+  writeStored(key, JSON.stringify({ at: Date.now(), data }));
 }
 
 /** Shared wiring for the two URL queries: same caching, same reload snapshot. */
 function useSignedUrls<T>(
-  kind: string,
+  kind: SignedUrlKind,
   eventId: string | null | undefined,
   fetcher: () => Promise<T>,
 ) {
-  const storageKey = `wwbh:v${SNAPSHOT_VERSION}:${kind}:${eventId ?? ""}`;
+  const storageKey = signedUrlSnapshotKey(SNAPSHOT_VERSION, kind, eventId);
   const qc = useQueryClient();
 
   // Seeded after hydration rather than as `initialData`: the server has no
@@ -62,7 +60,7 @@ function useSignedUrls<T>(
   // it is hydrating is how you get a mismatch on every card's src.
   useEffect(() => {
     if (!eventId) return;
-    const key = [kind, eventId];
+    const key = signedUrlsKey(kind, eventId);
     if (qc.getQueryData(key)) return;
     const snapshot = readSnapshot<T>(storageKey);
     // Snapshot data is only a first-paint hint. Marking it fresh for hours kept
@@ -71,7 +69,7 @@ function useSignedUrls<T>(
   }, [qc, kind, eventId, storageKey]);
 
   const query = useQuery({
-    queryKey: [kind, eventId],
+    queryKey: signedUrlsKey(kind, eventId),
     queryFn: fetcher,
     enabled: !!eventId,
     staleTime: SIGNED_URL_REFRESH_MS,
@@ -130,7 +128,7 @@ const CARD_BACK_REFRESH_MS = 45 * 60_000;
 export function useEventCardBack(eventId: string | null | undefined) {
   const fn = useServerFn(getEventCardBack);
   return useQuery({
-    queryKey: ["event-card-back", eventId],
+    queryKey: eventCardBackKey(eventId),
     queryFn: () => fn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: CARD_BACK_STALE_MS,

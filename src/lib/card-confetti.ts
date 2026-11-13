@@ -6,13 +6,7 @@
 import type { Rarity } from "./card-rarity";
 import { editionStyle, type Edition } from "./card-edition";
 import { oklchToHex } from "./color";
-
-function reducedMotion() {
-  return (
-    typeof window !== "undefined" &&
-    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-  );
-}
+import { prefersReducedMotionNow } from "./motion";
 
 /**
  * A tier's colours, in the only notation canvas-confetti can read.
@@ -46,7 +40,7 @@ async function cannon() {
  * where the card is rather than the bottom of the screen where a cannon would be.
  */
 export async function burst(rarity: Rarity, strength = 1) {
-  if (reducedMotion()) return;
+  if (prefersReducedMotionNow()) return;
   const confetti = await cannon();
   confetti({
     particleCount: Math.round(26 * strength),
@@ -76,7 +70,7 @@ export async function burst(rarity: Rarity, strength = 1) {
  * the same rule the card's own frame follows.
  */
 export async function celebrate(rarity: Rarity, edition: Edition = "standard") {
-  if (reducedMotion()) return;
+  if (prefersReducedMotionNow()) return;
   const confetti = await cannon();
   const edn = editionStyle(edition);
   confetti({
@@ -96,7 +90,7 @@ export async function celebrate(rarity: Rarity, edition: Edition = "standard") {
  * version of somebody winning a race.
  */
 export async function celebrateSecret(rarity: Rarity) {
-  if (reducedMotion()) return;
+  if (prefersReducedMotionNow()) return;
   const confetti = await cannon();
   const colors = palette(rarity, ["#ffffff"]);
   const shot = (x: number, angle: number) =>
@@ -116,7 +110,7 @@ export async function celebrateSecret(rarity: Rarity) {
  * same reason everything else here goes through palette().
  */
 export async function celebrateUpgrade(accent: string) {
-  if (reducedMotion()) return;
+  if (prefersReducedMotionNow()) return;
   const confetti = await cannon();
   const colors = [oklchToHex(accent), "#ffffff"];
   const lift = (spread: number) =>
@@ -151,7 +145,7 @@ export async function celebrateUpgrade(accent: string) {
  * palette. `warn` is already the league's award colour on the player pages.
  */
 export async function celebrateCollection() {
-  if (reducedMotion()) return;
+  if (prefersReducedMotionNow()) return;
   const confetti = await cannon();
   // The amber the award pills and the streak flame already use, hex-ified for the
   // same reason everything else here goes through palette(): canvas-confetti

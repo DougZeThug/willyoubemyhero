@@ -392,8 +392,6 @@ export const SET_ACCENTS = [
   { id: "slate", label: "Slate", oklch: "oklch(0.72 0.03 250)" },
 ] as const;
 
-export type SetAccentId = (typeof SET_ACCENTS)[number]["id"];
-
 export const SET_ACCENT_IDS = SET_ACCENTS.map((a) => a.id) as readonly string[];
 
 /** The colour for a stored accent id, or null when there is no theme. */
@@ -429,8 +427,6 @@ export const SECRET_COLLECTIONS: readonly SecretCollection[] = [
   { id: "pets", label: "Pets" },
   { id: "legacyPets", label: "Legacy Pets" },
 ];
-
-export const SECRET_COLLECTION_IDS = SECRET_COLLECTIONS.map((c) => c.id) as readonly string[];
 
 /**
  * A set id an admin can create. Not an enum any more — the vocabulary lives in a

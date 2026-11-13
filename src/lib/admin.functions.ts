@@ -3,12 +3,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { hashPin, signAccountAdminToken, signAdminToken, timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
-
-// Ten tries per event per ten minutes. Wide enough for a fumbled garden unlock,
-// narrow enough that a short PIN stops being brute-forceable in an afternoon —
-// timingSafeEq defends the comparison, this defends the volume.
-const PIN_ATTEMPT_WINDOW_S = 600;
-const PIN_ATTEMPT_MAX = 10;
+import { activeEventId } from "./active-event.server";
+import { clearAuthAttempts, noteAuthAttempt } from "./auth-attempts.server";
 
 export const verifyEventPin = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
@@ -16,22 +12,9 @@ export const verifyEventPin = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Counted before anything is compared, and failing OPEN when the counter
-    // itself errors: a party locked out of its own console by a limiter hiccup
-    // is a worse evening than ten extra guesses. Keyed by event, so a stranger
-    // hammering the gate locks the gate rather than enumerating it — and the
-    // commissioner's account path (startAdminSessionFromAccount) stays open
+    // The commissioner's account path (startAdminSessionFromAccount) stays open
     // through a lockout regardless.
-    // note_auth_attempt / clear_auth_attempts are still unknown to the generated
-    // types, so this one call needs the widened client. See auth-attempts-db.server.ts.
-    const { authAttemptsDb } = await import("./auth-attempts-db.server");
-    const { data: allowed } = await authAttemptsDb().rpc("note_auth_attempt", {
-      _kind: "pin",
-      _key: data.eventId,
-      _window_seconds: PIN_ATTEMPT_WINDOW_S,
-      _max: PIN_ATTEMPT_MAX,
-    });
-    if (allowed === false) {
+    if (!(await noteAuthAttempt("pin", data.eventId))) {
       return { ok: false as const, reason: "too_many_attempts" as const };
     }
     const { data: secret, error } = await supabaseAdmin
@@ -46,8 +29,7 @@ export const verifyEventPin = createServerFn({ method: "POST" })
     if (!timingSafeEq(candidate, secret.pin_hash)) {
       return { ok: false as const, reason: "bad_pin" as const };
     }
-    // Success wipes the counter, so the next fumble starts from zero.
-    await authAttemptsDb().rpc("clear_auth_attempts", { _kind: "pin", _key: data.eventId });
+    await clearAuthAttempts("pin", data.eventId);
     const { token, expiresAt } = signAdminToken(secret.event_id);
     return { ok: true as const, token, expiresAt };
   });
@@ -75,16 +57,9 @@ export const startAdminSessionFromAccount = createServerFn({ method: "POST" })
     if (adminError) throw adminError;
     if (!admin) return { ok: false as const, reason: "not_admin" as const };
 
-    const { data: event, error: eventError } = await supabaseAdmin
-      .from("events")
-      .select("id")
-      .eq("active", true)
-      .order("year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (eventError) throw eventError;
-    if (!event) return { ok: false as const, reason: "event_not_found" as const };
+    const eventId = await activeEventId();
+    if (!eventId) return { ok: false as const, reason: "event_not_found" as const };
 
-    const { token, expiresAt } = signAccountAdminToken(context.userId, event.id);
+    const { token, expiresAt } = signAccountAdminToken(context.userId, eventId);
     return { ok: true as const, token, expiresAt };
   });

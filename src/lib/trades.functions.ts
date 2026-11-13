@@ -1,12 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
-import { signPath } from "./media.functions";
-import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
-import { leagueDay, TRADE_UNDO_WINDOW_SECONDS } from "./trades";
+import { leagueDay } from "./league-day";
+import { TRADE_UNDO_WINDOW_SECONDS } from "./trades";
 import type {
   BlockedSpare,
   SecretSpare,
@@ -15,7 +13,7 @@ import type {
   TradeOfferView,
   TradeSpares,
 } from "./trades";
-import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
+import type { SecretPullRow } from "./secret-cards-rows";
 import type {
   AcceptTradeOfferResult,
   CardCopyRow,
@@ -27,6 +25,11 @@ import type {
 } from "./trades-rows";
 import { uuid as zuuid } from "./zod-uuid";
 import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { activeEventId } from "./active-event.server";
+import { nudge } from "./send-nudge";
+import { secretFaces, viewerSecretCardIds } from "./secret-visibility.server";
+import { noStore } from "./no-store.server";
 
 /**
  * The Trading Post: moving a spare card from one member to another.
@@ -52,74 +55,6 @@ import { sqlNull } from "./rpc-null";
  * ids, which are only useful to somebody who already owns the row: every one of
  * them is checked against the giver by `trade_item_is_spare` inside the RPC.
  */
-
-/** Typed client, for tables the generated types already know about. */
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function db() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/**
- * The same client, widened, for the one RPC `types.ts` has not been regenerated
- * against yet. The escape hatch trades-rows.ts opens and market.functions.ts
- * takes in the same shape — dynamically, inside the handler, so the top-level
- * `client.server` import over there never reaches the bundle.
- */
-async function untypedDb() {
-  const { tradesDb } = await import("./trades-rows");
-  return tradesDb();
-}
-
-/**
- * Tell the other side something moved. Dynamic import for the same reason as the
- * two above: nudge.server.ts reaches for node:crypto, and a top-level import here
- * would drag it into the client bundle.
- *
- * Awaited, but it cannot fail — sendTradeNudge swallows everything and gives up
- * after two seconds. A trade must never fail because Realtime did.
- */
-async function nudge(participantId: string) {
-  try {
-    const { sendTradeNudge } = await import("./nudge.server");
-    await sendTradeNudge(participantId);
-  } catch {
-    // Belt and braces on top of sendTradeNudge already swallowing its own
-    // failures. This is the layer that holds if that ever stops being true, and
-    // it is what makes "a broken nudge does not break a trade" a fact rather
-    // than a promise about another module.
-  }
-}
-
-/**
- * These responses vary by the caller's token, and a shared cache hit would hand
- * one member another's inbox. Same reasoning as secret-cards.functions.ts.
- */
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
-
-/**
- * The active combine, resolved server-side rather than taken from the caller —
- * the `recordCardPulls` pattern. A payload event id here would be both spoofable
- * and, on a screen that renders before the event query answers, racy.
- */
-async function activeEventId(): Promise<string | null> {
-  const sb = await admin();
-  const { data } = await sb
-    .from("events")
-    .select("id")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data?.id ?? null;
-}
 
 const itemSchema = z.discriminatedUnion("kind", [
   // A COPY, not a card. Which of your three Alices you are handing over is the
@@ -162,47 +97,36 @@ async function hydrateSecrets(
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
 
-  const sb = await db();
-  // Names are public enough to judge an offer; the art is what stays hidden.
-  // We fetch every card referenced by rows the caller is already entitled to see,
-  // but only sign URLs for the ones they actually hold (or when concealment is
-  // off entirely). That keeps the catalogue enumeration protection intact while
-  // still letting a member read "Dragon, mythic" on a face-down tile.
-  const cardIds = [...new Set(rows.map((r) => r.secret_card_id))];
-  const { data: cards } = cardIds.length
-    ? await sb
-        .from("secret_cards")
-        .select("id, name, art_path, collection")
-        .in("id", cardIds)
-        .returns<Pick<SecretCardRow, "id" | "name" | "art_path" | "collection">[]>()
-    : { data: [] as Pick<SecretCardRow, "id" | "name" | "art_path" | "collection">[] };
-  const byId = new Map((cards ?? []).map((c) => [c.id, c]));
-
-  await Promise.all(
-    rows.map(async (row) => {
-      const owns = viewerCardIds.has(row.secret_card_id);
-      const shown = !concealUnowned || owns;
-      const card = byId.get(row.secret_card_id);
-      out.set(row.id, {
-        pullId: row.id,
-        // Gated on `shown` for the reason on the field: an id attached to a card
-        // whose name is being withheld is a handle for counting the catalogue.
-        cardId: shown ? row.secret_card_id : undefined,
-        // A retired card still trades; it just has no row left to name it.
-        name: card?.name ?? "Secret card",
-        // thumb rather than large: these are tiles in a picker, not the reveal.
-        artUrl: shown ? await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb) : null,
-        // Gated on `shown` for a weaker version of the reason `cardId` is: a set
-        // on a card whose name is being withheld sorts the unknowns into piles,
-        // and a pile of unknowns is a step towards counting them. The name is
-        // public enough to judge an offer by; which shelf it came off is not.
-        collection: shown ? (card?.collection ?? null) : null,
-        tier: toSecretTier(row.tier),
-        lastCopy: lastCopyIds.has(row.id),
-        viewerOwns: owns,
-      });
-    }),
+  // Names are public enough to judge an offer; the art is what stays hidden. Every
+  // card referenced by rows the caller is already entitled to see is named, but
+  // only the ones they actually hold (or all of them, when concealment is off)
+  // get art. That keeps the catalogue enumeration protection intact while still
+  // letting a member read "Dragon, mythic" on a face-down tile.
+  const faces = await secretFaces(
+    rows.map((r) => r.secret_card_id),
+    { shown: (id) => !concealUnowned || viewerCardIds.has(id), nameUnshown: true },
   );
+
+  for (const row of rows) {
+    const face = faces.get(row.secret_card_id)!;
+    const owns = viewerCardIds.has(row.secret_card_id);
+    out.set(row.id, {
+      pullId: row.id,
+      // Gated on being shown for the reason on the field: an id attached to a card
+      // whose name is being withheld is a handle for counting the catalogue.
+      cardId: !concealUnowned || owns ? row.secret_card_id : undefined,
+      name: face.name,
+      artUrl: face.artUrl,
+      // Gated like the art, for a weaker version of the reason `cardId` is: a set
+      // on a card whose name is being withheld sorts the unknowns into piles.
+      // The name is public enough to judge an offer by; which shelf it came off
+      // is not.
+      collection: face.collection,
+      tier: toSecretTier(row.tier),
+      lastCopy: lastCopyIds.has(row.id),
+      viewerOwns: owns,
+    });
+  }
   return out;
 }
 
@@ -217,22 +141,18 @@ async function hydrateSecrets(
 async function viewerHoldings(
   me: string,
 ): Promise<{ roster: ReadonlySet<string>; secrets: ReadonlySet<string> }> {
-  const sb = await db();
-  const [{ data: copies }, { data: pulls }] = await Promise.all([
+  const sb = await adminDb();
+  const [{ data: copies }, secrets] = await Promise.all([
     sb
       .from("card_copies")
       .select("event_participant_id")
       .eq("participant_id", me)
       .returns<Pick<CardCopyRow, "event_participant_id">[]>(),
-    sb
-      .from("secret_card_pulls")
-      .select("secret_card_id")
-      .eq("participant_id", me)
-      .returns<Pick<SecretPullRow, "secret_card_id">[]>(),
+    viewerSecretCardIds(me),
   ]);
   return {
     roster: new Set((copies ?? []).map((r) => r.event_participant_id)),
-    secrets: new Set((pulls ?? []).map((r) => r.secret_card_id)),
+    secrets,
   };
 }
 
@@ -271,7 +191,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     const eventId = await activeEventId();
     if (!eventId) return empty;
 
-    const sb = await admin();
+    const sb = await adminDb();
     // Constrain to this event's own cards first, exactly as getCardPullCounts and
     // getMyCardStats do, so this can never be used to enumerate another event.
     const { data: eps, error: epsError } = await sb
@@ -281,10 +201,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     if (epsError) throw epsError;
     const ids = (eps ?? []).map((r) => r.id);
 
-    const trades = await db();
     const [{ data: allCopies, error }, { data: dupes, error: dupeError }] = await Promise.all([
       ids.length
-        ? trades
+        ? sb
             .from("card_copies")
             // THE EDITION IS IN THIS RESPONSE, and that is a deliberate widening
             // rather than an oversight: you cannot choose which copy to hand over,
@@ -310,7 +229,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // give — unlike a roster card there is no public count riding on you keeping
       // one. Which means this query is also where `lastCopy` is worked out, so the
       // tile can say so before somebody hands away their only mythic.
-      trades
+      sb
         .from("secret_card_pulls")
         .select("id, secret_card_id, tier")
         .eq("participant_id", data.participantId)
@@ -428,7 +347,7 @@ async function toOfferViews(
 
   let hydrated = new Map<string, SecretSpare>();
   let byCopy = new Map<string, Pick<CardCopyRow, "id" | "event_participant_id" | "edition">>();
-  const sb = await db();
+  const sb = await adminDb();
 
   if (secretRows.length) {
     const { data: pulls } = await sb
@@ -581,7 +500,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
   }> => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
 
     // Handed out here rather than from a server function of its own. A member
     // cannot derive their own topic — it is HMAC'd with SESSION_SECRET — and this
@@ -714,7 +633,7 @@ export const createTradeOffer = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { data: result, error } = await sb.rpc("create_trade_offer", {
       _proposer_id: me,
@@ -743,7 +662,7 @@ export const acceptTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     // `_recipient_id` is the token holder. The RPC raises if it is not the offer's
     // recipient, which is what stops anyone accepting an offer aimed at somebody
@@ -787,7 +706,7 @@ export const declineTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { data: row, error } = await sb
       .from("trade_offers")
@@ -811,7 +730,7 @@ export const cancelTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await db();
+    const sb = await adminDb();
 
     const { data: row, error } = await sb
       .from("trade_offers")
@@ -843,7 +762,7 @@ export const reopenTradeOffer = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const sb = await untypedDb();
+    const sb = await adminDb();
 
     const { data: result, error } = await sb.rpc("reopen_trade_offer", {
       _offer_id: data.offerId,
@@ -874,7 +793,7 @@ const FEED_LIMIT = 25;
 export const getTradeFeed = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeFeedEntry[]> => {
-    const sb = await db();
+    const sb = await adminDb();
     const { data: rows, error } = await sb
       .from("trades")
       .select("id, proposer_id, recipient_id, proposer_gave, recipient_gave, executed_at")

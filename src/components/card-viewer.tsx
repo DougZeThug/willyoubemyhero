@@ -11,13 +11,12 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, NO_FLICK } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY } from "@/components/locked-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { CardRibbon } from "@/components/card-ribbon";
 import { LevelPips } from "@/components/level-pips";
 import { SetChip } from "@/components/set-chip";
-import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import {
   DropdownMenu,
@@ -25,8 +24,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useModalSurface } from "@/hooks/use-modal-surface";
-import { editionStyle, type Edition } from "@/lib/card-edition";
+import { useBodyScrollLock, useModalSurface } from "@/hooks/use-modal-surface";
+import type { Edition } from "@/lib/card-edition";
+import { TierScope } from "@/components/tier-scope";
 import { packedByLabel } from "@/lib/card-pulls";
 import { playFlip } from "@/lib/card-sfx";
 import { formatDay } from "@/lib/format";
@@ -184,17 +184,9 @@ export function CardViewer({
     return () => document.removeEventListener("keydown", onKey, true);
   }, [cards.length, index, menuOpen, onClose, onStep]);
 
-  // The page underneath is still scrollable, and on the details page it is a very
-  // long one: a drag over the card's margins would scroll the stats around behind
-  // the viewer. Restored rather than cleared, so whatever the body had before —
-  // including another surface's lock — is what it goes back to.
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  // The page underneath is still a very long one on the details page: a drag over
+  // the card's margins would scroll the stats around behind the viewer.
+  useBodyScrollLock();
 
   if (!card) return null;
 
@@ -212,6 +204,13 @@ export function CardViewer({
   const go = (dir: -1 | 1) => {
     if (cards.length < 2) return;
     onStep(stepIndex(index, cards.length, dir));
+  };
+
+  // The sound rides here rather than on HoloCard's own toggle: the zoom frame
+  // swallows the click, so on a full-size surface that toggle never fires.
+  const toggleFlip = () => {
+    playFlip();
+    setFlipped((f) => !f);
   };
 
   const menu: {
@@ -273,21 +272,17 @@ export function CardViewer({
   }
 
   return (
-    <div
+    // CardRibbon and the pips sit outside the details page's subtree here, so the
+    // viewer is a tier scope of its own.
+    <TierScope
       ref={holdSurface}
+      accent={tint.accent}
+      edition={edition}
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={locked ? `${card.name} — not packed yet` : card.name}
       data-testid="card-viewer"
-      // The two axes every tier-coloured child reads. CardRibbon and the pips sit
-      // outside the details page's subtree here, so the viewer sets them itself.
-      style={
-        {
-          "--tier": tint.accent,
-          "--edn": editionStyle(edition).accent,
-        } as React.CSSProperties
-      }
       className="fixed inset-0 z-50 outline-none"
     >
       {/* The shell gets out of the way: nav faded and inert, toasts and the
@@ -323,11 +318,7 @@ export function CardViewer({
             // there is no second layer contending for the same pointer.
             onVerticalSwipe={(dir) => (dir === 1 ? onClose() : onDetails?.())}
             onTap={() => {
-              if (locked) return;
-              // The zoom frame swallows the click, so HoloCard's own toggle — and
-              // the sound that rides on it — never fires on a full-size surface.
-              playFlip();
-              setFlipped((f) => !f);
+              if (!locked) toggleFlip();
             }}
             // Chevrons are implicit via the swipe (§6); the row keeps the zoom
             // controls and the position, which is the whole of what it is for.
@@ -352,7 +343,7 @@ export function CardViewer({
                     // under a pan would make the thing you are reading move.
                     interactive={!zoomed}
                     // The horizontal throw means "next card" here.
-                    flickToFlip={false}
+                    gestures={NO_FLICK}
                     backContent={card.back}
                   />
                 )}
@@ -383,10 +374,7 @@ export function CardViewer({
           </ViewerButton>
           <button
             type="button"
-            onClick={() => {
-              playFlip();
-              setFlipped((f) => !f);
-            }}
+            onClick={toggleFlip}
             disabled={locked}
             aria-pressed={flipped}
             className="inline-flex min-h-11 items-center justify-center gap-1.5 justify-self-center rounded-md border border-border-strong bg-background/70 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
@@ -447,7 +435,7 @@ export function CardViewer({
           </button>
         )}
       </div>
-    </div>
+    </TierScope>
   );
 }
 
@@ -457,7 +445,6 @@ export function CardViewer({
  * how many PEOPLE have found it. Never a denominator, never a set size.
  */
 function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> }) {
-  const sets = useSecretCollections();
   return (
     <>
       {card.flavour && (
@@ -477,7 +464,7 @@ function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> })
           the card is on its own, and "which page of the binder is this" was the
           one thing it stopped being able to answer. Still no size — a name is not
           a count. */}
-      <SetChip collection={card.collection} sets={sets} />
+      <SetChip collection={card.collection} />
       <span className="text-meta font-semibold text-muted-foreground">
         Pulled {formatDay(card.firstPulledOn)}
         {card.copies > 1 && (

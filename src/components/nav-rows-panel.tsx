@@ -1,8 +1,10 @@
+import { activeEventKey } from "@/lib/query-keys";
 import { useEffect, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { PanelBottom } from "lucide-react";
-import { toast } from "sonner";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -53,7 +55,7 @@ export function NavRowsPanel({
 }) {
   const qc = useQueryClient();
   const setFn = useServerFn(setNavHidden);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
 
   // Filtered to the ids this deploy knows, which is what stops the panel wedging
   // itself. navHidden and navTabs both tolerate an unknown id — a set written by
@@ -97,25 +99,20 @@ export function NavRowsPanel({
     ) {
       return;
     }
-    setBusy(true);
-    try {
+    await run("Could not change that", async () => {
       await setFn({ data: { eventId, hidden: [...draft] as NavRowId[] } });
       // The list rides on the active event, which is the query the bar reads and
       // the one this panel is seeded from — one key refreshes both.
-      await qc.invalidateQueries({ queryKey: ["active-event"] });
-      toast.success(`Nav saved — ${preview.length} row${preview.length === 1 ? "" : "s"}`);
-    } catch {
-      toast.error("Could not change that");
-    } finally {
-      setBusy(false);
-    }
+      await qc.invalidateQueries({ queryKey: activeEventKey() });
+      return `Nav saved — ${plural(preview.length, "row")}`;
+    });
   }
 
   return (
     <AdminSection
       icon={<PanelBottom className="h-4 w-4 shrink-0" />}
       title="Navigation"
-      meta={`${saved.length} row${saved.length === 1 ? "" : "s"}`}
+      meta={`${plural(saved.length, "row")}`}
     >
       <p className="text-sm text-muted-foreground">
         Which rows the nav carries — the phone&apos;s bottom bar and the header on a wide screen,

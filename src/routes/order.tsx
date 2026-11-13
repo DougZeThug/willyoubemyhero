@@ -1,3 +1,5 @@
+import { errorMessage } from "@/lib/errors";
+import { eventBundleKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +17,7 @@ import { recordRandomization, setRunningOrder } from "@/lib/admin-write.function
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { toast } from "sonner";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 
 export const Route = createFileRoute("/order")({
   head: () => ({
@@ -78,14 +81,14 @@ function OrderPage() {
       try {
         await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to shuffle");
+        toast.error(errorMessage(e, "Failed to shuffle"));
         return;
       }
 
       // Past here the order HAS changed, so this runs whatever happens next.
       // Not left to the realtime subscription: a reshuffle nobody can see is
       // worse than no reshuffle, and this is the screen everyone is looking at.
-      await qc.invalidateQueries({ queryKey: ["event-bundle", event.id] });
+      await qc.invalidateQueries({ queryKey: eventBundleKey(event.id) });
 
       try {
         await recordFn({
@@ -162,8 +165,8 @@ function OrderPage() {
           <CardContent className="p-0">
             {rows.length === 0 && (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                {failedTables.includes("event_participants")
-                  ? "Couldn't read the roster just now — retrying."
+                {feedReadError(failedTables).roster
+                  ? readFailedMessage("roster")
                   : "No roster yet. The commissioner sets the field."}
               </div>
             )}

@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 import {
   bestEdition,
   EDITION_BP_TOTAL,
-  EDITION_CLASS,
   EDITION_ORDER,
   EDITION_WEIGHTS_BP,
   editionCelebrates,
@@ -45,11 +44,9 @@ describe("the odds table", () => {
 });
 
 describe("editionStyle", () => {
-  it("returns a style for every edition, with the edition echoed back", () => {
+  it("keeps every edition's lift on the 0..1 scale", () => {
     for (const edition of EDITION_ORDER) {
       const style = editionStyle(edition);
-      expect(style.edition).toBe(edition);
-      expect(style.label).toBeTruthy();
       expect(style.lift).toBeGreaterThanOrEqual(0);
       expect(style.lift).toBeLessThanOrEqual(1);
     }
@@ -75,18 +72,6 @@ describe("editionStyle", () => {
     // never collide on one line and the qualifier bought nothing.
     expect(editionStyle("gold").label).toBe("Gold");
     expect(editionStyle("platinum").label).toBe("Platinum");
-  });
-});
-
-describe("EDITION_CLASS", () => {
-  it("names a class for every edition that renders a frame", () => {
-    // Drift between the map and the union shows up as an unstyled card, not a
-    // type error, and standard is the only rung that deliberately has none.
-    for (const edition of EDITION_ORDER) {
-      if (edition === "standard") expect(EDITION_CLASS[edition]).toBeUndefined();
-      else expect(EDITION_CLASS[edition]).toBeTruthy();
-    }
-    expect(Object.keys(EDITION_CLASS).sort()).toEqual([...EDITION_ORDER].sort());
   });
 });
 

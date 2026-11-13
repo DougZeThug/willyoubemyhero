@@ -24,6 +24,7 @@
 // branch, called at both ends, is the only thing standing in front of it.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
+import { MARKET_MAX_ACTIVE } from "../../src/lib/market";
 
 afterAll(closeDb);
 beforeEach(async () => {
@@ -417,7 +418,7 @@ describe("list_card_for_dust", () => {
     // Not an economic rule — the only shape of denial-of-service a marketplace of
     // thirteen people with no pagination has.
     const ids = await cardIds();
-    await holdCopies(IDS.alice, ids[0], 30);
+    await holdCopies(IDS.alice, ids[0], MARKET_MAX_ACTIVE + 10);
     const copies = await sql<{ id: string }>(
       "SELECT id FROM public.card_copies WHERE participant_id = $1",
       [IDS.alice],
@@ -434,7 +435,7 @@ describe("list_card_for_dust", () => {
     const [row] = await sql<{ n: number }>(
       "SELECT count(*)::int AS n FROM public.market_listings WHERE status = 'active'",
     );
-    expect(row.n).toBe(20);
+    expect(row.n).toBe(MARKET_MAX_ACTIVE);
   });
 
   it("lists any secret copy, including an only one", async () => {

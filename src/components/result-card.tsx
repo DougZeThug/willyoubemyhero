@@ -12,20 +12,7 @@ import {
   RESULT_W,
   shareResultLayout,
 } from "@/lib/share-result-layout";
-import type { ImageUrlSet } from "@/lib/media";
-
-export type ResultCardData = {
-  eventName: string;
-  eventYear?: number | null;
-  participantName: string;
-  fantasyTeam?: string | null;
-  photoUrl?: ImageUrlSet | string | null;
-  totalMs: number;
-  penaltyMs?: number;
-  rank?: number | null;
-  /** `id` is the split row's own, because a label is not unique: station names may repeat. */
-  splits: { id: string; label: string; ms: number }[];
-};
+import type { ResultCardData } from "@/lib/result-card-data";
 
 export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(function ResultCard(
   { data },

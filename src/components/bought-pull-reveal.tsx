@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion } from "motion/react";
 import { HoloCard } from "@/components/holo-card";
 import { RevealAmbience } from "@/components/reveal-ambience";
 import { SecretBackPanel } from "@/components/secret-back-panel";
-import { celebrateSecret } from "@/lib/card-confetti";
-import { cue, playReveal } from "@/lib/card-sfx";
-import { SECRET_CHIME, SECRET_DUPE_CHIME, secretFoil } from "@/lib/secret-cards";
+import { useSecretRevealTurn } from "@/components/secret-reveal-turn";
+import { secretFoil } from "@/lib/secret-cards";
 import { EASE_OUT } from "@/lib/motion";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTierStyle } from "@/lib/secret-rarity";
@@ -25,19 +24,6 @@ import type { ImageUrlSet } from "@/lib/media";
  * What it shares — the face-down beat, the ambience, the tap-to-read back — is
  * shared by composition instead.
  */
-const TURN_DELAY_MS = 260;
-
-/**
- * Read synchronously, same as the milestone reveal does it: the hook settles a
- * tick later, which is fine for a duration and useless to something deciding
- * whether to animate at all on its first frame.
- */
-function reducedNow(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 export function BoughtPullReveal({
   card,
@@ -55,33 +41,16 @@ export function BoughtPullReveal({
   universalBack?: ImageUrlSet | string | null;
   onDone: () => void;
 }) {
-  const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const rarity = secretFoil(card.foil, card.borderFx, card.tier);
-  const celebratedRef = useRef(false);
   const tier = secretTierStyle(card.tier);
+  const revealed = useSecretRevealTurn(duplicate, rarity);
 
   // A user-dismissed full-screen dialog has to own focus while it is open —
   // role="dialog" alone still lets Tab fall through to the nav behind the
   // overlay, which is painted and reachable. The shared hook also hands focus
   // back to whatever opened this.
   const surfaceRef = useModalSurface<HTMLDivElement>();
-
-  useEffect(() => {
-    if (celebratedRef.current) return;
-    celebratedRef.current = true;
-    cue("secretImpact");
-    playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
-    // A duplicate is still yours, but it does not get the cannon — the same rule
-    // the daily pull and the milestone reveal both keep.
-    if (!duplicate) void celebrateSecret(rarity);
-    if (reducedNow()) {
-      setRevealed(true);
-      return;
-    }
-    const t = setTimeout(() => setRevealed(true), TURN_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [duplicate, rarity]);
 
   return (
     <div

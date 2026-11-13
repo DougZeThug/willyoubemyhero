@@ -5,10 +5,54 @@
 // branch of every screen state at once. None of it needs React: it is a slot in
 // and a handful of facts out, so it lives here where a test can exhaust it.
 import type { Variants } from "motion/react";
-import type { StandSlot } from "@/components/pack-stand";
 import type { Edition } from "@/lib/card-edition";
-import { rarityStyle } from "@/lib/card-rarity";
-import { upgradeLabel } from "@/lib/pack-outcome";
+import { rarityStyle, type Rarity } from "@/lib/card-rarity";
+import type { PackSlot } from "@/lib/pack";
+import { upgradeLabel, type PackOutcome } from "@/lib/pack-outcome";
+
+export type StandParticipant = {
+  id: string;
+  participant_id: string;
+  running_order: number;
+  bib_number: number | null;
+  selected_draft_position: number | null;
+  participant?: { name?: string | null; trash_talk_quote?: string | null } | null;
+};
+
+/**
+ * One slot of the pack, resolved for the stand and the summary.
+ *
+ * The route builds these: it is the only thing that holds the roster bundle,
+ * the reconciled collection, the dust switch and the secrets query together,
+ * and every number here is a decision it has already made. The stand prints
+ * and never guesses — a slot missing a count gets no ribbon rather than NEW.
+ */
+export type StandSlot = {
+  slot: PackSlot;
+  /** The tier for a roster card; `secretFoil(...)` for a secret. */
+  rarity: Rarity;
+  /** The finish Postgres minted. Null is "not decided", never "standard". */
+  edition: Edition | null;
+  outcome: PackOutcome;
+  /**
+   * Copies held once this one lands, or null when nobody can say. What the ribbon
+   * prints: a fact about THIS pull, which a later sale or trade does not undo, so a
+   * duplicate is never shown as a first.
+   */
+  copies: number | null;
+  /**
+   * Copies held right now, or null when that is not known (or not worth asking, as
+   * for a roster card, whose recorded count is the one to use). What the sell
+   * dialog quotes as "you'll still have" and the receipt records — facts about
+   * the vault, which is where a sale and a trade move the number. Absent, `copies`
+   * is quoted instead; null stays unknown.
+   */
+  held?: number | null;
+  /** What a spare copy would fetch, or null for nothing to say. */
+  sellValue: number | null;
+  /** The roster row behind a roster slot. Null on a secret. */
+  ep: StandParticipant | null;
+};
 
 /** A roster card turns over at the house speed. */
 export const FLIP_MS = 500;

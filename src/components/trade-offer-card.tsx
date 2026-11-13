@@ -9,8 +9,15 @@ import { secretFoil } from "@/lib/secret-cards";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { LevelPips } from "@/components/level-pips";
 import { SetChip } from "@/components/set-chip";
-import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { offerStatusLabel, tradeItemName, tradeItemsLabel, type TradeItemView, type TradeOfferView } from "@/lib/trades"; // prettier-ignore
+import {
+  offerPerspective,
+  offerStatusLabel,
+  offerStatusTone,
+  tradeItemName,
+  tradeItemsLabel,
+  type TradeItemView,
+  type TradeOfferView,
+} from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
 /** Everything the card needs to turn an event_participant_id into a face. */
@@ -21,7 +28,7 @@ export type RosterCardLookup = (eventParticipantId: string) => {
   rarity: Rarity;
 };
 
-export type TradeItemTileProps = {
+type TradeItemTileProps = {
   item: TradeItemView;
   lookup: RosterCardLookup;
   /** Rendered as a control rather than a picture. */
@@ -70,7 +77,6 @@ export function TradeItemTile({
   concealed = false,
   backUrl = null,
 }: TradeItemTileProps) {
-  const sets = useSecretCollections();
   const width = TILE_WIDTH[size];
   const big = size === "lg";
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
@@ -143,9 +149,7 @@ export function TradeItemTile({
             scoped to the card's NAME. A set is a different fact: it says which
             shelf of yours has something missing from it, which is the one thing
             the whole feature withholds. So the tile gates it here as well. */}
-        {!concealed && item.kind === "secret" && (
-          <SetChip collection={item.collection} sets={sets} />
-        )}
+        {!concealed && item.kind === "secret" && <SetChip collection={item.collection} />}
         {/* Any secret copy is tradeable now, single or not, so this is the only
             thing standing between somebody and giving away their only mythic.
             A marker rather than a dialog: visible, not in the way. */}
@@ -252,19 +256,16 @@ function CardStrip({
  * it the first time either side gained a state.
  */
 function StatusChip({ offer }: { offer: TradeOfferView }) {
-  const pending = offer.status === "pending";
-  const accepted = offer.status === "accepted";
-  const rejected =
-    offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
+  const tone = offerStatusTone(offer.status);
   return (
     <span
       className={cn(
         "shrink-0 rounded-full border px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]",
-        pending
+        tone === "live"
           ? "border-primary/50 bg-primary/10 text-primary"
-          : accepted
+          : tone === "won"
             ? "border-success/50 bg-success/10 text-success"
-            : rejected
+            : tone === "dead"
               ? "border-destructive/50 bg-destructive/10 text-destructive"
               : "border-white/15 text-muted-foreground",
       )}
@@ -311,7 +312,7 @@ function Exchange({ pending }: { pending: boolean }) {
   );
 }
 
-export type TradeOfferCardProps = {
+type TradeOfferCardProps = {
   offer: TradeOfferView;
   /** The viewer's participant id, which decides which side reads as "you". */
   me: string;
@@ -353,14 +354,9 @@ export function TradeOfferCard({
   highlighted = false,
   collapsible = false,
 }: TradeOfferCardProps) {
-  const iAmProposer = offer.proposerId === me;
-  const theirId = iAmProposer ? offer.recipientId : offer.proposerId;
-  const iGive = iAmProposer ? offer.proposerGives : offer.recipientGives;
-  const iGet = iAmProposer ? offer.recipientGives : offer.proposerGives;
-  const pending = offer.status === "pending";
-  const accepted = offer.status === "accepted";
-  const rejected =
-    offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
+  const { iAmProposer, theirId, iGive, iGet } = offerPerspective(offer, me);
+  const tone = offerStatusTone(offer.status);
+  const pending = tone === "live";
 
   // A live offer is the loudest thing on the screen: ringed, big cards. A
   // settled one is a receipt.
@@ -405,7 +401,7 @@ export function TradeOfferCard({
         highlighted && "ring-2 ring-success",
         // The tighter padding a status outside the known five would have got
         // before, kept rather than quietly widened.
-        !pending && !accepted && !rejected && "p-3",
+        tone === "quiet" && "p-3",
       )}
     >
       <div className="mb-1 flex items-baseline justify-between gap-2">

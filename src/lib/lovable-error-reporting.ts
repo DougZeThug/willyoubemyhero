@@ -1,3 +1,5 @@
+import { errorMessage } from "@/lib/errors";
+
 type LovableErrorOptions = {
   mechanism?: "manual" | "onerror" | "unhandledrejection" | "react_error_boundary";
   handled?: boolean;
@@ -46,9 +48,7 @@ export function reportLovableError(error: unknown, context: Record<string, unkno
   const message =
     error instanceof Response
       ? `Response ${error.status}${error.url ? ` at ${error.url}` : ""}`
-      : error instanceof Error
-        ? error.message
-        : String(error);
+      : errorMessage(error, String(error));
   window.__lovableReportRuntimeError?.({
     message,
     stack: error instanceof Error ? error.stack : undefined,

@@ -233,6 +233,36 @@ export function offerStatusLabel(status: string): string {
 }
 
 /**
+ * What an offer's state means to the eye: live (pending), won (accepted), dead
+ * (declined, pulled or expired), quiet (anything the client does not know yet).
+ */
+export function offerStatusTone(status: string): "live" | "won" | "dead" | "quiet" {
+  if (status === "pending") return "live";
+  if (status === "accepted") return "won";
+  if (status === "declined" || status === "cancelled" || status === "voided") return "dead";
+  return "quiet";
+}
+
+/** One offer from `me`'s side of the table: who the other person is, what leaves, what arrives. */
+export function offerPerspective(offer: TradeOfferView, me: string) {
+  const iAmProposer = offer.proposerId === me;
+  return {
+    iAmProposer,
+    theirId: iAmProposer ? offer.recipientId : offer.proposerId,
+    iGive: iAmProposer ? offer.proposerGives : offer.recipientGives,
+    iGet: iAmProposer ? offer.recipientGives : offer.proposerGives,
+  };
+}
+
+/** The card's own name with no tier or finish in front, for a sentence that has no room for them. */
+export function tradeItemBareName(
+  item: { kind: "secret"; name: string } | { kind: "roster"; eventParticipantId: string },
+  rosterName: (eventParticipantId: string) => string,
+): string {
+  return item.kind === "secret" ? item.name : rosterName(item.eventParticipantId);
+}
+
+/**
  * How long a declined or pulled-back offer can still be put back.
  *
  * Twelve times the five seconds the toast is on screen, and the gap is slack
@@ -343,29 +373,6 @@ export function tradeSwapPrompt(args: {
   const mine = namesFit ? tradeItemName(give[0], rosterName) : tradeItemsLabel(give);
   const theirs = namesFit ? tradeItemName(get[0], rosterName) : tradeItemsLabel(get);
   return `Swap your ${mine} for ${theirName}'s ${theirs}?`;
-}
-
-/**
- * The league's timezone, which decides where a day ends.
- *
- * Duplicated from SQL rather than derived: every daily thing in this app — the
- * pack drop and the streak among them — bakes `America/New_York` into the
- * function body, precisely so a caller cannot shift the boundary. `leagueDay()`
- * exists so client code agrees with those RPCs about which day it is. A db test
- * pins the two together, the way card-edition.ts and secret-rarity.ts are pinned
- * to their SQL ladders.
- */
-export const LEAGUE_TIME_ZONE = "America/New_York";
-
-/** Today in the league's zone, as `YYYY-MM-DD` — the same text a `date` renders as. */
-export function leagueDay(at: Date = new Date()): string {
-  // en-CA formats as ISO-8601, which is the one locale that needs no reassembly.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: LEAGUE_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(at);
 }
 
 /**

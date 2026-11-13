@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { prefersReducedMotionNow } from "@/lib/motion";
 import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion, AnimatePresence } from "motion/react";
 import { formatTime } from "@/lib/format";
@@ -36,7 +37,7 @@ export function FinishCelebration({
   useEffect(() => {
     if (!name) return;
     let cancelled = false;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduce = prefersReducedMotionNow();
     if (!reduce) {
       import("canvas-confetti").then(({ default: confetti }) => {
         if (cancelled) return;

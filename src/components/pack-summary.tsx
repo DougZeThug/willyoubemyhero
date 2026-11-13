@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Check, Flame, PackageOpen, Share2 } from "lucide-react";
-import { HoloCard } from "@/components/holo-card";
+import { HoloCard, type HoloGestures } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
@@ -15,15 +15,26 @@ import { EASE_OUT } from "@/lib/motion";
 import { upgradeLabel } from "@/lib/pack-outcome";
 import { nextMilestoneLine, type Streak } from "@/lib/streaks";
 import { secretTierCaption, secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
-import type { StandSlot } from "@/components/pack-stand";
+import type { StandSlot } from "@/lib/stand-view";
 import { copiesAfterSale, nextPackLabel, packResetAt } from "@/lib/pack";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { urlFromSet } from "@/lib/media";
+import { StreakClaim } from "@/components/streak-claim";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { SellSpareDialog } from "@/components/sell-spare-dialog";
 import { cn } from "@/lib/utils";
+
+/**
+ * The row scrolls sideways now, and drag-tilt cannot share that axis with it. A
+ * tilting card sets `touch-action: pan-y`, which hands the browser the vertical
+ * pan and keeps the horizontal one for itself — so a thumb dragging across a card
+ * tilted it and the row underneath never moved. touch-action is read once at
+ * gesture start and is final, so there is no arrangement where both work.
+ * Scrolling wins: these are thumbnails in a scrolling row.
+ */
+const SCROLLING_ROW: HoloGestures = { touchTilt: false };
 
 /**
  * The box a pulled card's name sits in, link or not.
@@ -252,7 +263,7 @@ export function PackSummary({
                     backUrl={universalBack}
                     name={name}
                     rarity={rarity}
-                    touchTilt={false}
+                    gestures={SCROLLING_ROW}
                     backContent={<SecretBackPanel card={slot.card} rarity={rarity} />}
                   />
                 ) : (
@@ -262,15 +273,7 @@ export function PackSummary({
                     name={name}
                     rarity={rarity}
                     edition={edition ?? "standard"}
-                    // The row scrolls sideways now, and drag-tilt cannot share that
-                    // axis with it. A tilting card sets `touch-action: pan-y`, which
-                    // hands the browser the vertical pan and keeps the horizontal
-                    // one for itself — so a thumb dragging across a card tilted it
-                    // and the row underneath never moved. touch-action is read once
-                    // at gesture start and is final, so there is no arrangement
-                    // where both work. Scrolling wins: these are thumbnails in a
-                    // scrolling row, which is the case this prop exists for.
-                    touchTilt={false}
+                    gestures={SCROLLING_ROW}
                     backContent={
                       ep ? (
                         <CardBackPanel
@@ -469,41 +472,17 @@ export function PackSummary({
           )}
 
           {claimable ? (
-            canClaim ? (
-              <>
-                <button
-                  onClick={onClaim}
-                  disabled={claiming || offline}
-                  {...offlineReason(offline)}
-                  data-testid="streak-claim"
-                  className="neon-btn-sm disabled:opacity-55"
-                >
-                  {claiming ? "Opening…" : `Claim ${claimable.label}`}
-                </button>
-                {/* Never a toast, for the same reason the failed secret slot
-                    avoids one: it announces the reward to whoever is glancing at
-                    the phone over your shoulder. */}
-                {claimError && (
-                  <span className="text-meta leading-snug text-muted-foreground">{claimError}</span>
-                )}
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/auth"
-                  search={{ mode: "signup", next: "/players/pack" }}
-                  className="neon-btn-sm"
-                >
-                  Sign in to claim
-                </Link>
-                {/* Deliberately not "claim your player": thirteen people are on
-                    the roster and everyone else is here to watch. An account is
-                    something anybody can have, and it is what keeps the card. */}
-                <span className="text-meta leading-snug text-muted-foreground">
-                  {claimable.label} is waiting. An account keeps it on every phone you play from.
-                </span>
-              </>
-            )
+            <StreakClaim
+              claimable={claimable}
+              canClaim={canClaim}
+              claiming={claiming}
+              error={claimError}
+              offline={offline}
+              onClaim={onClaim}
+              testId="streak-claim"
+              next="/players/pack"
+              waitingNote=" An account keeps it on every phone you play from."
+            />
           ) : (
             <>
               <span className="text-meta leading-snug text-muted-foreground">

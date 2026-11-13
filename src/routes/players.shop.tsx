@@ -1,10 +1,10 @@
+import { claimRosterKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMemberSession } from "@/lib/member-token";
-import { useSecretActor } from "@/hooks/use-daily-secret";
 import { useDustBalance } from "@/hooks/use-dust";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMarketListings } from "@/hooks/use-market";
@@ -52,7 +52,6 @@ function ShopPage() {
   const { event, bundle, loading, error, realtimeDegraded, refetch } = useEventBundle();
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
-  const actor = useSecretActor();
   const dustOn = dustLive(event);
   // Same gate the vault's chip uses: no balance to ask for while the economy is
   // off, and none to ask for on behalf of somebody with no name yet.
@@ -82,7 +81,7 @@ function ShopPage() {
   // two-source lookup the Trading Post builds.
   const rosterFn = useServerFn(getClaimRoster);
   const roster = useQuery({
-    queryKey: ["claim-roster"],
+    queryKey: claimRosterKey(),
     queryFn: () => rosterFn(),
     staleTime: 5 * 60_000,
     // Not gated on the switch: the stall still renders while dust is off, and a
@@ -184,7 +183,6 @@ function ShopPage() {
                 <MarketPanel
                   balance={dust.data?.balance}
                   participantId={participantId}
-                  actor={actor}
                   eventId={event?.id ?? null}
                   nameFor={nameFor}
                   nameOf={nameOf}
@@ -213,7 +211,6 @@ function ShopPage() {
             <MarketPanel
               balance={dust.data?.balance}
               participantId={participantId}
-              actor={actor}
               eventId={event?.id ?? null}
               nameFor={nameFor}
               nameOf={nameOf}
@@ -248,7 +245,6 @@ function ShopPage() {
             <DustShopPanel
               balance={dust.data?.balance}
               participantId={participantId}
-              actor={actor}
               eventId={event?.id ?? null}
               nameFor={nameFor}
               backUrl={cardBack.data?.urls ?? null}

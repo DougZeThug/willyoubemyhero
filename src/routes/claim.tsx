@@ -1,3 +1,5 @@
+import { errorMessage } from "@/lib/errors";
+import { claimRosterKey } from "@/lib/query-keys";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,16 +9,9 @@ import { BadgeCheck, LogOut, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { claimPlayer, getClaimRoster } from "@/lib/member.functions";
 import { linkClaimedPlayer } from "@/lib/account.functions";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
-import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
-import {
-  adoptableIds,
-  adoptLocalCollection,
-  holdForAdoption,
-  releaseAdoptionHold,
-  snapshotLocalCollection,
-} from "@/lib/adopt-collection";
-import { carryPackToIdentity } from "@/lib/card-collection";
-import { carryTrophySeen } from "@/lib/trophy-seen";
+import { clearMemberToken, useMemberSession } from "@/lib/member-token";
+import { snapshotLocalCollection } from "@/lib/adopt-collection";
+import { becomeMember } from "@/lib/become-member";
 import { deviceId } from "@/lib/device-id";
 import { FeedError } from "@/components/feed-state";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,7 +44,7 @@ function ClaimPage() {
   const qc = useQueryClient();
 
   const roster = useQuery({
-    queryKey: ["claim-roster"],
+    queryKey: claimRosterKey(),
     queryFn: () => rosterFn(),
     staleTime: 60_000,
   });
@@ -89,70 +84,19 @@ function ClaimPage() {
         setCode("");
         return;
       }
-      const device = deviceId();
-      // THE CEREMONIES GO ACROSS BEFORE THE TOKEN, and that ordering is the whole
-      // point of this line. `claim_guest_secrets` has already banked the trophy
-      // by now, and `setMemberToken` below is what hands the root ceremony host a
-      // participant id — so between the two, the realtime INSERT can invalidate
-      // and refetch, find `<participantId>:<set>` unmarked, and queue a ceremony
-      // the pack screen already threw during the guest phase. It then marks it
-      // celebrated, so the duplicate cannot be taken back.
-      //
-      // This used to sit below the adoption, two awaited round trips away, where
-      // it narrowed that window rather than closing it. Nothing here needs the
-      // network: it is a localStorage re-file of `d:<deviceId>:<set>` keys onto
-      // `<participantId>:<set>`, so it can simply happen first. It is also
-      // idempotent, which is what makes running it before a claim that might
-      // still roll back harmless — the guest genuinely saw that ceremony, so
-      // suppressing it on a later re-claim is the right answer anyway.
-      //
-      // The pack row does NOT come with it. See below: that carry has to wait.
-      if (device) carryTrophySeen(`d:${device}`, selected);
-      // The token has to land first — `adoptCollection` authenticates as the
-      // member it is filing cards for. But the moment it lands, the collection
-      // hook starts reconciling this device against a server record that has
-      // never heard of these guest cards, and an empty `card_pulls` reads as
-      // "you own nothing" rather than "we don't know", so it deletes them. So if
-      // adoption does not stick, the token comes straight back off: no member,
-      // no reconciliation, nothing pruned, and the code still works next time.
-      //
-      // The rule above holds for this tab. A vault open in ANOTHER tab of this
-      // profile hears the token through `storage` and reconciles on its own clock,
-      // so the cards are filed as owed-to-this-member first: the one thing every
-      // reconcile already honours, written before the token that wakes it.
-      await holdForAdoption(selected, held);
-      setMemberToken(res.token, res.name);
-      try {
-        await adoptLocalCollection(held);
-      } catch {
-        try {
-          // One retry, because the usual failure here is a flaky first request
-          // from a phone that has just woken up on garden wifi.
-          await adoptLocalCollection(held);
-        } catch {
-          clearMemberToken();
-          await releaseAdoptionHold(selected, held);
-          toast.error(
-            "Claimed, but your cards couldn't be transferred — your code still works, try again on a better connection.",
-          );
-          return;
-        }
-      }
-      // Not awaited: it waits on a refetch, and a phone on garden wifi should not
-      // sit on this screen for it. If the refetch fails the hold simply stays.
-      void releaseAdoptionHold(selected, held, qc).catch(() => {
-        // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+      const became = await becomeMember({
+        participantId: selected,
+        token: res.token,
+        name: res.name,
+        held,
+        device: deviceId(),
+        qc,
       });
-      // Their guest pack follows them across, now that the cards themselves have.
-      // It is keyed on the identity `usePackIdentity` hands out, and a claim moves
-      // that from `d:<deviceId>` to `m:<participantId>` — which every screen keyed
-      // on it reads as the handset changing hands. See B-07.
-      //
-      // AFTER the adoption, unlike the trophy carry above, because the adoption is
-      // what makes carrying the pack safe: it is the record for these cards, so the
-      // member must not file them a second time.
-      if (device) {
-        await carryPackToIdentity(`d:${device}`, `m:${selected}`, adoptableIds(held));
+      if (became.status === "failed") {
+        toast.error(
+          "Claimed, but your cards couldn't be transferred — your code still works, try again on a better connection.",
+        );
+        return;
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity. A THROW here
@@ -183,7 +127,7 @@ function ClaimPage() {
       toast.success(`Welcome, ${res.name}`);
       navigate({ to: "/players" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not claim");
+      toast.error(errorMessage(err, "Could not claim"));
     } finally {
       setBusy(false);
     }
@@ -234,7 +178,7 @@ function ClaimPage() {
                         user ? "Signed out of your account" : "Signed out on this device",
                       );
                     } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Could not sign out");
+                      toast.error(errorMessage(e, "Could not sign out"));
                     } finally {
                       setSigningOut(false);
                     }

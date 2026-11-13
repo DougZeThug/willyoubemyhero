@@ -1,9 +1,7 @@
+import { mySecretsKey, packStatusKey, streakHistoryKey, streakStatusKey } from "@/lib/query-keys";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { packStatusKey } from "@/hooks/use-pack-status";
-import { streakHistoryKey, streakStatusKey } from "@/hooks/use-streak";
 import { claimStreakMilestone, type StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { StreakStatus } from "@/lib/streaks.functions";
 import { streakMilestone } from "@/lib/streaks";

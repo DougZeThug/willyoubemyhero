@@ -7,7 +7,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { resetIndexedDB } from "@/test/idb";
-import { PACK_DEALT_KEY, PACK_STATE_CHANGED, todayKey } from "@/lib/card-collection";
+import { leagueDay } from "@/lib/league-day";
+import { PACK_STATE_CHANGED } from "@/lib/card-collection";
+import { STORAGE_KEYS } from "@/lib/storage-keys";
 
 const DEVICE = "test-device";
 
@@ -83,7 +85,7 @@ describe("usePackProgress", () => {
     // guessed "sealed" here would paint "Open today's pack" over a pack somebody
     // is halfway through, then swap the label under their thumb.
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [0],
       cursor: 1,
@@ -102,7 +104,7 @@ describe("usePackProgress", () => {
 
   it("is torn, with a count, while cards are still face-down", async () => {
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [0],
       cursor: 1,
@@ -115,7 +117,7 @@ describe("usePackProgress", () => {
 
   it("counts a secret slot like any other card still face-down", async () => {
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b"],
       cards: [
         { kind: "roster", id: "a" },
@@ -135,7 +137,7 @@ describe("usePackProgress", () => {
     // No `cards`: the old client wrote it, and it is not today's pack. The pack
     // screen asks the server, which resumes or deals over it.
     await seedSilently({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       cards: undefined,
       revealed: [0, 1, 2],
@@ -148,7 +150,7 @@ describe("usePackProgress", () => {
 
   it("is done once the whole pack is turned", async () => {
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [0, 1, 2],
       cursor: 3,
@@ -172,7 +174,7 @@ describe("usePackProgress", () => {
 
   it("does not resume the pack of whoever held the phone before", async () => {
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [0],
       cursor: 1,
@@ -188,7 +190,7 @@ describe("usePackProgress", () => {
     const { result } = await mountHook();
     await waitFor(() => expect(result.current.state).toBe("sealed"));
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [],
       cursor: 0,
@@ -206,14 +208,14 @@ describe("usePackProgress", () => {
     const { result } = await mountHook();
     await waitFor(() => expect(result.current.state).toBe("sealed"));
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b"],
       revealed: [],
       cursor: 0,
       identity: `d:${DEVICE}`,
     });
     act(() => {
-      window.dispatchEvent(new StorageEvent("storage", { key: PACK_DEALT_KEY }));
+      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEYS.packDealt }));
     });
     await waitFor(() => expect(result.current.state).toBe("torn"));
   });
@@ -223,7 +225,7 @@ describe("usePackProgress", () => {
     // phone suspends timers, and the timer that mattered was always set for
     // exactly the moment the screen was off.
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const today = todayKey();
+    const today = leagueDay();
     await seed({
       dayKey: today,
       ids: ["a", "b", "c"],
@@ -248,7 +250,7 @@ describe("usePackProgress", () => {
     // design. Without this, a vault left open beside the pack shows the count it
     // had when the pack was torn for the rest of the day.
     await seed({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [0],
       cursor: 1,
@@ -261,7 +263,7 @@ describe("usePackProgress", () => {
     // IndexedDB, because writing through savePackState would announce it on the
     // very listener this test exists to prove is not the one doing the work.
     await seedSilently({
-      dayKey: todayKey(),
+      dayKey: leagueDay(),
       ids: ["a", "b", "c"],
       revealed: [0, 1, 2],
       cursor: 3,

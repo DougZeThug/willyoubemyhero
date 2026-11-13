@@ -104,7 +104,6 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
     finished_at: "2026-07-28T12:01:00.000Z",
     raw_time_ms: 60_000,
   },
-  deleteRun: { eventId: EVENT_ID, runId: RUN_ID },
   recordDraftSelection: {
     eventId: EVENT_ID,
     participantId: PARTICIPANT_ID,
@@ -480,7 +479,7 @@ describe("saveCompletedRun", () => {
       "runs.select": { count: 0 },
       "runs.upsert": { data: null, error: { message: "conflict" } },
     });
-    await expect(save(base)).rejects.toBeTruthy();
+    await expect(save(base)).rejects.toMatchObject({ message: "conflict" });
   });
 
   it("rejects a negative time", async () => {
@@ -562,7 +561,7 @@ describe("draft selections", () => {
 });
 
 describe("setRunningOrder", () => {
-  it("writes one update per row", async () => {
+  it("gives every named row its new running order, scoped to the event", async () => {
     const { setRunningOrder } = await import("./admin-write.functions");
     await callServerFn(setRunningOrder, {
       data: {
@@ -574,7 +573,17 @@ describe("setRunningOrder", () => {
       },
       headers: asAdmin(),
     });
-    expect(mock.callsFor("event_participants", "update")).toHaveLength(2);
+    const written = mock.callsFor("event_participants", "update").map((call) => ({
+      id: mock.eqValue(call, "id"),
+      event: mock.eqValue(call, "event_id"),
+      order: (call.payload as { running_order: number }).running_order,
+    }));
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { id: EVENT_PARTICIPANT_ID, event: EVENT_ID, order: 2 },
+        { id: STATION_ID, event: EVENT_ID, order: 1 },
+      ]),
+    );
   });
 
   it("accepts an empty reorder", async () => {
@@ -656,13 +665,8 @@ describe("updateEvent", () => {
  */
 describe("an admin token is only good for its own event", () => {
   it("scopes every roster and station write to the authorized event", async () => {
-    const {
-      setParticipantStatus,
-      removeParticipantFromEvent,
-      upsertStation,
-      deleteStation,
-      deleteRun,
-    } = await import("./admin-write.functions");
+    const { setParticipantStatus, removeParticipantFromEvent, upsertStation, deleteStation } =
+      await import("./admin-write.functions");
 
     await callServerFn(setParticipantStatus, {
       data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "finished" },
@@ -694,13 +698,6 @@ describe("an admin token is only good for its own event", () => {
       headers: asAdmin(),
     });
     expect(mock.eqValue(mock.callsFor("stations", "delete")[0], "event_id")).toBe(EVENT_ID);
-
-    withDb();
-    await callServerFn(deleteRun, {
-      data: { eventId: EVENT_ID, runId: RUN_ID },
-      headers: asAdmin(),
-    });
-    expect(mock.eqValue(mock.callsFor("runs", "delete")[0], "event_id")).toBe(EVENT_ID);
   });
 
   it("refuses a status change for somebody outside the event", async () => {
@@ -786,14 +783,6 @@ describe("an admin token is only good for its own event", () => {
         data: { eventId: EVENT_ID, id: STATION_ID },
         headers: asAdmin(),
       }),
-    ).rejects.toThrow("not part of this event");
-  });
-
-  it("refuses to delete a run belonging to another event", async () => {
-    withDb({ "runs.delete": { data: [] } });
-    const { deleteRun } = await import("./admin-write.functions");
-    await expect(
-      callServerFn(deleteRun, { data: { eventId: EVENT_ID, runId: RUN_ID }, headers: asAdmin() }),
     ).rejects.toThrow("not part of this event");
   });
 
