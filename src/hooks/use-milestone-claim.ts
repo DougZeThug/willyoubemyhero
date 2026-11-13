@@ -1,4 +1,4 @@
-import { mySecretsKey, packStatusKey, streakHistoryKey, streakStatusKey } from "./query-keys";
+import { mySecretsKey, packStatusKey, streakHistoryKey, streakStatusKey } from "@/lib/query-keys";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

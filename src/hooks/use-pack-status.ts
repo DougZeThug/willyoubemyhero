@@ -1,4 +1,4 @@
-import { packStatusKey } from "./query-keys";
+import { packStatusKey } from "@/lib/query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getPackStatus } from "@/lib/pack.functions";

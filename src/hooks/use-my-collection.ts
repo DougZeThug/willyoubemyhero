@@ -1,6 +1,6 @@
 import { useMemberQuery } from "./use-member-query";
 import { usePackSignals } from "./use-pack-signals";
-import { myCardStatsKey } from "./query-keys";
+import { myCardStatsKey } from "@/lib/query-keys";
 import { memberIdentity, memberIdentityOrNull } from "@/lib/identity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";

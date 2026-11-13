@@ -1,5 +1,5 @@
 import { signedUrlSnapshotKey } from "@/lib/storage-keys";
-import { eventCardBackKey, signedUrlsKey, type SignedUrlKind } from "./query-keys";
+import { eventCardBackKey, signedUrlsKey, type SignedUrlKind } from "@/lib/query-keys";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

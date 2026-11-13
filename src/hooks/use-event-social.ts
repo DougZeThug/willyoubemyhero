@@ -1,4 +1,4 @@
-import { activeEventKey, eventAwardsKey, eventSocialKey } from "./query-keys";
+import { activeEventKey, eventAwardsKey, eventSocialKey } from "@/lib/query-keys";
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

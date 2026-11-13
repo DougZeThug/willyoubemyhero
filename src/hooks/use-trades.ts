@@ -1,5 +1,10 @@
 import { useMemberQuery } from "./use-member-query";
-import { invalidateCardsMoved, tradeFeedKey, tradeOffersKey, tradeSparesKey } from "./query-keys";
+import {
+  invalidateCardsMoved,
+  tradeFeedKey,
+  tradeOffersKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
 import { memberIdentityOrNull } from "@/lib/identity";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

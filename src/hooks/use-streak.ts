@@ -1,5 +1,5 @@
 import { useMemberQuery } from "./use-member-query";
-import { streakStatusKey } from "./query-keys";
+import { streakStatusKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getStreakStatus, type StreakStatus } from "@/lib/streaks.functions";
 

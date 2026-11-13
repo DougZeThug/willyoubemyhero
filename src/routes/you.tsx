@@ -1,4 +1,4 @@
-import { streakHistoryKey } from "@/hooks/query-keys";
+import { streakHistoryKey } from "@/lib/query-keys";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";

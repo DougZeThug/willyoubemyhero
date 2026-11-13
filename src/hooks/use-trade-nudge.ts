@@ -6,7 +6,7 @@ import {
   marketListingsKey,
   myStallKey,
   tradeOffersKey,
-} from "./query-keys";
+} from "@/lib/query-keys";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { subscribeToNudges } from "@/lib/nudge-channel";

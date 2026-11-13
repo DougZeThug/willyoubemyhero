@@ -22,7 +22,7 @@ import {
   myStallKey,
   packStatusKey,
   tradeSparesKey,
-} from "@/hooks/query-keys";
+} from "@/lib/query-keys";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

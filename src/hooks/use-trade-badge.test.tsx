@@ -4,7 +4,7 @@
 // dot counts only what is pointed AT you, that reading the inbox clears it without
 // the stored set growing for the life of the app, and that a browser refusing to
 // store still clears it for the page load.
-import { dustSparesKey, tradeSparesKey } from "./query-keys";
+import { dustSparesKey, tradeSparesKey } from "@/lib/query-keys";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";

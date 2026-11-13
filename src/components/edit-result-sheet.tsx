@@ -9,7 +9,7 @@
  * sheet sends the complete intended set of splits and penalties, so clearing a
  * station's field deletes that split.
  */
-import { eventBundleKey } from "@/hooks/query-keys";
+import { eventBundleKey } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

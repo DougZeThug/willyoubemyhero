@@ -1,25 +1,12 @@
-import { deviceIdentity, memberIdentity } from "@/lib/identity";
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { browserSupabase } from "@/lib/browser-supabase";
 import { syncAccountSession } from "@/lib/account.functions";
-import {
-  setMemberToken,
-  clearMemberToken,
-  getMemberToken,
-  memberTokenParticipant,
-} from "@/lib/member-token";
+import { clearMemberToken, getMemberToken, memberTokenParticipant } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
-import {
-  adoptableIds,
-  adoptLocalCollection,
-  holdForAdoption,
-  releaseAdoptionHold,
-  snapshotLocalCollection,
-} from "@/lib/adopt-collection";
-import { carryPackToIdentity } from "@/lib/card-collection";
-import { carryTrophySeen } from "@/lib/trophy-seen";
+import { snapshotLocalCollection } from "@/lib/adopt-collection";
+import { becomeMember } from "@/lib/become-member";
 import { deviceId } from "@/lib/device-id";
 import { clearAccountHandoff } from "@/lib/account-handoff";
 import { bindAdminTokenTo } from "@/lib/admin-token";
@@ -170,76 +157,33 @@ export function useAccountSync(user: User | null) {
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
-        const carryFrom = deviceId();
-        // BEFORE the token, for the reason claim.tsx spells out at length: the
-        // token is what gives the root ceremony host a participant id, and the
-        // trophy row is already banked by the time this function runs. Left until
-        // after the adoption, the realtime refetch could get there first and
-        // replay a ceremony this device has already thrown as a guest.
+        // The token this run wrote, so the cleanup can take back exactly that one.
+        // Every await inside is a moment the account can change under this sync:
+        // once it has, a stale rejection must not clear the member token the newer
+        // run just wrote, and a stale success must not clear its guest token.
         //
-        // No `getMemberToken() === wrote` gate, unlike the pack carry below. That
-        // gate is about not rewriting a pack row for an account already switched
-        // away from; re-filing seen-keys is idempotent and costs nothing if the
-        // run turns out to be stale.
-        if (carryFrom) carryTrophySeen(deviceIdentity(carryFrom), res.id);
-        // Held first for the tabs this one cannot see: see claim.tsx. After the
-        // snapshot, before the token that wakes them.
-        await holdForAdoption(res.id, held);
-        if (cancelled) {
-          // No token went on, so nothing is reconciling and nothing needs holding.
-          await releaseAdoptionHold(res.id, held);
-          return;
-        }
-        setMemberToken(res.token, res.name ?? "Player");
+        // The pack carry is gated on that token still being the one on the device,
+        // strictly stronger than `cancelled` (which flips on unmount too and says
+        // nothing about which identity localStorage holds). By participant: a
+        // renewal landing mid-sync swaps the string for the same person, and must
+        // not cost them their pack.
         wrote = res.token;
-        // Every await below is a moment the account can change under this sync.
-        // Once it has, the tokens belong to the new user's run: a stale rejection
-        // must not clear the member token that run just wrote, and a stale
-        // success must not clear its guest token. Hence the checks after each.
-        try {
-          await adoptLocalCollection(held);
-        } catch {
-          if (cancelled) return;
-          try {
-            // One retry, because the usual failure here is a flaky first request
-            // from a phone that has just woken up on garden wifi.
-            await adoptLocalCollection(held);
-          } catch (e) {
-            if (cancelled) return;
-            // The claim screen's rule, which this path used to skip: if the
-            // upload does not stick, the token comes straight back off. No
-            // member, no reconciliation, nothing pruned — and the throw hands
-            // the whole sync to the retry loop below, so a later attempt gets
-            // the same snapshot rather than a store the prune has been through.
-            clearMemberToken();
-            await releaseAdoptionHold(res.id, held);
-            throw e;
-          }
-        }
-        if (cancelled) return;
-        // Not awaited: it waits on a refetch. If that fails the hold stays.
-        void releaseAdoptionHold(res.id, held, qc).catch(() => {
-          // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+        const became = await becomeMember({
+          participantId: res.id,
+          token: res.token,
+          name: res.name ?? "Player",
+          held,
+          device: deviceId(),
+          qc,
+          isCurrent: () => !cancelled,
+          mayCarryPack: () =>
+            memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote),
         });
-        // The claim screen's move — a sign-in is the other way a guest becomes a
-        // member, and B-07 does not care which door was used.
-        //
-        // Gated on the token this run actually wrote still being the one on the
-        // device, which is the same compare-and-clear the cleanup below makes and
-        // strictly stronger than `cancelled`: that flips on unmount too, and says
-        // nothing about which identity localStorage holds by now. A pack rewritten
-        // to an account that has already been switched away from cannot be carried
-        // again, and the next run would deal a second one. By participant, as
-        // the cleanup compares: a renewal landing mid-sync swaps the string for
-        // the same person, and must not cost them their pack.
-        const device = deviceId();
-        if (device && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
-          await carryPackToIdentity(
-            deviceIdentity(device),
-            memberIdentity(res.id),
-            adoptableIds(held),
-          );
-        }
+        if (became.status === "stale") return;
+        // The throw hands the whole sync to the retry loop below, so a later
+        // attempt gets the same snapshot rather than a store the prune has been
+        // through.
+        if (became.status === "failed") throw became.error;
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.
         clearGuestToken();

@@ -34,6 +34,8 @@ export const cardPullCountsKey = (eventId: string | null | undefined) =>
 export const myCardStatsKey = (eventId: string | null | undefined, participantId?: string | null) =>
   ["my-card-stats", eventId, participantId ?? null] as const;
 
+/** Every cached stats answer, whatever event or member. */
+export const myCardStatsPrefix = () => ["my-card-stats"] as const;
 export const collectionTrophiesKey = () => ["collection-trophies"] as const;
 
 /**

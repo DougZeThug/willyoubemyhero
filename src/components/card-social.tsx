@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from "@/lib/storage-keys";
-import { eventSocialKey } from "@/hooks/query-keys";
+import { eventSocialKey } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

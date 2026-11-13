@@ -1,4 +1,4 @@
-import { activeEventKey } from "./query-keys";
+import { activeEventKey } from "@/lib/query-keys";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getActiveEvent } from "@/lib/event.functions";

@@ -9,7 +9,7 @@
 //
 // Its own file because it needs the open to SUCCEED and an identity that can be
 // either, where players.pack.claim-reject.test.tsx needs it refused.
-import { dustSparesKey, tradeSparesKey } from "@/hooks/query-keys";
+import { dustSparesKey, tradeSparesKey } from "@/lib/query-keys";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";

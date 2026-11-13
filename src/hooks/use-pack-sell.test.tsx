@@ -5,7 +5,7 @@
 // refusal comes back as a line rather than a throw, and that a sale refreshes
 // exactly what the dust shop refreshes — keyed on the actor where those caches
 // are keyed on the actor.
-import { dustBalanceKey, mySecretsKey, packStatusKey, tradeSparesKey } from "./query-keys";
+import { dustBalanceKey, mySecretsKey, packStatusKey, tradeSparesKey } from "@/lib/query-keys";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";

@@ -1,5 +1,5 @@
 import { useMemberQuery } from "./use-member-query";
-import { dustBalanceKey } from "./query-keys";
+import { dustBalanceKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getDustBalance } from "@/lib/dust.functions";
 

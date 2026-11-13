@@ -7,7 +7,7 @@ import {
   packStatusKey,
   streakStatusKey,
   tradeSparesKey,
-} from "@/hooks/query-keys";
+} from "@/lib/query-keys";
 import { deviceIdentity, isMemberIdentity } from "@/lib/identity";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

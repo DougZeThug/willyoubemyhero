@@ -1,4 +1,4 @@
-import { eventBundleKey } from "@/hooks/query-keys";
+import { eventBundleKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";

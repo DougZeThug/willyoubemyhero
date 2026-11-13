@@ -6,7 +6,7 @@ import {
   mySecretsKey,
   packStatusKey,
   tradeSparesKey,
-} from "@/hooks/query-keys";
+} from "@/lib/query-keys";
 import { useId, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

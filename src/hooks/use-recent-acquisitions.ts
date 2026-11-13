@@ -1,5 +1,5 @@
 import { useMemberQuery } from "./use-member-query";
-import { recentAcquisitionsKey } from "./query-keys";
+import { recentAcquisitionsKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecentAcquisitions, type RecentAcquisitions } from "@/lib/acquisitions.functions";
 import { useMemberSession } from "@/lib/member-token";

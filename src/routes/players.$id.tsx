@@ -1,4 +1,4 @@
-import { cardUrlsKey } from "@/hooks/query-keys";
+import { cardUrlsKey } from "@/lib/query-keys";
 import {
   createFileRoute,
   Link,

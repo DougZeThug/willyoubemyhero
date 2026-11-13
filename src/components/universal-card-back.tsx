@@ -1,4 +1,4 @@
-import { cardUrlsKey, eventCardBackKey } from "@/hooks/query-keys";
+import { cardUrlsKey, eventCardBackKey } from "@/lib/query-keys";
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

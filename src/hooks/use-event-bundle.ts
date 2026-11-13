@@ -4,7 +4,7 @@ import {
   eventBundleKey,
   eventCardBackKey,
   photoUrlsKey,
-} from "./query-keys";
+} from "@/lib/query-keys";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

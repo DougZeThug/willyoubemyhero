@@ -1,4 +1,4 @@
-import { claimRosterKey } from "@/hooks/query-keys";
+import { claimRosterKey } from "@/lib/query-keys";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";

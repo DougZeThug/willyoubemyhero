@@ -1,4 +1,4 @@
-import { dustBalanceKey, invalidateCardsMoved, packStatusKey } from "./query-keys";
+import { dustBalanceKey, invalidateCardsMoved, packStatusKey } from "@/lib/query-keys";
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

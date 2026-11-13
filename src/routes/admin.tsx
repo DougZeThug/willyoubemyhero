@@ -1,4 +1,4 @@
-import { cardUrlsKey, photoUrlsKey } from "@/hooks/query-keys";
+import { cardUrlsKey, photoUrlsKey } from "@/lib/query-keys";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";

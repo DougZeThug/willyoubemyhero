@@ -1,5 +1,5 @@
 import { useMemberQuery } from "./use-member-query";
-import { marketListingsKey, myStallKey } from "./query-keys";
+import { marketListingsKey, myStallKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getMarketListings, getMyStall } from "@/lib/market.functions";
 import type { MarketBrowse, MyStall } from "@/lib/market";

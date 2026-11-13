@@ -1,4 +1,4 @@
-import { collectionTrophiesKey } from "./query-keys";
+import { collectionTrophiesKey } from "@/lib/query-keys";
 import { isDeviceIdentity, memberIdentity } from "@/lib/identity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

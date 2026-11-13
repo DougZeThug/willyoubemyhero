@@ -4,7 +4,7 @@ import {
   invalidateCardsMoved,
   tradeFeedKey,
   tradeOffersKey,
-} from "@/hooks/query-keys";
+} from "@/lib/query-keys";
 import { memberIdentityOrNull } from "@/lib/identity";
 import {
   createFileRoute,
