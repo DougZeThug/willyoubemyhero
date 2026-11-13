@@ -8,6 +8,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
+import { stationSplitStats } from "@/lib/card-stats";
 import { standingsRows } from "@/hooks/use-standings-rows";
 import {
   FeedDegradedBanner,
@@ -41,57 +42,7 @@ function AnalyticsPage() {
   const listFn = useServerFn(listArchives);
   const archives = useQuery({ queryKey: ["archives"], queryFn: () => listFn(), staleTime: 60_000 });
 
-  const stationAverages = useMemo(() => {
-    if (!bundle) return [];
-    // With no splits — whether the read failed and coalesced to [] or the
-    // event genuinely has none — the loop below can only produce zero-value
-    // bars. Return empty so the render falls through to the error/empty
-    // message instead.
-    if (!bundle.splits.length) return [];
-    const byStation = new Map<string, number[]>();
-    for (const s of bundle.splits) {
-      // A missing segment_time_ms is a measurement never taken, not a
-      // zero-second segment. At 0 it drags the mean down AND wins Math.min
-      // outright, so one unmeasured split made the whole station's "Best" bar
-      // read 0.00s. card-rarity.ts and card-stats.ts skip them for the same
-      // reason; this was the one place that did not.
-      if (s.segment_time_ms == null) continue;
-      const st = bundle.stations.find((x) => x.id === s.station_id);
-      if (!st) continue;
-      // Keyed by id, not by name. Nothing stops two stations in one event
-      // sharing a name -- no unique index on stations.name, and neither
-      // upsertStation nor the admin panel checks for one -- and by name their
-      // splits pooled into a single bucket. The map below still emits a row per
-      // station, so both rows then read the SAME merged average and the same
-      // global minimum: two identical bars, an average that is no station's, and
-      // a slow station credited with a best it never produced. `bests` below
-      // learned this about athletes called Dave.
-      const arr = byStation.get(st.id) ?? [];
-      arr.push(s.segment_time_ms);
-      byStation.set(st.id, arr);
-    }
-    // Splits that were all unmeasured, or that name stations this event does
-    // not have, leave nothing to plot — the same nothing as no splits at all,
-    // so say so rather than drawing a row of zero bars.
-    if (byStation.size === 0) return [];
-    // And the same holds one station at a time. A station nobody reached — the
-    // field DNF'd before it, or it was set up and never run — has no bucket, and
-    // falling back to 0 drew a 0.00s "Best" beside real ones: on the archive,
-    // the fastest time anybody ran anywhere.
-    return bundle.stations.flatMap((st) => {
-      const arr = byStation.get(st.id);
-      if (!arr) return [];
-      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-      const best = Math.min(...arr);
-      return [
-        {
-          name: st.name,
-          avgSec: Number((avg / 1000).toFixed(2)),
-          bestSec: Number((best / 1000).toFixed(2)),
-        },
-      ];
-    });
-  }, [bundle]);
+  const stationAverages = useMemo(() => stationSplitStats(bundle), [bundle]);
 
   // The board's own rows, so these ten names are ten off the leaderboard. Reducing
   // official runs per athlete asked nothing about contention, so a scratched
@@ -206,7 +157,7 @@ function AnalyticsPage() {
                     // collided, and this list re-renders on every realtime nudge,
                     // which is where an undefined reconciliation goes wrong.
                     key={b.participantId}
-                    className="flex items-center gap-3 rounded-md bg-[oklch(0.16_0.02_240)] px-3 py-2"
+                    className="flex items-center gap-3 rounded-md bg-panel px-3 py-2"
                   >
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-label font-black text-primary">
                       {b.place}
@@ -265,7 +216,7 @@ function AnalyticsPage() {
                     <Link
                       to="/recap/$slug"
                       params={{ slug: a.slug }}
-                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/50 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary"
+                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/50 bg-panel px-3 py-2 text-sm hover:border-primary"
                     >
                       <span className="font-semibold uppercase tracking-wide">
                         {a.event_name} {a.event_year ?? ""}

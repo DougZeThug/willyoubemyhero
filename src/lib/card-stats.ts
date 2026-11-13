@@ -137,3 +137,41 @@ export function cardStats(
 
   return { bestRun, ladder, rank, fieldSize: allBest.size };
 }
+
+export type StationSplitStat = { name: string; avgSec: number; bestSec: number };
+
+/**
+ * Average and best segment per station, in the bundle's station order, for the
+ * analytics bars.
+ *
+ * Stations with no measured split are left out rather than drawn as 0.00s: a
+ * missing `segment_time_ms` is a measurement never taken, and at zero it would
+ * drag the mean down and win the minimum outright. Splits are grouped by
+ * station id, not name — nothing stops two stations sharing a name, and pooling
+ * them gave both rows the same merged average and a best neither produced.
+ */
+export function stationSplitStats(
+  bundle: Pick<StatsBundle, "stations" | "splits"> | null | undefined,
+): StationSplitStat[] {
+  if (!bundle) return [];
+  const known = new Set(bundle.stations.map((st) => st.id));
+  const byStation = new Map<string, number[]>();
+  for (const s of bundle.splits) {
+    if (s.segment_time_ms == null || !known.has(s.station_id)) continue;
+    const arr = byStation.get(s.station_id) ?? [];
+    arr.push(s.segment_time_ms);
+    byStation.set(s.station_id, arr);
+  }
+  return bundle.stations.flatMap((st) => {
+    const arr = byStation.get(st.id);
+    if (!arr) return [];
+    const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+    return [
+      {
+        name: st.name,
+        avgSec: Number((avg / 1000).toFixed(2)),
+        bestSec: Number((Math.min(...arr) / 1000).toFixed(2)),
+      },
+    ];
+  });
+}

@@ -115,7 +115,7 @@ function TvPage() {
               "flex items-center gap-4 rounded-2xl border p-4",
               row.place === 1
                 ? "hud-bezel border-primary/60 hud-glow"
-                : "border-primary/15 bg-[oklch(0.16_0.02_240)]",
+                : "border-primary/15 bg-panel",
             )}
           >
             {/* place, not the row index: a three-way tie for first is three
@@ -167,7 +167,7 @@ function TvPage() {
           </div>
         ))}
         {rows.length === 0 && (
-          <div className="col-span-2 rounded-2xl border border-primary/20 bg-[oklch(0.16_0.02_240)] p-10 text-center text-muted-foreground">
+          <div className="col-span-2 rounded-2xl border border-primary/20 bg-panel p-10 text-center text-muted-foreground">
             {/* The one read that can empty the board, not any of the seven — a
                 failed splits or stations read cannot, and nor can the roster,
                 which has its own banner above. */}

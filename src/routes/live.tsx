@@ -378,7 +378,7 @@ function LiveTopFive({
               return (
                 <li
                   key={row.run.id}
-                  className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-2"
+                  className="flex items-center gap-2 rounded-md border border-primary/5 bg-panel px-2 py-2"
                 >
                   <span
                     className={cn(
