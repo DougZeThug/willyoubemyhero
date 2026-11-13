@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -193,7 +194,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       const failed = res.results.filter((r) => !r.ok);
       if (failed.length === 0) {
-        toast.success(`Uploaded ${res.results.length} card${res.results.length === 1 ? "" : "s"}`);
+        toast.success(`Uploaded ${plural(res.results.length, "card")}`);
         clearAll();
       } else {
         toast.error(`${failed.length} of ${res.results.length} failed: ${failed[0]?.error ?? ""}`);

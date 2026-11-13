@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -135,7 +136,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     }
     if (
       !confirm(
-        `Issue a new code for the ${unclaimedCount} player${unclaimedCount === 1 ? "" : "s"} who ` +
+        `Issue a new code for the ${plural(unclaimedCount, "player")} who ` +
           "haven't claimed yet? Players who already claimed keep their current code.",
       )
     ) {
@@ -364,7 +365,7 @@ export function AwardsAdminPanel({ eventId, locked }: { eventId: string; locked:
     await run("Could not close voting", async () => {
       const res = await closeFn({ data: { eventId } });
       await qc.invalidateQueries();
-      return `Published ${res.published} award${res.published === 1 ? "" : "s"}`;
+      return `Published ${plural(res.published, "award")}`;
     });
   }
 

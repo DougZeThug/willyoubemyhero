@@ -1,4 +1,5 @@
 import { formatTime } from "@/lib/format";
+import { plural } from "@/components/plural";
 import type { LadderRow } from "@/lib/card-stats";
 import { cn } from "@/lib/utils";
 
@@ -47,9 +48,7 @@ export function FieldComparison({
           {bestCount > 0 && (
             <>
               {" · "}
-              <span style={{ color: "var(--tier)" }}>
-                {bestCount} station{bestCount === 1 ? "" : "s"} won
-              </span>
+              <span style={{ color: "var(--tier)" }}>{plural(bestCount, "station")} won</span>
             </>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { newClientKey } from "@/lib/format";
@@ -301,7 +302,7 @@ export function SecretCardsPanel() {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       clearDrafts();
       if (failed.length > 0) {
-        toast.error(`${failed.length} card${failed.length === 1 ? "" : "s"} failed to upload`);
+        toast.error(`${plural(failed.length, "card")} failed to upload`);
       } else {
         toast.success(`${res.results.length} added to the set`);
       }
@@ -478,7 +479,7 @@ export function SecretCardsPanel() {
         toast.promise(p, {
           id: `set-look-${key}`,
           loading: `Applying to ${label}…`,
-          success: (r) => `${label}: ${r.updated} card${r.updated === 1 ? "" : "s"} updated`,
+          success: (r) => `${label}: ${plural(r.updated, "card")} updated`,
           error: (e) => (e instanceof Error ? e.message : "Save failed"),
         });
         try {

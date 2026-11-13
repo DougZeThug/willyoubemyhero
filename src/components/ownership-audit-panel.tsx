@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -58,7 +59,7 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
       "Could not move those cards",
       async () => {
         const res = await attachFn({ data: { eventId, guestId, participantId } });
-        toast.success(`${res.name} now holds ${res.secrets} secret${res.secrets === 1 ? "" : "s"}`);
+        toast.success(`${res.name} now holds ${plural(res.secrets, "secret")}`);
         setOpenDevice(null);
         await qc.invalidateQueries();
       },
@@ -146,20 +147,15 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                         </span>
                       </span>
                       <span className="shrink-0 text-right text-xs font-bold uppercase tracking-wider text-primary">
-                        {d.secrets} secret{d.secrets === 1 ? "" : "s"}
+                        {plural(d.secrets, "secret")}
                         <span className="block text-[11px] font-semibold text-muted-foreground">
-                          {d.packOpens} pack{d.packOpens === 1 ? "" : "s"}
+                          {plural(d.packOpens, "pack")}
                           {/* Only when there are any. A device is listed the
                               moment it holds packs or rungs as well as secrets,
                               so a row reading "0 secrets, 0 packs" with nothing
                               else on it would be the panel pointing at a device
                               and declining to say why. */}
-                          {d.milestoneClaims > 0 && (
-                            <>
-                              {" "}
-                              · {d.milestoneClaims} rung{d.milestoneClaims === 1 ? "" : "s"}
-                            </>
-                          )}
+                          {d.milestoneClaims > 0 && <> · {plural(d.milestoneClaims, "rung")}</>}
                         </span>
                       </span>
                       <ChevronDown

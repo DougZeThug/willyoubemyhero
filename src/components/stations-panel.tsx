@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -224,7 +225,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         }
       }
       await refresh();
-      toast.success(`Renamed ${changed.length} station${changed.length === 1 ? "" : "s"}`);
+      toast.success(`Renamed ${plural(changed.length, "station")}`);
       setRenames(null);
     });
   }
@@ -264,7 +265,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
     <AdminSection
       icon={<Flag className="h-4 w-4 shrink-0" />}
       title="Stations"
-      meta={`${stations.length} station${stations.length === 1 ? "" : "s"}`}
+      meta={`${plural(stations.length, "station")}`}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
