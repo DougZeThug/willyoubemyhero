@@ -31,6 +31,7 @@ import {
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard, NO_FLICK, type HoloGestures } from "@/components/holo-card";
+import { TierScope } from "@/components/tier-scope";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
@@ -616,13 +617,12 @@ function PlayerCardPage() {
 
   return (
     <>
-      {/* Every tier-coloured thing below reads `--tier` off this node rather than
-          taking a prop, so one variable retints the whole page. */}
-      <div
+      {/* Every tier-coloured thing below reads its colour off this scope rather
+          than taking a prop, so one variable retints the whole page. */}
+      <TierScope
+        accent={rarity.accent}
+        edition={edition}
         className="card-bg relative min-h-[var(--page-min-h)]"
-        style={
-          { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
-        }
         // The details page is covered by the viewer, not gone: without this its
         // controls stay in the tab order and in the accessibility tree behind it,
         // which among other things puts a second "More actions" on the screen.
@@ -1002,7 +1002,7 @@ function PlayerCardPage() {
             <ShareCard ref={shareRef} data={shareData} />
           </div>
         )}
-      </div>
+      </TierScope>
 
       {/* Over everything, and a SIBLING of the page rather than a child of it:
           the page is `inert` while this is up, and a viewer inside it would be

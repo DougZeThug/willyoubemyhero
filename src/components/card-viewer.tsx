@@ -25,7 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useBodyScrollLock, useModalSurface } from "@/hooks/use-modal-surface";
-import { editionStyle, type Edition } from "@/lib/card-edition";
+import type { Edition } from "@/lib/card-edition";
+import { TierScope } from "@/components/tier-scope";
 import { packedByLabel } from "@/lib/card-pulls";
 import { playFlip } from "@/lib/card-sfx";
 import { formatDay } from "@/lib/format";
@@ -264,21 +265,17 @@ export function CardViewer({
   }
 
   return (
-    <div
+    // CardRibbon and the pips sit outside the details page's subtree here, so the
+    // viewer is a tier scope of its own.
+    <TierScope
       ref={holdSurface}
+      accent={tint.accent}
+      edition={edition}
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={locked ? `${card.name} — not packed yet` : card.name}
       data-testid="card-viewer"
-      // The two axes every tier-coloured child reads. CardRibbon and the pips sit
-      // outside the details page's subtree here, so the viewer sets them itself.
-      style={
-        {
-          "--tier": tint.accent,
-          "--edn": editionStyle(edition).accent,
-        } as React.CSSProperties
-      }
       className="fixed inset-0 z-50 outline-none"
     >
       {/* The shell gets out of the way: nav faded and inert, toasts and the
@@ -438,7 +435,7 @@ export function CardViewer({
           </button>
         )}
       </div>
-    </div>
+    </TierScope>
   );
 }
 
