@@ -8,7 +8,7 @@
 // not its rule either.
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { feedReadError, readFailedMessage } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";

@@ -2,13 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  FeedDegradedBanner,
-  FeedError,
-  FeedLoading,
-  feedReadError,
-  readFailedMessage,
-} from "./feed-state";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "./feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 
 describe("FeedLoading", () => {
   it("says it is still reading, not that there is nothing there", () => {

@@ -13,13 +13,8 @@ import { useFinishWatcher, type FinishPayload } from "@/hooks/use-finish-watcher
 import { currentAthlete, idleFieldState } from "@/lib/current-athlete";
 import { standingsRows } from "@/hooks/use-standings-rows";
 import { outOfContention } from "@/lib/standings";
-import {
-  FeedDegradedBanner,
-  FeedError,
-  FeedLoading,
-  feedReadError,
-  readFailedMessage,
-} from "@/components/feed-state";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 import { hudStatus, onClockElapsedMs, type HudStatus, type OnClockEntry } from "@/lib/live-clock";
 import { useLiveHud } from "@/hooks/use-live-hud";
 import { LiveTimingBar } from "@/components/live-timing-bar";

@@ -14,9 +14,8 @@ import {
   FeedError,
   FeedLoading,
   FeedPartialBanner,
-  feedReadError,
-  readFailedMessage,
 } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
 import { toResultCardData, type ResultCardData } from "@/lib/result-card-data";

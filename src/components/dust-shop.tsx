@@ -217,9 +217,10 @@ export function DustShopPanel({
   // reads as one card held several times. Keyed by the card's id where the
   // server gave one (names are not unique), else by name. Groups order by their
   // best copy so the biggest payout is still at the top of the thumb.
+  const sparesData = spares.data;
   const sellGroups = useMemo(() => {
-    const byKey = new Map<string, NonNullable<typeof spares.data>["secrets"]>();
-    for (const s of spares.data?.secrets ?? []) {
+    const byKey = new Map<string, NonNullable<typeof sparesData>["secrets"]>();
+    for (const s of sparesData?.secrets ?? []) {
       const key = s.cardId ?? `name:${s.name}`;
       byKey.set(key, [...(byKey.get(key) ?? []), s]);
     }
@@ -237,7 +238,7 @@ export function DustShopPanel({
           secretSellValue(b.copies[0].tier) - secretSellValue(a.copies[0].tier) ||
           a.name.localeCompare(b.name),
       );
-  }, [spares.data]);
+  }, [sparesData]);
   // The badge counts copies, not names.
   const sellableCount = sellGroups.reduce((n, g) => n + g.copies.length, 0);
 

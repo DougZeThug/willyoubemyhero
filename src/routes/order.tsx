@@ -15,13 +15,8 @@ import { useEventAdmin } from "@/hooks/use-event-admin";
 import { recordRandomization, setRunningOrder } from "@/lib/admin-write.functions";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { toast } from "sonner";
-import {
-  FeedDegradedBanner,
-  FeedError,
-  FeedLoading,
-  feedReadError,
-  readFailedMessage,
-} from "@/components/feed-state";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 
 export const Route = createFileRoute("/order")({
   head: () => ({

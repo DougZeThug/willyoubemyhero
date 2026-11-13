@@ -15,13 +15,8 @@ import { formatTime } from "@/lib/format";
 import { standingsRows } from "@/hooks/use-standings-rows";
 import { ClipboardList, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  FeedDegradedBanner,
-  FeedError,
-  FeedLoading,
-  feedReadError,
-  readFailedMessage,
-} from "@/components/feed-state";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 
 export const Route = createFileRoute("/draft")({
   head: () => ({
