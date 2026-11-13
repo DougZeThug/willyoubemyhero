@@ -35,6 +35,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { QrCode, Camera, Archive, ExternalLink, IdCard, Trash2, Wand2 } from "lucide-react";
+import { errorMessage } from "@/lib/errors";
 
 export function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: string }) {
   const { event, bundle } = useEventBundle();
@@ -179,7 +180,7 @@ export function EventOpsPanel({ eventId, eventName }: { eventId: string; eventNa
       }
     } catch (e) {
       setRegenState({ running: false, done: 0, total: 0, failed: 0 });
-      toast.error(e instanceof Error ? e.message : "Regeneration failed");
+      toast.error(errorMessage(e, "Regeneration failed"));
     }
   }
 

@@ -33,6 +33,7 @@ import {
 } from "@/lib/card-prompt.functions";
 import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
+import { errorMessage } from "@/lib/errors";
 
 export type PromptStudioBundle = StatsBundle & {
   participants: Array<{
@@ -85,7 +86,7 @@ export function CardPromptTemplateManager({ templates }: { templates: PromptTemp
       setDrafts((d) => ({ ...d, [slug]: value }));
       toast.success("Series prompt saved");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save prompt");
+      toast.error(errorMessage(e, "Could not save prompt"));
     }
   }
   return (

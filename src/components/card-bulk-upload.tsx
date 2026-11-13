@@ -13,6 +13,7 @@ import { ImageDropZone } from "@/components/admin/image-drop-zone";
 import { isUploadImage, MAX_IMAGE_BYTES, MAX_IMAGE_MB } from "@/components/admin/image-limits";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 /**
  * Server cap is 12,000,000 chars of base64 per card (see media.functions.ts).
@@ -122,7 +123,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         try {
           staged = await snapshotFile(file);
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : `Couldn't read ${file.name}`);
+          toast.error(errorMessage(e, `Couldn't read ${file.name}`));
           continue;
         }
         const { side, id } = bestMatch(file.name, targets);
@@ -214,7 +215,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         });
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Bulk upload failed");
+      toast.error(errorMessage(e, "Bulk upload failed"));
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 
 /**
  * The shape every admin console button shares: busy while it runs, a success toast
@@ -22,7 +23,7 @@ export function useAdminAction() {
       const done = await work();
       if (done) toast.success(done);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : failure);
+      toast.error(errorMessage(e, failure));
     } finally {
       setBusyKey(null);
     }

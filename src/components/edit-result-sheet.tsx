@@ -27,6 +27,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { createManualRun, deleteRunResult, updateRunResult } from "@/lib/admin-write.functions";
 import { formatTime, parseGridTime, parseTime, snapMs, timeField } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
 
@@ -196,7 +197,7 @@ export function EditResultSheet({
       await qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The edit did not save. Try again.");
+      setError(errorMessage(e, "The edit did not save. Try again."));
     } finally {
       setSaving(false);
     }
@@ -214,7 +215,7 @@ export function EditResultSheet({
       await qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The delete did not go through. Try again.");
+      setError(errorMessage(e, "The delete did not go through. Try again."));
     } finally {
       setSaving(false);
     }
