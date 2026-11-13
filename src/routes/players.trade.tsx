@@ -1,3 +1,4 @@
+import { useTransientId } from "@/hooks/use-transient-id";
 import {
   createFileRoute,
   Link,
@@ -132,7 +133,7 @@ function TradePage() {
   const [tab, setTab] = useState<Tab>("offers");
   const [pending, setPending] = useState<string | null>(null);
   /** The offer just sent, so the outbox can say which one it is. */
-  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useTransientId(HIGHLIGHT_MS);
   /**
    * Sets this trade just finished for the person holding the phone.
    *
@@ -246,12 +247,6 @@ function TradePage() {
     if (builderOpen) return;
     void navigate({ to: ".", search: { make: 1 as const }, replace: true });
   }, [intent, builderOpen, myIdForIntent, navigate]);
-
-  useEffect(() => {
-    if (!highlightId) return;
-    const t = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
-    return () => clearTimeout(t);
-  }, [highlightId]);
 
   async function refreshMine() {
     await Promise.all([

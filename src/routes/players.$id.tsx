@@ -64,7 +64,7 @@ import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
 import { playFlip, useCardSfx } from "@/lib/card-sfx";
-import { exportCardPng, waitForPaint } from "@/lib/share-card";
+import { useCardExport } from "@/hooks/use-card-export";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
@@ -160,13 +160,12 @@ function PlayerCardPage() {
     };
   }, [tiltWanted]);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
   // Seeded from the search parameter, which is the whole reason it exists:
   // `?vs=` is a link you drop in the group chat, and the recipient used to
   // land on the left card with the chip lit and have to tap it themselves.
   // The seed alone is not enough — see the lock effect below.
   const [comparing, setComparing] = useState(!!vs);
-  const shareRef = useRef<HTMLDivElement>(null);
+  const { ref: shareRef, busy: sharing, exportCard } = useCardExport();
 
   // Roster in running order gives prev/next a stable, meaningful sequence.
   const roster = useMemo(
@@ -512,23 +511,12 @@ function PlayerCardPage() {
     rank,
   };
 
-  async function onShare() {
-    setSharing(true);
-    try {
+  function onShare() {
+    return exportCard(`${name.replace(/\s+/g, "-").toLowerCase()}-card.png`, {
+      fallback: "Could not export card",
       // Signed storage URLs expire after an hour; a stale one rasterises blank.
-      await qc.refetchQueries({ queryKey: ["card-urls", event?.id] });
-      const node = shareRef.current;
-      if (!node) throw new Error("Share card not ready");
-      // Waited on rather than guessed at: a fixed delay is either too long
-      // on wifi or too short on a phone in a garden, and too short means a
-      // shared card showing initials where a face should be.
-      await waitForPaint(node);
-      await exportCardPng(node, `${name.replace(/\s+/g, "-").toLowerCase()}-card.png`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not export card");
-    } finally {
-      setSharing(false);
-    }
+      prepare: () => qc.refetchQueries({ queryKey: ["card-urls", event?.id] }),
+    });
   }
 
   async function onCopyLink() {

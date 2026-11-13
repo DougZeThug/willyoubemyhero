@@ -19,7 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ResultCard, type ResultCardData } from "@/components/result-card";
 import { toResultCardData } from "@/lib/result-card-data";
-import { exportCardPng, waitForPaint } from "@/lib/share-card";
+import { useCardExport } from "@/hooks/use-card-export";
 import { toast } from "sonner";
 import { useStandingsRows } from "@/hooks/use-standings-rows";
 
@@ -54,13 +54,12 @@ function LeaderboardPage() {
     useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
-  const [sharingRunId, setSharingRunId] = useState<string | null>(null);
   // A snapshot taken at tap time, not derived from `rows` on each render. A
   // realtime bundle update that dropped the row mid-export (a re-time, a
   // scratch) would otherwise unmount the offscreen card between the frame wait
   // and the rasterise, and the PNG came out blank or of a card that changed.
   const [shareData, setShareData] = useState<ResultCardData | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const { ref: cardRef, busy: sharing, exportCard } = useCardExport();
   // The same standings the tier rules use, not a second looser set. Ranking
   // official *runs* put a re-timed athlete on the board twice, kept a scratched
   // one's place, and numbered a dead heat 1 and 2 beside two champion cards —
@@ -83,25 +82,13 @@ function LeaderboardPage() {
     const row = rows.find((r) => r.run.id === runId);
     if (!row) return;
     setShareData(toResultCardData({ row, event, bundle, photos: photos.data }));
-    setSharingRunId(runId);
-    try {
+    await exportCard(`combine-${runId.slice(0, 8)}.png`, {
+      fallback: "Could not export that card",
       // The offscreen card mounts on the render this state change causes, so
-      // one frame is what it takes for the ref to be filled. The fixed 100ms
-      // this replaces was also a complete no-op when it was not: no catch,
-      // no node, no card, no message.
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      const node = cardRef.current;
-      if (!node) throw new Error("Share card not ready");
-      await waitForPaint(node);
-      await exportCardPng(node, `combine-${runId.slice(0, 8)}.png`);
-    } catch (e) {
-      // It used to be try/finally with no catch at all: an unhandled
-      // rejection, and a screen reader user got nothing whatsoever.
-      toast.error(e instanceof Error ? e.message : "Could not export that card");
-    } finally {
-      setSharingRunId(null);
-      setShareData(null);
-    }
+      // one frame is what it takes for the ref to be filled.
+      prepare: () => new Promise((r) => requestAnimationFrame(() => r(null))),
+    });
+    setShareData(null);
   }
 
   if (loading && !bundle) {
@@ -267,7 +254,7 @@ function LeaderboardPage() {
                       // lands first then clears sharingRunId and unmounts the
                       // node under the other. Same shape as secret-cards-panel's
                       // setBusyId.
-                      disabled={sharingRunId !== null}
+                      disabled={sharing}
                     >
                       <Share2 className="h-4 w-4" />
                     </Button>

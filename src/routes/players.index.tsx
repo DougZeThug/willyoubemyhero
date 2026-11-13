@@ -13,6 +13,7 @@ import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession } from "@/lib/member-token";
 import { useWasMember } from "@/hooks/use-was-member";
+import { useTransientId } from "@/hooks/use-transient-id";
 import { collectionSettled, dustHolder, idOf, summaryLine } from "@/lib/collection-view";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { usePackStatus } from "@/hooks/use-pack-status";
@@ -648,7 +649,7 @@ function PlayersPage() {
    * the shelf they are actually on.
    */
   const shelfRefs = useRef(new Map<string, HTMLDivElement | null>());
-  const [flashed, setFlashed] = useState<string | null>(null);
+  const [flashed, setFlashed] = useTransientId(1600);
   const reducedMotion = usePrefersReducedMotion();
   const shelfForTrophy = useCallback(
     (collection: string) => {
@@ -673,11 +674,6 @@ function PlayersPage() {
     },
     [collapsed, toggle, reducedMotion],
   );
-  useEffect(() => {
-    if (!flashed) return;
-    const t = setTimeout(() => setFlashed(null), 1600);
-    return () => clearTimeout(t);
-  }, [flashed]);
 
   // The sheet swipes what is on screen, in the order it is on screen. It used to
   // swipe the flat newest-pull-first list while the grid was already grouped, so
