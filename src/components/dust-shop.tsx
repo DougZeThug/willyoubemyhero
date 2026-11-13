@@ -1,8 +1,7 @@
 import { useId, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { dustBalanceKey } from "@/hooks/use-dust";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { editionStyle, toEdition } from "@/lib/card-edition";
 import {
@@ -22,6 +21,7 @@ import { ListError } from "@/components/list-error";
 import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
+import { settleDustMutation, useDustSpares } from "@/components/dust-cache";
 import { SetChip } from "@/components/set-chip";
 import { PresentationMode } from "@/components/presentation-mode";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
@@ -29,12 +29,7 @@ import type { OwnedSecret } from "@/lib/secret-cards";
 import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { packStatusKey } from "@/hooks/use-pack-status";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
-import { getTradeSpares } from "@/lib/trades.functions";
-import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
-import { myCardStatsKey } from "@/hooks/use-my-collection";
-import type { TradeSpares } from "@/lib/trades";
 
 /**
  * A server from before 20260930120000 refuses today's pull with `too_fresh`.
@@ -42,6 +37,21 @@ import type { TradeSpares } from "@/lib/trades";
  * to, and "Could not burn that one" reads like a bug rather than a rule.
  */
 const TOO_FRESH = "Today's pull can be dusted from tomorrow";
+const STAKED = "That one is on an open offer or up for sale";
+
+const BUY_REFUSALS: Record<string, string> = {
+  insufficient: `Not enough dust yet — a pull is ${DUST_PRICES.bonusPull}`,
+};
+const MILL_REFUSALS: Record<string, string> = {
+  last_copy: "That is your only copy",
+  staked: STAKED,
+  too_fresh: TOO_FRESH,
+};
+const SELL_REFUSALS: Record<string, string> = { staked: STAKED, too_fresh: TOO_FRESH };
+const REROLL_REFUSALS: Record<string, string> = {
+  insufficient: `Not enough dust — a re-roll is ${DUST_PRICES.reroll}`,
+  staked: STAKED,
+};
 
 /** Settle rows shown before "Show all". */
 const SETTLE_CAP = 3;
@@ -95,6 +105,7 @@ export function DustShopPanel({
   backUrl?: ImageUrlSet | string | null;
 }) {
   const qc = useQueryClient();
+  const ids = { participantId, eventId, actor };
   const buyFn = useServerFn(buyBonusSecretPull);
   const mySecretsFn = useServerFn(getMySecrets);
   /**
@@ -117,32 +128,13 @@ export function DustShopPanel({
     mutationFn: () => buyFn({ data: { requestId } }),
     onSuccess: (res) => {
       if (!res.ok) {
-        toast(
-          res.reason === "insufficient"
-            ? `Not enough dust yet — a pull is ${DUST_PRICES.bonusPull}`
-            : "Nothing left in the pool right now",
-        );
+        toast(BUY_REFUSALS[res.reason] ?? "Nothing left in the pool right now");
         return;
       }
       // The balance comes back on the response, so it is written straight in
       // rather than refetched — dust_ledger is not published to realtime and a
       // round trip here would show a stale number behind the ceremony.
-      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      // KEYED ON THE ACTOR, both of them. These two queries are registered as
-      // ["daily-secret", "m:<uuid>"] and ["my-secrets", "m:<uuid>"], so a bare
-      // participant id matches nothing at all and the purchase closed on "check
-      // your secrets" with the card still missing. useMySecrets holds a
-      // five-minute staleTime, so it was the one that stayed wrong longest.
-      void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
-      void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-      // The two spares lists, the same pair sell, mill and re-roll refresh. A
-      // bought pull is minted `granted`, and getTradeSpares stakes granted rows
-      // straight away — so the card is sellable and offerable the instant it
-      // lands, while the sheet below and the Trading Post went on showing the
-      // list from before the purchase for a cache lifetime. Buying was the only
-      // mutation in this file that moved the spares and did not say so.
-      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
+      settleDustMutation(qc, ids, res.balance, { secrets: true });
       // A bought pull is a real pull: buy_bonus_secret_pull delegates to
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
       // the card that finishes a set is the best moment this feature has, so the
@@ -180,16 +172,7 @@ export function DustShopPanel({
     onError: () => toast("Could not buy that just now"),
   });
 
-  const sparesFn = useServerFn(getTradeSpares);
-  const spares = useQuery({
-    queryKey: dustSparesKey(participantId),
-    queryFn: () => sparesFn({ data: { participantId: participantId! } }) as Promise<TradeSpares>,
-    // This used to wait on the sheet being open. Being on the screen is that
-    // intent now, so the only gate left is having somebody to ask about.
-    enabled: !!participantId,
-    staleTime: 15_000,
-    retry: false,
-  });
+  const spares = useDustSpares(participantId);
 
   // Rarest first, so the biggest payout is the one at the top of the thumb.
   const burnable = useMemo(
@@ -211,27 +194,10 @@ export function DustShopPanel({
       millFn({ data: { cardCopyId: v.cardCopyId } }),
     onSuccess: (res, v) => {
       if (!res.ok) {
-        toast(
-          res.reason === "last_copy"
-            ? "That is your only copy"
-            : res.reason === "staked"
-              ? "That one is on an open offer or up for sale"
-              : res.reason === "too_fresh"
-                ? TOO_FRESH
-                : "Could not burn that one",
-        );
+        toast(MILL_REFUSALS[res.reason] ?? "Could not burn that one");
         return;
       }
-      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      // The copy is gone, so both the spares list and the vault's own counts are
-      // now wrong until they are asked again.
-      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-      // The trading post reads a DIFFERENT key for the same list. Without
-      // this a milled spare stayed offerable for up to a cache lifetime, and
-      // the server refused the offer that was composed from it. market-panel
-      // next door already invalidated both.
-      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-      void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
+      settleDustMutation(qc, ids, res.balance, { stats: true });
       toast(`Burned ${v.name} · +${res.awarded} dust`);
     },
     onError: () => toast("Could not burn that one"),
@@ -275,27 +241,10 @@ export function DustShopPanel({
       sellFn({ data: { secretPullId: v.secretPullId } }),
     onSuccess: (res, v) => {
       if (!res.ok) {
-        toast(
-          res.reason === "staked"
-            ? "That one is on an open offer or up for sale"
-            : res.reason === "too_fresh"
-              ? TOO_FRESH
-              : "Could not sell that one",
-        );
+        toast(SELL_REFUSALS[res.reason] ?? "Could not sell that one");
         return;
       }
-      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-      // The trading post reads a DIFFERENT key for the same list. Without
-      // this a milled spare stayed offerable for up to a cache lifetime, and
-      // the server refused the offer that was composed from it. market-panel
-      // next door already invalidated both.
-      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-      // KEYED ON THE ACTOR, both of them — the vault's secret shelf and the count
-      // beside it have both moved, and a bare participant id matches neither. See
-      // the comment on the prop.
-      void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-      void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
+      settleDustMutation(qc, ids, res.balance, { secrets: true });
       toast(`Sold ${v.name} · +${res.awarded} dust`);
     },
     onError: () => toast("Could not sell that one"),
@@ -373,23 +322,10 @@ export function DustShopPanel({
     },
     onSuccess: (res, { copyId, name }) => {
       if (!res.ok) {
-        toast(
-          res.reason === "insufficient"
-            ? `Not enough dust — a re-roll is ${DUST_PRICES.reroll}`
-            : res.reason === "staked"
-              ? "That one is on an open offer or up for sale"
-              : "Could not re-roll that one",
-        );
+        toast(REROLL_REFUSALS[res.reason] ?? "Could not re-roll that one");
         return;
       }
-      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-      // The trading post reads a DIFFERENT key for the same list. Without
-      // this a milled spare stayed offerable for up to a cache lifetime, and
-      // the server refused the offer that was composed from it. market-panel
-      // next door already invalidated both.
-      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-      void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
+      settleDustMutation(qc, ids, res.balance, { stats: true });
       // A fresh id, so the next tap on this card is a new gamble rather than a
       // replay of the one just paid for.
       setRerollIds((prev) => ({ ...prev, [copyId]: crypto.randomUUID() }));
