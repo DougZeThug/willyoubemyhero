@@ -233,6 +233,36 @@ export function offerStatusLabel(status: string): string {
 }
 
 /**
+ * What an offer's state means to the eye: live (pending), won (accepted), dead
+ * (declined, pulled or expired), quiet (anything the client does not know yet).
+ */
+export function offerStatusTone(status: string): "live" | "won" | "dead" | "quiet" {
+  if (status === "pending") return "live";
+  if (status === "accepted") return "won";
+  if (status === "declined" || status === "cancelled" || status === "voided") return "dead";
+  return "quiet";
+}
+
+/** One offer from `me`'s side of the table: who the other person is, what leaves, what arrives. */
+export function offerPerspective(offer: TradeOfferView, me: string) {
+  const iAmProposer = offer.proposerId === me;
+  return {
+    iAmProposer,
+    theirId: iAmProposer ? offer.recipientId : offer.proposerId,
+    iGive: iAmProposer ? offer.proposerGives : offer.recipientGives,
+    iGet: iAmProposer ? offer.recipientGives : offer.proposerGives,
+  };
+}
+
+/** The card's own name with no tier or finish in front, for a sentence that has no room for them. */
+export function tradeItemBareName(
+  item: { kind: "secret"; name: string } | { kind: "roster"; eventParticipantId: string },
+  rosterName: (eventParticipantId: string) => string,
+): string {
+  return item.kind === "secret" ? item.name : rosterName(item.eventParticipantId);
+}
+
+/**
  * How long a declined or pulled-back offer can still be put back.
  *
  * Twelve times the five seconds the toast is on screen, and the gap is slack

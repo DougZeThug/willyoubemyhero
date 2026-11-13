@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/drawer";
 import { TradeOfferCard, type RosterCardLookup } from "@/components/trade-offer-card";
 import { SectionTitle } from "@/components/section-title";
-import { tradeSwapPrompt, type TradeOfferView } from "@/lib/trades";
+import { offerPerspective, tradeSwapPrompt, type TradeOfferView } from "@/lib/trades";
 import type { ImageUrlSet } from "@/lib/media";
 import { offlineReason } from "@/hooks/use-online";
 
@@ -242,13 +242,12 @@ function ConfirmAcceptSheet({
   onConfirm: (offerId: string) => void;
   onCancel: () => void;
 }) {
-  const iAmProposer = offer ? offer.proposerId === me : false;
-  const theirId = offer ? (iAmProposer ? offer.recipientId : offer.proposerId) : null;
-  const question = offer
+  const view = offer ? offerPerspective(offer, me) : null;
+  const question = view
     ? tradeSwapPrompt({
-        give: iAmProposer ? offer.proposerGives : offer.recipientGives,
-        get: iAmProposer ? offer.recipientGives : offer.proposerGives,
-        theirName: nameOf(theirId!),
+        give: view.iGive,
+        get: view.iGet,
+        theirName: nameOf(view.theirId),
         rosterName: (id) => lookup(id).name,
       })
     : "";

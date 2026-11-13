@@ -28,7 +28,7 @@ import {
   type BuilderStep,
   type Staged,
 } from "@/lib/trade-staging";
-import { BLOCKED_LABEL, tradeItemsLabel, type TradeSpares } from "@/lib/trades";
+import { BLOCKED_LABEL, tradeItemBareName, tradeItemsLabel, type TradeSpares } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
 export type BuilderCounterparty = { id: string; name: string };
@@ -192,8 +192,7 @@ export function TradeBuilder({
    */
   const intentLine = useMemo(() => {
     if (!intentLeft) return null;
-    const what =
-      intentLeft.kind === "secret" ? intentLeft.name : lookup(intentLeft.eventParticipantId).name;
+    const what = tradeItemBareName(intentLeft, (id) => lookup(id).name);
     const side = intentLeft.side === "give" ? mySpares : theirSpares;
     if (theirId && !side.isPending && !spareForIntent(intentLeft, side.data)) {
       return intentLeft.side === "give"
@@ -567,7 +566,7 @@ function Tray({
               <button
                 type="button"
                 onClick={() => onRemove(s)}
-                aria-label={`Remove ${s.item.kind === "secret" ? s.item.name : lookup(s.item.eventParticipantId).name}`}
+                aria-label={`Remove ${tradeItemBareName(s.item, (id) => lookup(id).name)}`}
                 className="mt-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-destructive"
               >
                 <X className="h-4 w-4" aria-hidden />
