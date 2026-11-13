@@ -206,6 +206,13 @@ export function CardViewer({
     onStep(stepIndex(index, cards.length, dir));
   };
 
+  // The sound rides here rather than on HoloCard's own toggle: the zoom frame
+  // swallows the click, so on a full-size surface that toggle never fires.
+  const toggleFlip = () => {
+    playFlip();
+    setFlipped((f) => !f);
+  };
+
   const menu: {
     key: string;
     label: string;
@@ -311,11 +318,7 @@ export function CardViewer({
             // there is no second layer contending for the same pointer.
             onVerticalSwipe={(dir) => (dir === 1 ? onClose() : onDetails?.())}
             onTap={() => {
-              if (locked) return;
-              // The zoom frame swallows the click, so HoloCard's own toggle — and
-              // the sound that rides on it — never fires on a full-size surface.
-              playFlip();
-              setFlipped((f) => !f);
+              if (!locked) toggleFlip();
             }}
             // Chevrons are implicit via the swipe (§6); the row keeps the zoom
             // controls and the position, which is the whole of what it is for.
@@ -371,10 +374,7 @@ export function CardViewer({
           </ViewerButton>
           <button
             type="button"
-            onClick={() => {
-              playFlip();
-              setFlipped((f) => !f);
-            }}
+            onClick={toggleFlip}
             disabled={locked}
             aria-pressed={flipped}
             className="inline-flex min-h-11 items-center justify-center gap-1.5 justify-self-center rounded-md border border-border-strong bg-background/70 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
