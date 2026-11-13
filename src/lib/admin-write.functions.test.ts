@@ -479,7 +479,7 @@ describe("saveCompletedRun", () => {
       "runs.select": { count: 0 },
       "runs.upsert": { data: null, error: { message: "conflict" } },
     });
-    await expect(save(base)).rejects.toBeTruthy();
+    await expect(save(base)).rejects.toMatchObject({ message: "conflict" });
   });
 
   it("rejects a negative time", async () => {
@@ -561,7 +561,7 @@ describe("draft selections", () => {
 });
 
 describe("setRunningOrder", () => {
-  it("writes one update per row", async () => {
+  it("gives every named row its new running order, scoped to the event", async () => {
     const { setRunningOrder } = await import("./admin-write.functions");
     await callServerFn(setRunningOrder, {
       data: {
@@ -573,7 +573,17 @@ describe("setRunningOrder", () => {
       },
       headers: asAdmin(),
     });
-    expect(mock.callsFor("event_participants", "update")).toHaveLength(2);
+    const written = mock.callsFor("event_participants", "update").map((call) => ({
+      id: mock.eqValue(call, "id"),
+      event: mock.eqValue(call, "event_id"),
+      order: (call.payload as { running_order: number }).running_order,
+    }));
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { id: EVENT_PARTICIPANT_ID, event: EVENT_ID, order: 2 },
+        { id: STATION_ID, event: EVENT_ID, order: 1 },
+      ]),
+    );
   });
 
   it("accepts an empty reorder", async () => {

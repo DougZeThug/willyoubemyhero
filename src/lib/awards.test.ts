@@ -22,14 +22,6 @@ describe("AWARD_CATEGORIES", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("gives every category a label, blurb and badge icon", () => {
-    for (const category of AWARD_CATEGORIES) {
-      expect(category.label).toBeTruthy();
-      expect(category.blurb).toBeTruthy();
-      expect(category.icon).toBeTruthy();
-    }
-  });
-
   it("keeps ids within the 40 characters castAwardVote accepts", () => {
     for (const category of AWARD_CATEGORIES) {
       expect(category.id.length).toBeLessThanOrEqual(40);

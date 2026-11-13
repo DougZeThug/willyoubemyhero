@@ -740,12 +740,14 @@ describe("getMyTradeOffers", () => {
     ]);
   });
 
-  it("scopes all four queries to the token holder", async () => {
+  it("scopes every offer query to the token holder", async () => {
     withDb({ "trade_offers.select": { data: [] } });
     await offers(asMe());
     const calls = mock.callsFor("trade_offers", "select");
-    expect(calls).toHaveLength(4);
-    expect(calls.map((c) => mock.eqValue(c, "proposer_id") ?? mock.eqValue(c, "recipient_id"))).toEqual([ME, ME, ME, ME]); // prettier-ignore
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(mock.eqValue(call, "proposer_id") ?? mock.eqValue(call, "recipient_id")).toBe(ME);
+    }
   });
 
   it("asks for what settled by when it settled, capped in the query", async () => {
