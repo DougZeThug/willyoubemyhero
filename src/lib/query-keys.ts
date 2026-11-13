@@ -143,3 +143,16 @@ export function invalidateCardsMoved(
     qc.invalidateQueries({ queryKey: mySecretsKey(actor) }),
   ]);
 }
+
+// Admin consoles and the awards ballot: each is read in one component and
+// invalidated from another, so the spelling lives here.
+export const secretCardsKey = () => ["secret-cards"] as const;
+export const cardPromptTemplatesKey = () => ["card-prompt-templates"] as const;
+export const cardPromptRunsKey = (eventId: string | null | undefined) =>
+  ["card-prompt-runs", eventId] as const;
+export const memberClaimsKey = (eventId: string | null | undefined) =>
+  ["member-claims", eventId] as const;
+export const myAwardVotesKey = (
+  eventId: string | null | undefined,
+  participantId: string | null | undefined,
+) => ["my-award-votes", eventId, participantId] as const;

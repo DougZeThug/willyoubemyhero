@@ -24,7 +24,7 @@ import { OwnershipAuditPanel } from "@/components/ownership-audit-panel";
 import { StationsPanel } from "@/components/stations-panel";
 import { ResultsAdminPanel } from "@/components/results-admin-panel";
 import { AdminSection } from "@/components/admin-section";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { RosterPanel } from "@/components/admin/roster-panel";
 import { cardUrlsKey, photoUrlsKey } from "@/lib/query-keys";
 import { dustLive } from "@/lib/dust";

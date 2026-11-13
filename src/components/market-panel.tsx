@@ -26,9 +26,9 @@ import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-c
 import { SectionTitle } from "@/components/section-title";
 import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
-import { settleDustMutation, useDustSpares } from "@/components/dust-cache";
+import { settleDustMutation, useDustSpares } from "@/hooks/use-dust-cache";
 import { ListError } from "@/components/list-error";
-import { useIdSet } from "@/components/use-id-set";
+import { useIdSet } from "@/hooks/use-id-set";
 import { useMarketListings, useMyStall } from "@/hooks/use-market";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
@@ -63,8 +63,6 @@ import type { TradeItemView } from "@/lib/trades";
 export type MarketPanelProps = {
   balance: number | undefined;
   participantId: string;
-  /** `m:<participantId>` — the secret queries key on this, never the bare id. */
-  actor: string | null;
   eventId: string | null | undefined;
   nameFor: (eventParticipantId: string) => string;
   nameOf: (participantId: string) => string;
@@ -160,7 +158,6 @@ function itemMeta(
 export function MarketPanel({
   balance,
   participantId,
-  actor,
   eventId,
   nameFor,
   nameOf,
@@ -226,7 +223,7 @@ export function MarketPanel({
   function refreshAfterBuy(balance: number, completedCollection: unknown) {
     // Written straight in rather than refetched: the response already carries the
     // new balance, and a refetch would race the invalidations.
-    settleDustMutation(qc, { participantId, eventId, actor }, balance, {
+    settleDustMutation(qc, { participantId, eventId }, balance, {
       secrets: true,
       stats: true,
     });

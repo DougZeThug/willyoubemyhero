@@ -7,7 +7,7 @@ import { uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions"
 import { urlFromSet } from "@/lib/media";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { ImageDropZone } from "@/components/admin/image-drop-zone";

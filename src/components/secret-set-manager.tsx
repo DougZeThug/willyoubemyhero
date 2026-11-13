@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { secretCardsKey } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -12,7 +13,7 @@ import { setAccentColor } from "@/lib/secret-cards";
 import { setEditRefusal } from "@/lib/secret-set-edit";
 import { errorMessage } from "@/lib/errors";
 import { SetAccentPicker } from "@/components/set-accent-picker";
-import { useSecretSave } from "@/components/use-secret-save";
+import { useSecretSave } from "@/hooks/use-secret-save";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -83,7 +84,7 @@ export function SecretSetManager({
       updateSetFn({ data: { id: a.id, sortOrder: b.sortOrder } }),
       updateSetFn({ data: { id: b.id, sortOrder: a.sortOrder } }),
     ]).then(async () => {
-      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      await qc.invalidateQueries({ queryKey: secretCardsKey() });
     });
     void p
       .catch((e) => toast.error(errorMessage(e, "Reorder failed")))

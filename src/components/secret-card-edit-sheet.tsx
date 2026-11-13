@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { secretCardsKey } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Trash2, Undo2 } from "lucide-react";
@@ -12,8 +13,8 @@ import { secretCollectionLabel, type SecretCollection } from "@/lib/secret-cards
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import { SecretArtThumb, type SecretCardAdminRow } from "@/components/secret-card-tile";
 import { MAX_FLAVOUR } from "@/components/secret-upload-drafts";
-import { useSecretSave } from "@/components/use-secret-save";
-import type { useAdminAction } from "@/components/admin/use-admin-action";
+import { useSecretSave } from "@/hooks/use-secret-save";
+import type { useAdminAction } from "@/hooks/use-admin-action";
 import {
   Sheet,
   SheetContent,
@@ -76,7 +77,7 @@ function EditBody({
   const [flavour, setFlavour] = useState(card.flavour ?? "");
   const activeIds = new Set(pickerSets.map((c) => c.id));
 
-  const refetch = () => qc.invalidateQueries({ queryKey: ["secret-cards"] });
+  const refetch = () => qc.invalidateQueries({ queryKey: secretCardsKey() });
 
   function saveEdit() {
     void run("Save failed", async () => {

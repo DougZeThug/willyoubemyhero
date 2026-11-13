@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { memberClaimsKey } from "@/lib/query-keys";
 import { plural } from "@/components/plural";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -8,7 +9,7 @@ import { generateMemberCodes, listMemberClaims } from "@/lib/member.functions";
 import { closeAwardVoting, getAwardTally, reopenAwardVoting } from "@/lib/social.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AWARD_CATEGORIES } from "@/lib/awards";
-import { useAdminAction } from "@/components/admin/use-admin-action";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -90,7 +91,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   }, [unsaved]);
 
   const claims = useQuery({
-    queryKey: ["member-claims", eventId],
+    queryKey: memberClaimsKey(eventId),
     queryFn: () => claimsFn({ data: { eventId } }),
     staleTime: 30_000,
   });
@@ -124,7 +125,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
       }
       setIssued(res.issued);
       setSaved(false);
-      await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
+      await qc.invalidateQueries({ queryKey: memberClaimsKey(eventId) });
       return `Issued ${res.issued.length} codes — copy them now`;
     });
   }
@@ -198,7 +199,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
       if (!code) throw new Error("No code returned");
       setSingles((s) => ({ ...s, [participantId]: code }));
       setSaved(false);
-      await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
+      await qc.invalidateQueries({ queryKey: memberClaimsKey(eventId) });
       return `New code for ${name} — copy it now`;
     });
   }

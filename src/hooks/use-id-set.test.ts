@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useIdSet } from "@/components/use-id-set";
-import { useKeyedQueue } from "@/components/admin/use-keyed-queue";
+import { useIdSet } from "@/hooks/use-id-set";
+import { useKeyedQueue } from "@/hooks/use-keyed-queue";
 
 describe("useIdSet", () => {
   it("tracks several ids at once and removes only the one that finished", () => {
@@ -14,6 +14,25 @@ describe("useIdSet", () => {
     act(() => result.current.remove("a"));
     expect(result.current.has("a")).toBe(false);
     expect(result.current.has("b")).toBe(true);
+  });
+
+  it("toggles an id in and out", () => {
+    const { result } = renderHook(() => useIdSet());
+    act(() => result.current.toggle("a"));
+    expect(result.current.has("a")).toBe(true);
+    act(() => result.current.toggle("a"));
+    expect(result.current.has("a")).toBe(false);
+  });
+
+  it("keeps `has` stable when an add or remove changes nothing", () => {
+    const { result } = renderHook(() => useIdSet());
+    act(() => result.current.add("a"));
+    const has = result.current.has;
+    act(() => {
+      result.current.add("a");
+      result.current.remove("zzz");
+    });
+    expect(result.current.has).toBe(has);
   });
 });
 
