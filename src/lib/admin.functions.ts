@@ -22,7 +22,10 @@ export const verifyEventPin = createServerFn({ method: "POST" })
       .select("event_id, pin_salt, pin_hash")
       .eq("event_id", data.eventId)
       .maybeSingle();
-    if (error || !secret) {
+    // Thrown, not "event_not_found": a database blip is not an answer about the
+    // event, and reading it as one would be a distinction visible to a guesser.
+    if (error) throw error;
+    if (!secret) {
       return { ok: false as const, reason: "event_not_found" as const };
     }
     const candidate = hashPin(secret.pin_salt, data.pin);

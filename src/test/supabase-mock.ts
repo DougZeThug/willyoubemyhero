@@ -118,6 +118,7 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
       "lte",
       "order",
       "limit",
+      "range",
     ]) {
       chain[method] = (...args: unknown[]) => {
         call.filters.push({ method, args });

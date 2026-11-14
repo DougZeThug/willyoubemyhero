@@ -37,6 +37,112 @@ function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
 }
 
 /**
+ * Throw unless every named station belongs to this event.
+ *
+ * A station id in a payload is only an FK away from any event's station, so
+ * without this a result typed for this combine could hang its splits and
+ * penalties on somebody else's course — and leaderboards read them by station.
+ * One round trip however many ids; null and undefined (a penalty with no
+ * station) are skipped.
+ */
+async function assertStationsInEvent(
+  eventId: string,
+  stationIds: readonly (string | null | undefined)[],
+): Promise<void> {
+  const ids = [...new Set(stationIds.filter((id): id is string => !!id))];
+  if (ids.length === 0) return;
+  const { data, error } = await (
+    await adminDb()
+  )
+    .from("stations")
+    .select("id")
+    .eq("event_id", eventId)
+    .in("id", ids);
+  if (error) throw error;
+  if ((data?.length ?? 0) < ids.length) throw new Error(notInEventMessage("station"));
+}
+
+/**
+ * Throw if any of these client keys already names a row on a DIFFERENT run.
+ *
+ * splits and penalties upsert on `client_key`, which is unique across every run
+ * and event, so a key that belongs to somebody else's row would not conflict —
+ * it would be rewritten onto this run, moving a split or penalty out of a result
+ * this token has no say over. `ownRunId` is the run this save is a retry of, if
+ * there is one; its own rows are the whole point of the idempotent upsert.
+ */
+async function assertKeysNotOnOtherRuns(
+  table: "splits" | "penalties",
+  keys: readonly string[],
+  ownRunId: string | undefined,
+): Promise<void> {
+  if (keys.length === 0) return;
+  const { data, error } = await (
+    await adminDb()
+  )
+    .from(table)
+    .select("run_id")
+    .in("client_key", [...keys]);
+  if (error) throw error;
+  if ((data ?? []).some((row) => row.run_id !== ownRunId)) {
+    throw new Error("That run belongs to a different result");
+  }
+}
+
+const MAX_RUN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The typed-in half of a result — time, splits and penalties — as the
+ * commissioner's sheets send it. Shared by createManualRun and updateRunResult
+ * so the bounds cannot drift between "add a result" and "fix a result".
+ */
+const runPartsSchema = {
+  raw_time_ms: z.number().int().min(0).max(MAX_RUN_MS),
+  splits: z
+    .array(z.object({ stationId: zuuid(), cumulative_time_ms: z.number().int().min(0) }))
+    .max(50),
+  penalties: z
+    .array(
+      z.object({
+        stationId: zuuid().nullable().optional(),
+        penalty_ms: z.number().int().min(0),
+        reason: z.string().max(120).nullable().optional(),
+      }),
+    )
+    .max(50),
+};
+
+type RunPartsInput = {
+  splits: { stationId: string; cumulative_time_ms: number }[];
+  penalties: { stationId?: string | null; penalty_ms: number; reason?: string | null }[];
+};
+
+/**
+ * Turn the sheet's input into the rows both writers store.
+ *
+ * Segment times are derived, not typed: sorting by cumulative time and
+ * differencing keeps them consistent with whatever the commissioner entered.
+ * `recorded_at` is the start plus the cumulative time.
+ */
+function buildRunParts(input: RunPartsInput, startMs: number) {
+  const ordered = [...input.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
+  return {
+    penaltyTotal: input.penalties.reduce((sum, p) => sum + p.penalty_ms, 0),
+    splits: ordered.map((s, i) => ({
+      station_id: s.stationId,
+      cumulative_time_ms: s.cumulative_time_ms,
+      segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
+      recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
+    })),
+    penalties: input.penalties.map((p) => ({
+      station_id: p.stationId ?? null,
+      penalty_ms: p.penalty_ms,
+      reason: p.reason ?? null,
+    })),
+  };
+}
+
+/**
  * Put somebody on this event's roster, creating the person only if the league
  * has never heard of them.
  *
@@ -573,7 +679,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
           .array(
             z.object({
               stationId: zuuid().nullable(),
-              penalty_ms: z.number().int(),
+              penalty_ms: z.number().int().nonnegative(),
               reason: z.string().nullable(),
               clientKey: z.string(),
             }),
@@ -597,9 +703,13 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     // client_key) would then overwrite the saved run's number with it. The
     // console's Retry re-sends the same client_key, so failing loudly is safe.
     await assertOnRoster(supabaseAdmin, data.eventId, data.participantId);
+    await assertStationsInEvent(data.eventId, [
+      ...data.splits.map((s) => s.stationId),
+      ...data.penalties.map((p) => p.stationId),
+    ]);
     const { data: alreadySaved, error: lookupError } = await supabaseAdmin
       .from("runs")
-      .select("attempt_number, event_id, participant_id")
+      .select("id, attempt_number, event_id, participant_id")
       .eq("client_key", data.clientKey)
       .maybeSingle();
     if (lookupError) throw lookupError;
@@ -612,6 +722,16 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     ) {
       throw new Error("That run belongs to a different result");
     }
+    await assertKeysNotOnOtherRuns(
+      "splits",
+      data.splits.map((s) => s.clientKey),
+      alreadySaved?.id,
+    );
+    await assertKeysNotOnOtherRuns(
+      "penalties",
+      data.penalties.map((p) => p.clientKey),
+      alreadySaved?.id,
+    );
     const { count, error: countError } = await supabaseAdmin
       .from("runs")
       .select("*", { count: "exact", head: true })
@@ -723,8 +843,15 @@ export const deleteRunResult = createServerFn({ method: "POST" })
     if (countError) throw countError;
     const expected = Math.max(0, (before ?? 0) - 1);
 
-    await supabaseAdmin.from("penalties").delete().eq("run_id", run.id);
-    await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
+    // Each delete is read for its error, children first: a failure aborts with
+    // the run still standing and the retry intact.
+    const { error: penaltiesError } = await supabaseAdmin
+      .from("penalties")
+      .delete()
+      .eq("run_id", run.id);
+    if (penaltiesError) throw penaltiesError;
+    const { error: splitsError } = await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
+    if (splitsError) throw splitsError;
     const { error } = await supabaseAdmin.from("runs").delete().eq("id", run.id);
     if (error) throw error;
 
@@ -745,13 +872,14 @@ export const deleteRunResult = createServerFn({ method: "POST" })
       if (statusError) throw statusError;
     }
 
-    await supabaseAdmin.from("audit_logs").insert({
+    const { error: auditError } = await supabaseAdmin.from("audit_logs").insert({
       event_id: data.eventId,
       entity_type: "runs",
       entity_id: run.id,
       action: "delete_run_result",
       performed_by: "admin",
     });
+    if (auditError) throw auditError;
 
     return { ok: true, remainingRuns: remaining };
   });
@@ -766,114 +894,32 @@ export const deleteRunResult = createServerFn({ method: "POST" })
  */
 export const createManualRun = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
-    z
-      .object({
-        eventId: zuuid(),
-        participantId: zuuid(),
-        raw_time_ms: z
-          .number()
-          .int()
-          .min(0)
-          .max(24 * 60 * 60 * 1000),
-        splits: z
-          .array(z.object({ stationId: zuuid(), cumulative_time_ms: z.number().int().min(0) }))
-          .max(50),
-        penalties: z
-          .array(
-            z.object({
-              stationId: zuuid().nullable().optional(),
-              penalty_ms: z.number().int().min(0),
-              reason: z.string().max(120).nullable().optional(),
-            }),
-          )
-          .max(50),
-      })
-      .parse(d),
+    z.object({ eventId: zuuid(), participantId: zuuid(), ...runPartsSchema }).parse(d),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    await assertOnRoster(supabaseAdmin, data.eventId, data.participantId);
-
-    // Thrown, not coalesced: a null count numbered this run attempt 1 whatever
-    // the athlete had already run.
-    const { count, error: countError } = await supabaseAdmin
-      .from("runs")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", data.participantId);
-    if (countError) throw countError;
-
-    const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
     const finishedAt = new Date();
     const startedAt = new Date(finishedAt.getTime() - data.raw_time_ms);
+    const parts = buildRunParts(data, startedAt.getTime());
 
-    const { data: run, error } = await supabaseAdmin
-      .from("runs")
-      .insert({
-        event_id: data.eventId,
-        participant_id: data.participantId,
-        attempt_number: (count ?? 0) + 1,
-        started_at: startedAt.toISOString(),
-        finished_at: finishedAt.toISOString(),
-        raw_time_ms: data.raw_time_ms,
-        paused_duration_ms: 0,
-        penalty_ms: penaltyTotal,
-        status: "official",
-        is_official: true,
-        client_key: `manual:${crypto.randomUUID()}`,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-
-    const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
-    if (ordered.length) {
-      const { error: splitsError } = await supabaseAdmin.from("splits").insert(
-        ordered.map((s, i) => ({
-          run_id: run.id,
-          station_id: s.stationId,
-          cumulative_time_ms: s.cumulative_time_ms,
-          segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
-          recorded_at: new Date(startedAt.getTime() + s.cumulative_time_ms).toISOString(),
-          entry_method: "admin_manual",
-          client_key: `manual:${run.id}:${s.stationId}`,
-        })),
-      );
-      if (splitsError) throw splitsError;
-    }
-    if (data.penalties.length) {
-      const { error: penaltiesError } = await supabaseAdmin.from("penalties").insert(
-        data.penalties.map((p, i) => ({
-          run_id: run.id,
-          station_id: p.stationId ?? null,
-          penalty_ms: p.penalty_ms,
-          reason: p.reason ?? null,
-          created_by: "admin",
-          client_key: `manual:${run.id}:${i}`,
-        })),
-      );
-      if (penaltiesError) throw penaltiesError;
-    }
-
-    const { error: statusError } = await supabaseAdmin
-      .from("event_participants")
-      .update({ participation_status: "finished", on_clock_since: null })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", data.participantId);
-    if (statusError) throw statusError;
-
-    await supabaseAdmin.from("audit_logs").insert({
-      event_id: data.eventId,
-      entity_type: "runs",
-      entity_id: run.id,
-      action: "manual_run_entry",
-      new_value: { raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal },
-      performed_by: "admin",
+    // The roster and station checks, the attempt number, the run, its splits and
+    // penalties, the athlete's status and the audit row are one transaction in
+    // the database: see 20261009120000_create_a_manual_run_in_one_transaction.sql.
+    const { data: runId, error } = await (
+      await adminDb()
+    ).rpc("create_manual_run", {
+      _event_id: data.eventId,
+      _participant_id: data.participantId,
+      _raw_time_ms: data.raw_time_ms,
+      _penalty_ms: parts.penaltyTotal,
+      _started_at: startedAt.toISOString(),
+      _finished_at: finishedAt.toISOString(),
+      _splits: parts.splits,
+      _penalties: parts.penalties,
     });
-
-    return { runId: run.id };
+    if (error) throw error;
+    return { runId: runId as string };
   });
 
 /**
@@ -897,34 +943,7 @@ export const createManualRun = createServerFn({ method: "POST" })
  */
 export const updateRunResult = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
-    z
-      .object({
-        eventId: zuuid(),
-        runId: zuuid(),
-        raw_time_ms: z
-          .number()
-          .int()
-          .min(0)
-          .max(24 * 60 * 60 * 1000),
-        splits: z
-          .array(
-            z.object({
-              stationId: zuuid(),
-              cumulative_time_ms: z.number().int().min(0),
-            }),
-          )
-          .max(50),
-        penalties: z
-          .array(
-            z.object({
-              stationId: zuuid().nullable().optional(),
-              penalty_ms: z.number().int().min(0),
-              reason: z.string().max(120).nullable().optional(),
-            }),
-          )
-          .max(50),
-      })
-      .parse(d),
+    z.object({ eventId: zuuid(), runId: zuuid(), ...runPartsSchema }).parse(d),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
@@ -941,12 +960,12 @@ export const updateRunResult = createServerFn({ method: "POST" })
     if (runError) throw runError;
     if (!run) throw new Error("That run is not part of this event.");
 
-    const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
+    await assertStationsInEvent(data.eventId, [
+      ...data.splits.map((s) => s.stationId),
+      ...data.penalties.map((p) => p.stationId),
+    ]);
 
-    // Segment times are derived, not typed: sorting by cumulative time and
-    // differencing keeps them consistent with whatever the commissioner entered.
-    const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
-    const startMs = run.started_at ? Date.parse(run.started_at) : Date.now();
+    const parts = buildRunParts(data, run.started_at ? Date.parse(run.started_at) : Date.now());
 
     const { error } = await (
       await adminDb()
@@ -954,26 +973,15 @@ export const updateRunResult = createServerFn({ method: "POST" })
       _run_id: run.id,
       _event_id: data.eventId,
       _raw_time_ms: data.raw_time_ms,
-      _penalty_ms: penaltyTotal,
-      _splits: ordered.map((s, i) => ({
-        station_id: s.stationId,
-        cumulative_time_ms: s.cumulative_time_ms,
-        segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
-        recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
-        // Derived rather than random, so a retry of a half-written save
-        // overwrites its own rows instead of doubling them.
-        client_key: `edit:${run.id}:${s.stationId}`,
-      })),
-      _penalties: data.penalties.map((p, i) => ({
-        station_id: p.stationId ?? null,
-        penalty_ms: p.penalty_ms,
-        reason: p.reason ?? null,
-        client_key: `edit:${run.id}:${i}`,
-      })),
+      _penalty_ms: parts.penaltyTotal,
+      // Derived rather than random, so a retry of a half-written save
+      // overwrites its own rows instead of doubling them.
+      _splits: parts.splits.map((s) => ({ ...s, client_key: `edit:${run.id}:${s.station_id}` })),
+      _penalties: parts.penalties.map((p, i) => ({ ...p, client_key: `edit:${run.id}:${i}` })),
     });
     if (error) throw error;
 
-    return { ok: true, official_time_ms: data.raw_time_ms + penaltyTotal };
+    return { ok: true, official_time_ms: data.raw_time_ms + parts.penaltyTotal };
   });
 
 export const recordDraftSelection = createServerFn({ method: "POST" })
@@ -1020,12 +1028,19 @@ export const undoLastDraftSelection = createServerFn({ method: "POST" })
     return { ok: true as const, participantId: undone as string };
   });
 
+// events.status and events.timing_mode are free text in the database (no CHECK),
+// so these lists are all that keeps a typo out of the columns. They are the
+// values the schema documents in 20260724145544; nothing in the app writes
+// either today, so widen deliberately if a screen ever needs another.
+const EVENT_STATUSES = ["setup", "live", "paused", "drafting", "complete"] as const;
+const EVENT_TIMING_MODES = ["standard", "split"] as const;
+
 export const updateEvent = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
-        status: z.string().optional(),
+        status: z.enum(EVENT_STATUSES).optional(),
         results_locked: z.boolean().optional(),
         // draft_locked and running_order_locked are deliberately absent.
         // Both columns exist, this was the only thing that could ever have
@@ -1034,7 +1049,7 @@ export const updateEvent = createServerFn({ method: "POST" })
         // rather than wired up, per the triage. The columns stay: removing
         // one costs a migration to bring back, and the feature may return.
         splits_enabled: z.boolean().optional(),
-        timing_mode: z.string().optional(),
+        timing_mode: z.enum(EVENT_TIMING_MODES).optional(),
       })
       .parse(d),
   )

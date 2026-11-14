@@ -1373,3 +1373,55 @@ describe("archiveEvent with a read that fails", () => {
     expect(mock.callsFor("event_archive_snapshots", "insert")).toEqual([]);
   });
 });
+
+describe("archiveEvent reads only this event's splits and penalties", () => {
+  const HEALTHY: SupabaseResponses = {
+    "events.select": { data: { id: EVENT_ID, name: "Combine", year: 2026 } },
+    "event_archive_snapshots.select": { data: null },
+    "event_archive_snapshots.insert": {},
+  };
+
+  async function archive() {
+    const mod = await freshModule();
+    return callServerFn(mod.archiveEvent, { data: { eventId: EVENT_ID }, headers: asAdmin() });
+  }
+
+  const snapshot = () =>
+    (
+      mock.callsFor("event_archive_snapshots", "insert")[0].payload as {
+        snapshot: Record<string, Record<string, unknown>[]>;
+      }
+    ).snapshot;
+
+  it.each(["splits", "penalties"])("filters %s to this event through their run", async (table) => {
+    withDb(HEALTHY);
+    await archive();
+    const [read] = mock.callsFor(table, "select");
+    expect(read.columns).toContain("run:runs!inner(event_id)");
+    expect(read.filters.find((f) => f.method === "eq")?.args).toEqual(["run.event_id", EVENT_ID]);
+  });
+
+  it("keeps the snapshot's rows as they were, without the join column", async () => {
+    withDb({
+      ...HEALTHY,
+      "splits.select": { data: [{ id: "s1", run_id: "r1", run: { event_id: EVENT_ID } }] },
+      "penalties.select": { data: [{ id: "p1", run_id: "r1", run: { event_id: EVENT_ID } }] },
+    });
+    await archive();
+    expect(snapshot().splits).toEqual([{ id: "s1", run_id: "r1" }]);
+    expect(snapshot().penalties).toEqual([{ id: "p1", run_id: "r1" }]);
+  });
+
+  it("archives every split of a combine bigger than one PostgREST page", async () => {
+    const rows = Array.from({ length: 1_200 }, (_, i) => ({ id: `s${i}`, run_id: "r1", run: {} }));
+    withDb({
+      ...HEALTHY,
+      "splits.select": (call) => {
+        const [from, to] = call.filters.find((f) => f.method === "range")!.args as [number, number];
+        return { data: rows.slice(from, to + 1) };
+      },
+    });
+    await archive();
+    expect(snapshot().splits).toHaveLength(1_200);
+  });
+});

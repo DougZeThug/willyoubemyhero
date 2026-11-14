@@ -18,6 +18,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
+import { readAllRows } from "./paged-read.server";
 
 export const getEventPhotoUrls = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
@@ -734,6 +735,11 @@ export const archiveEvent = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Splits and penalties belong to a run, and a run to this event: the join is
+    // what keeps another combine's rows out of this one's snapshot. They are
+    // also the tables that outgrow PostgREST's 1000-row cap first (a run carries
+    // a split per station), so they are read a page at a time — a plain SELECT
+    // would be cut off without a word and archived for good.
     const [event, eps, stations, runs, splits, penalties, drafts] = await Promise.all([
       supabaseAdmin.from("events").select("*").eq("id", data.eventId).maybeSingle(),
       supabaseAdmin
@@ -741,20 +747,36 @@ export const archiveEvent = createServerFn({ method: "POST" })
         .select("*, participant:participants(*)")
         .eq("event_id", data.eventId),
       supabaseAdmin.from("stations").select("*").eq("event_id", data.eventId),
-      supabaseAdmin
-        .from("runs")
-        .select(
-          "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at",
-        )
-        .eq("event_id", data.eventId),
-      supabaseAdmin
-        .from("splits")
-        .select(
-          "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at",
-        ),
-      supabaseAdmin
-        .from("penalties")
-        .select("id, run_id, station_id, penalty_ms, reason, created_at"),
+      readAllRows((from, to) =>
+        supabaseAdmin
+          .from("runs")
+          .select(
+            "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at",
+          )
+          .eq("event_id", data.eventId)
+          .order("id")
+          .range(from, to),
+      ),
+      readAllRows((from, to) =>
+        supabaseAdmin
+          .from("splits")
+          .select(
+            "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at, run:runs!inner(event_id)",
+          )
+          .eq("run.event_id", data.eventId)
+          .order("id")
+          .range(from, to),
+      ),
+      readAllRows((from, to) =>
+        supabaseAdmin
+          .from("penalties")
+          .select(
+            "id, run_id, station_id, penalty_ms, reason, created_at, run:runs!inner(event_id)",
+          )
+          .eq("run.event_id", data.eventId)
+          .order("id")
+          .range(from, to),
+      ),
       supabaseAdmin
         .from("draft_selections")
         .select("id, event_id, participant_id, selection_order, draft_position, selected_at")
@@ -762,20 +784,22 @@ export const archiveEvent = createServerFn({ method: "POST" })
     ]);
     // Every read throws on failure rather than coalescing to "none". The snapshot
     // goes into an append-only table the public reads, so one failed SELECT would
-    // otherwise be archived for good as a combine with no runs, or no roster.
+    // otherwise be archived for good as a combine with no runs, or no roster. The
+    // paged reads throw for themselves; these are the single-shot ones.
     if (event.error) throw event.error;
-    for (const read of [eps, stations, runs, splits, penalties, drafts]) {
+    for (const read of [eps, stations, drafts]) {
       if (read.error) throw read.error;
     }
     if (!event.data) throw new Error("Event not found");
-    const runIds = new Set((runs.data ?? []).map((r) => r.id));
+    // The join column is a filter, not part of the record the snapshot has always held.
+    const withoutJoin = <T extends { run: unknown }>({ run: _run, ...row }: T) => row;
     const snapshot = {
       event: event.data,
       participants: eps.data ?? [],
       stations: stations.data ?? [],
-      runs: runs.data ?? [],
-      splits: (splits.data ?? []).filter((s) => runIds.has(s.run_id)),
-      penalties: (penalties.data ?? []).filter((p) => runIds.has(p.run_id)),
+      runs,
+      splits: splits.map(withoutJoin),
+      penalties: penalties.map(withoutJoin),
       drafts: drafts.data ?? [],
       archivedAt: new Date().toISOString(),
     };
