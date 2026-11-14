@@ -1,7 +1,7 @@
 import { errorMessage } from "@/lib/errors";
 import { claimRosterKey } from "@/lib/query-keys";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";

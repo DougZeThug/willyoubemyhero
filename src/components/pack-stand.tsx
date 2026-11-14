@@ -12,8 +12,6 @@ import { burst } from "@/lib/card-confetti";
 import { cue, playEditionShine } from "@/lib/card-sfx";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import { secretTierEarnsTheBeat } from "@/lib/secret-rarity";
-import type { PackSlot } from "@/lib/pack";
-import type { PackOutcome } from "@/lib/pack-outcome";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
@@ -21,7 +19,6 @@ import { useStandSwipe } from "@/hooks/use-stand-swipe";
 import {
   BEAT_MS,
   type StandSlot,
-  type StandParticipant,
   FACE_LANDS_AT,
   SLAM_MS,
   type StandBeat,

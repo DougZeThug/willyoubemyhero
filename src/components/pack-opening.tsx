@@ -18,7 +18,6 @@ import {
 import { seededRng } from "@/lib/format";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
 
 /**

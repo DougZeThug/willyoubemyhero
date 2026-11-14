@@ -1,14 +1,9 @@
 import {
   cardPullCountsKey,
   collectionTrophiesKey,
-  dustBalanceKey,
   dustSparesKey,
   marketListingsKey,
-  myCardStatsKey,
-  mySecretsKey,
   myStallKey,
-  packStatusKey,
-  tradeSparesKey,
 } from "@/lib/query-keys";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";

@@ -1,12 +1,4 @@
-import {
-  collectionTrophiesKey,
-  dustBalanceKey,
-  dustSparesKey,
-  myCardStatsKey,
-  mySecretsKey,
-  packStatusKey,
-  tradeSparesKey,
-} from "@/lib/query-keys";
+import { collectionTrophiesKey, mySecretsKey } from "@/lib/query-keys";
 import { useId, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

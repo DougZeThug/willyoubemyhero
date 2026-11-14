@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Layers, Check, Medal } from "lucide-react";
 import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";

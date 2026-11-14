@@ -7,7 +7,7 @@ import {
   useNavigate,
   useRouter,
 } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -33,7 +33,7 @@ import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/u
 import { HoloCard, NO_FLICK, type HoloGestures } from "@/components/holo-card";
 import { TierScope } from "@/components/tier-scope";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
-import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
+import { cardBadge, editionRank, editionStyle, toEdition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { hasLiveGyro, requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";

@@ -1,5 +1,5 @@
 import { activeEventKey } from "@/lib/query-keys";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { plural } from "@/components/plural";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";

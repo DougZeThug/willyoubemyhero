@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { motion } from "motion/react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
 import { toResultCardData, type ResultCardData } from "@/lib/result-card-data";
 import { useCardExport } from "@/hooks/use-card-export";
-import { toast } from "sonner";
 import { useStandingsRows } from "@/hooks/use-standings-rows";
 
 export const Route = createFileRoute("/leaderboard")({

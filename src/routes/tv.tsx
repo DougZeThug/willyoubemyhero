@@ -7,7 +7,6 @@
 // this is a screen watched from a sofa rather than held, so the touch floor is
 // not its rule either.
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
 import { feedReadError, readFailedMessage } from "@/lib/feed-read";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";

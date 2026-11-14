@@ -1,4 +1,3 @@
-import { cardUrlsKey, photoUrlsKey } from "@/lib/query-keys";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";

@@ -31,7 +31,7 @@ import { MilestoneReveal } from "@/components/milestone-reveal";
 import { CollectionComplete } from "@/components/collection-complete";
 import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
-import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { rarityMap } from "@/lib/card-rarity";
 import {
   addUnrecorded,
   clearPackDealt,
@@ -51,27 +51,19 @@ import { celebrate, celebrateSecret, celebrateUpgrade } from "@/lib/card-confett
 import { openPack } from "@/lib/pack.functions";
 import { leagueDay } from "@/lib/league-day";
 import { adoptCollection } from "@/lib/card-pulls.functions";
-import { secretFoil, SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
+import { SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { deviceId, usePackIdentity } from "@/lib/device-id";
-import {
-  copiesAfterSale,
-  packStage,
-  rosterHeldNow,
-  secretHeldNow,
-  type PackSlot,
-} from "@/lib/pack";
+import { copiesAfterSale, packStage, type PackSlot } from "@/lib/pack";
 import {
   celebrationFor,
-  copiesAfter,
   peekMs,
   SECRET_RISER_AT_MS,
-  slotOutcome,
   upgradeLabel,
   type LocalBefore,
 } from "@/lib/pack-outcome";
-import { editionStyle, toEdition } from "@/lib/card-edition";
-import { dustLive, MILL_BY_EDITION, secretSellValue } from "@/lib/dust";
+import { editionStyle } from "@/lib/card-edition";
+import { dustLive } from "@/lib/dust";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
@@ -80,7 +72,6 @@ import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { usePackSell } from "@/hooks/use-pack-sell";
 import { streakLine } from "@/lib/streaks";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
-import { urlFromSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
 import { universalBack } from "@/lib/collection-view";

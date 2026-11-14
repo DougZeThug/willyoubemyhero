@@ -6,13 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { errorMessage } from "./errors";
-import {
-  VARIANT_WIDTHS,
-  type CardSide,
-  type CardUrls,
-  type ImageUrlSet,
-  type SizedPhotoUrls,
-} from "./media";
+import { type CardSide, type CardUrls, type ImageUrlSet, type SizedPhotoUrls } from "./media";
 import { forgetSignedPath, signPath, signSet } from "./media-sign.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";

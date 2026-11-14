@@ -26,7 +26,6 @@ import {
   Timer as TimerIcon,
   X,
   Camera,
-  Archive,
   Trash2,
   RotateCcw,
 } from "lucide-react";

@@ -20,7 +20,6 @@ import { copiesAfterSale, nextPackLabel, packResetAt } from "@/lib/pack";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
-import { urlFromSet } from "@/lib/media";
 import { StreakClaim } from "@/components/streak-claim";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { SellSpareDialog } from "@/components/sell-spare-dialog";

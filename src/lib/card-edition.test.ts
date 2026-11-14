@@ -17,7 +17,6 @@ import {
   editionRank,
   editionStyle,
   isEdition,
-  type Edition,
 } from "./card-edition";
 
 describe("the odds table", () => {
