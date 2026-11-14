@@ -4,6 +4,7 @@ import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
 import { SECRET_PLACEHOLDER_NAME } from "./secret-visibility.server";
 import { adminDb } from "./admin-db.server";
+import { readAllRows } from "./paged-read.server";
 
 /**
  * The commissioner's answer to "why can't I see my card in trades?".
@@ -179,62 +180,92 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
     await requireAdmin(data.eventId);
     const sb = await adminDb();
 
-    const [{ data: participants }, { data: codes }, { data: accounts }, { data: pulls }] =
-      await Promise.all([
-        sb.from("participants").select("id, name, is_collector").eq("active", true).order("name"),
-        sb.from("member_codes").select("participant_id, claimed_at"),
-        sb.from("account_identities").select("participant_id, guest_id"),
+    // Whole-table reads on purpose — a device-held row has no event to scope by
+    // — so each is paged past PostgREST's 1000-row cap and throws on error. The
+    // audit exists to find what is missing; a silently short read under-reports
+    // the very devices it is there to list. Orders are total (a primary key or a
+    // unique pair) so offset paging cannot repeat or skip a row.
+    const [participants, codes, accounts, pulls, copies, packs, rungs] = await Promise.all([
+      readAllRows((from, to) =>
+        sb
+          .from("participants")
+          .select("id, name, is_collector")
+          .eq("active", true)
+          .order("name")
+          .order("id")
+          .range(from, to),
+      ),
+      readAllRows((from, to) =>
+        sb
+          .from("member_codes")
+          .select("participant_id, claimed_at")
+          .order("participant_id")
+          .range(from, to),
+      ),
+      readAllRows((from, to) =>
+        sb
+          .from("account_identities")
+          .select("participant_id, guest_id")
+          .order("user_id")
+          .range(from, to),
+      ),
+      readAllRows<PullRow>((from, to) =>
         sb
           .from("secret_card_pulls")
           .select("participant_id, guest_id, secret_card_id, pulled_on")
-          .returns<
-            {
-              participant_id: string | null;
-              guest_id: string | null;
-              secret_card_id: string;
-              pulled_on: string;
-            }[]
-          >(),
-      ]);
+          .order("id")
+          .range(from, to)
+          .returns<PullRow[]>(),
+      ),
+      readAllRows<{ participant_id: string; event_participant_id: string }>((from, to) =>
+        sb
+          .from("card_copies")
+          .select("participant_id, event_participant_id")
+          .order("id")
+          .range(from, to)
+          .returns<{ participant_id: string; event_participant_id: string }[]>(),
+      ),
+      // The third thing a device can be left holding is a streak rung: a
+      // guest-held one is a payout this person cannot reach, and the panel is the
+      // only place anybody can see one to move it. Packs are read for the same reason.
+      readAllRows<{ participant_id: string | null; guest_id: string | null }>((from, to) =>
+        sb
+          .from("pack_opens")
+          .select("participant_id, guest_id")
+          .order("opened_on")
+          .order("participant_id")
+          .order("guest_id")
+          .range(from, to)
+          .returns<{ participant_id: string | null; guest_id: string | null }[]>(),
+      ),
+      readAllRows<{ participant_id: string | null; guest_id: string | null }>((from, to) =>
+        sb
+          .from("streak_milestone_claims")
+          .select("participant_id, guest_id")
+          .order("id")
+          .range(from, to)
+          .returns<{ participant_id: string | null; guest_id: string | null }[]>(),
+      ),
+    ]);
 
-    const { data: copies } = await sb
-      .from("card_copies")
-      .select("participant_id, event_participant_id")
-      .returns<{ participant_id: string; event_participant_id: string }[]>();
-
-    const { data: packs } = await sb
-      .from("pack_opens")
-      .select("participant_id, guest_id")
-      .returns<{ participant_id: string | null; guest_id: string | null }[]>();
-
-    // The third thing a device can be left holding. Read for the same reason the
-    // packs are: a guest-held rung is a payout this person cannot reach, and the
-    // panel is the only place anybody can see one to move it.
-    const { data: rungs } = await sb
-      .from("streak_milestone_claims")
-      .select("participant_id, guest_id")
-      .returns<{ participant_id: string | null; guest_id: string | null }[]>();
-
-    const claimed = new Map((codes ?? []).map((c) => [c.participant_id, c.claimed_at]));
+    const claimed = new Map(codes.map((c) => [c.participant_id, c.claimed_at]));
     const linked = new Set(
-      (accounts ?? []).map((a) => a.participant_id).filter((id): id is string => Boolean(id)),
+      accounts.map((a) => a.participant_id).filter((id): id is string => Boolean(id)),
     );
     const accountGuests = new Set(
-      (accounts ?? [])
-        .filter((a) => !a.participant_id && a.guest_id)
-        .map((a) => a.guest_id as string),
+      accounts.filter((a) => !a.participant_id && a.guest_id).map((a) => a.guest_id as string),
     );
 
     const players = buildPlayers(
-      participants ?? [],
-      tallySecrets(pulls ?? []),
-      tallyCopies(copies ?? []),
+      participants,
+      tallySecrets(pulls),
+      tallyCopies(copies),
       claimed,
       linked,
     );
 
-    const packsByGuest = countByGuest(packs ?? []);
-    const rungsByGuest = countByGuest(rungs ?? []);
+    const packsByGuest = countByGuest(packs);
+    const rungsByGuest = countByGuest(rungs);
 
     // Device-held rows: the whole point of the panel.
     //
@@ -246,20 +277,20 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
     // panel could not see.
     const strandedIds = [
       ...new Set([
-        ...(pulls ?? [])
-          .filter((r) => !r.participant_id && r.guest_id)
-          .map((r) => r.guest_id as string),
+        ...pulls.filter((r) => !r.participant_id && r.guest_id).map((r) => r.guest_id as string),
         ...packsByGuest.keys(),
         ...rungsByGuest.keys(),
       ]),
     ];
 
-    const { data: cardNames } = await sb.from("secret_cards").select("id, name");
-    const nameOfCard = new Map((cardNames ?? []).map((c) => [c.id, c.name]));
+    const cardNames = await readAllRows((from, to) =>
+      sb.from("secret_cards").select("id, name").order("id").range(from, to),
+    );
+    const nameOfCard = new Map(cardNames.map((c) => [c.id, c.name]));
 
     const stranded = buildStranded(
       strandedIds,
-      pulls ?? [],
+      pulls,
       packsByGuest,
       rungsByGuest,
       accountGuests,
