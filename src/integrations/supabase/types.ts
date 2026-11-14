@@ -2187,6 +2187,19 @@ export type Database = {
         Args: { _categories: Json; _event_id: string };
         Returns: number;
       };
+      create_manual_run: {
+        Args: {
+          _event_id: string;
+          _finished_at: string;
+          _participant_id: string;
+          _penalties: Json;
+          _penalty_ms: number;
+          _raw_time_ms: number;
+          _splits: Json;
+          _started_at: string;
+        };
+        Returns: string;
+      };
       create_trade_offer: {
         Args: {
           _event_id: string;
