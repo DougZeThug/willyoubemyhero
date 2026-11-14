@@ -93,6 +93,8 @@
   --color-warn: var(--warn);
   --color-warn-foreground: var(--warn-foreground);
   --color-focus: var(--focus);
+  /* Dark row fill the spectator screens (/live, /tv, /analytics, /recap) sit rows on. */
+  --color-panel: oklch(0.16 0.02 240);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Barlow Condensed", "Bebas Neue", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;

@@ -4,16 +4,11 @@ import { RUNS_PUBLIC_COLUMNS } from "./runs-columns";
 import { DRAFT_SELECTIONS_PUBLIC_COLUMNS, PENALTIES_PUBLIC_COLUMNS } from "./penalties-columns";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
+import { queryActiveEvent } from "./active-event-query";
 
 export const getActiveEvent = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const { data: event, error } = await sb
-    .from("events_public")
-    .select("*")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: event, error } = await queryActiveEvent(sb);
   if (error) console.error("[getActiveEvent] events_public failed", error);
   return event;
 });

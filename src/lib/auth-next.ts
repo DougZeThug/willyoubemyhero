@@ -15,7 +15,9 @@
 // goes stale the first time a new CTA is added. The destination is this device's
 // business, so it waits here instead.
 
-const KEY = "wwbh:auth-next";
+import { STORAGE_KEYS } from "./storage-keys";
+
+const KEY = STORAGE_KEYS.authNext;
 
 /**
  * How long a stashed destination is worth honouring.

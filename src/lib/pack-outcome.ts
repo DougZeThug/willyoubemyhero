@@ -7,7 +7,7 @@
 // is this new to me, is it better than mine, or is it just another one — and
 // it is answered here, once, in a form a test can exhaust.
 import { editionCelebrates, editionLabel, editionRank, editionStyle, toEdition } from "./card-edition"; // prettier-ignore
-import type { Rarity } from "./card-rarity";
+import { tierCelebrates, type Rarity } from "./card-rarity";
 import { secretTierCelebrates, secretTierLabel, secretTierRank, secretTierStyle } from "./secret-rarity"; // prettier-ignore
 import type { PackSlot } from "./pack";
 
@@ -110,6 +110,18 @@ export function peekMs(slot: PackSlot, outcome: PackOutcome): number | null {
 }
 
 /**
+ * Whether a roster card's landing is a party: its own tier, or a finish that is
+ * itself worth one. The pack stand and the player page share this so landing on
+ * a platinum base card is an event on both screens.
+ */
+export function rosterCelebrates(
+  tier: Rarity["tier"],
+  edition: string | null | undefined,
+): boolean {
+  return tierCelebrates(tier) || editionCelebrates(edition);
+}
+
+/**
  * Which burst the landing earns.
  *
  * The tier's own celebration comes first: a champion is a champion in every
@@ -130,9 +142,7 @@ export function celebrationFor(args: {
     return outcome === "upgrade" ? "upgrade" : "quiet";
   }
   const finish = slot.edition;
-  if (tier === "champion" || tier === "podium" || (finish != null && editionCelebrates(finish))) {
-    return "tier";
-  }
+  if (rosterCelebrates(tier, finish)) return "tier";
   if (outcome === "upgrade") return "upgrade";
   return "quiet";
 }

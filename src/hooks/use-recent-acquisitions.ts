@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemberQuery } from "./use-member-query";
+import { recentAcquisitionsKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecentAcquisitions, type RecentAcquisitions } from "@/lib/acquisitions.functions";
 import { useMemberSession } from "@/lib/member-token";
@@ -15,17 +16,11 @@ import { useMemberSession } from "@/lib/member-token";
  * deliberate: the key is identical, so the second one is served from cache rather
  * than issuing a second request for an answer that is already in hand.
  */
-export const recentAcquisitionsKey = (
-  eventId: string | null | undefined,
-  participantId: string | null | undefined,
-  since: string | null | undefined,
-) => ["recent-acquisitions", eventId, participantId, since] as const;
-
 export function useRecentAcquisitions(eventId: string | null, since: string | null) {
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
   const fn = useServerFn(getRecentAcquisitions);
-  return useQuery({
+  return useMemberQuery({
     queryKey: recentAcquisitionsKey(eventId, participantId, since),
     queryFn: () =>
       fn({ data: { eventId: eventId!, since: since! } }) as Promise<RecentAcquisitions>,
@@ -33,9 +28,5 @@ export function useRecentAcquisitions(eventId: string | null, since: string | nu
     // that is the silent first visit rather than a window of zero length.
     enabled: !!eventId && !!since && !!participantId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
-    // A member whose token has just expired should see the vault they already
-    // have, not a retry storm against a handler that will keep refusing them.
-    retry: false,
   });
 }

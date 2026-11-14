@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { createDeviceStore, parseFlag } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
 /**
  * Whether a device can actually lean a card, and whether it will.
@@ -90,12 +91,6 @@ export function hasLiveGyro(): Promise<boolean> {
   return awaitReading().then((access) => access === "granted");
 }
 
-// ------- The preference, as opposed to the permission -------
-
-const TILT_KEY = "wwbh:tilt";
-
-let tiltWanted = false;
-
 /**
  * "Tilt wanted", never "permission held".
  *
@@ -106,68 +101,17 @@ let tiltWanted = false;
  * So this stores what the person asked for, and `requestGyroAccess` still runs
  * from the tap that sets it — which is the gesture iOS requires.
  *
- * Stored the way every other device preference in this app is — see the header
- * of nav-shape.ts: a `wwbh:` key, storage in a try/catch so a locked private
- * window degrades to "works for this page load", a module flag because that is
- * all there is left to trust when a write is refused, and a custom event because
- * `storage` only fires in *other* tabs.
+ * Reactive view `useTiltWanted` starts false so the server and the first client
+ * render agree: a card seeded from it starts flat and leans a tick later, which is
+ * the right way round — the other order is a card that leans and then snaps back.
  */
-export function setTiltWanted(next: boolean) {
-  tiltWanted = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(TILT_KEY, next ? "1" : "0");
-  } catch {
-    /* private mode with storage blocked still holds for this page load */
-  }
-  window.dispatchEvent(new Event("wwbh:tilt-changed"));
-}
+const tilt = createDeviceStore<boolean>({
+  key: STORAGE_KEYS.tilt,
+  empty: false,
+  parse: parseFlag,
+  serialize: (on) => (on ? "1" : "0"),
+});
 
-export function isTiltWanted() {
-  return tiltWanted;
-}
-
-function readTiltWanted(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(TILT_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Reactive view of the preference.
- *
- * Starts false so the server and the first client render agree, then reads
- * storage in an effect — the same hydration dance as `useMemberSession`. A card
- * seeded from this therefore starts flat and leans a tick later, which is the
- * right way round: the other order is a card that leans and then snaps back.
- */
-export function useTiltWanted() {
-  const [wanted, setWanted] = useState(false);
-
-  useEffect(() => {
-    const mine = () => setWanted(isTiltWanted());
-    const reread = () => {
-      tiltWanted = readTiltWanted();
-      setWanted(tiltWanted);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to re-read and re-render on every
-    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== TILT_KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener("wwbh:tilt-changed", mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener("wwbh:tilt-changed", mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
-
-  return wanted;
-}
+export const setTiltWanted = tilt.set;
+export const isTiltWanted = tilt.get;
+export const useTiltWanted = tilt.useValue;

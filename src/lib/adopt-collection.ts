@@ -1,3 +1,5 @@
+import { memberIdentity } from "./identity";
+import { myCardStatsPrefix } from "./query-keys";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   addUnrecorded,
@@ -5,9 +7,12 @@ import {
   loadCollectionOrThrow,
   loadUnrecorded,
   retireUnrecorded,
-  todayKey,
 } from "./card-collection";
+import { leagueDay } from "./league-day";
 import { adoptCollection } from "./card-pulls.functions";
+
+/** The cards read off this handset before it becomes somebody. */
+export type LocalCollection = Awaited<ReturnType<typeof loadCollection>>;
 
 /**
  * File the cards on this handset against the member it has just become.
@@ -33,9 +38,7 @@ import { adoptCollection } from "./card-pulls.functions";
  * and the server files every adopted copy as standard — see
  * 20260902120000_harden_adopt_card_copies.sql for what trusting it cost.
  */
-export async function adoptLocalCollection(
-  snapshot: Awaited<ReturnType<typeof loadCollection>>,
-): Promise<number> {
+export async function adoptLocalCollection(snapshot: LocalCollection): Promise<number> {
   const ids = adoptableIds(snapshot);
   let adopted = 0;
   // Sent in batches, sequentially. The handler takes a roster's worth at a
@@ -68,7 +71,7 @@ const ADOPT_CHUNK = 64;
  * file it. See `carryPackToIdentity`, which skips re-recording these and only
  * these.
  */
-export function adoptableIds(snapshot: Awaited<ReturnType<typeof loadCollection>>): string[] {
+export function adoptableIds(snapshot: LocalCollection): string[] {
   return Object.values(snapshot).map((c) => c.eventParticipantId);
 }
 
@@ -95,12 +98,12 @@ export const snapshotLocalCollection = loadCollectionOrThrow;
  */
 export async function holdForAdoption(
   participantId: string,
-  snapshot: Awaited<ReturnType<typeof loadCollection>>,
+  snapshot: LocalCollection,
 ): Promise<void> {
   const ids = adoptableIds(snapshot);
   if (ids.length === 0) return;
-  const identity = `m:${participantId}`;
-  await addUnrecorded({ dayKey: todayKey(), identity, ids });
+  const identity = memberIdentity(participantId);
+  await addUnrecorded({ dayKey: leagueDay(), identity, ids });
   // Read back, because `addUnrecorded` swallows a failed write by design — the
   // pack screen would rather deal a pack than stop on a blocked database. Here
   // that contract is the wrong one: a hold that was never written, reported as
@@ -133,17 +136,17 @@ export async function holdForAdoption(
  */
 export async function releaseAdoptionHold(
   participantId: string,
-  snapshot: Awaited<ReturnType<typeof loadCollection>>,
+  snapshot: LocalCollection,
   qc?: QueryClient,
 ): Promise<void> {
   const ids = adoptableIds(snapshot);
   if (ids.length === 0) return;
   if (qc) {
     await qc.refetchQueries(
-      { queryKey: ["my-card-stats"], type: "active" },
+      { queryKey: myCardStatsPrefix(), type: "active" },
       { throwOnError: true },
     );
   }
   // Scoped to the identity the hold was filed under; see `retireUnrecorded`.
-  await retireUnrecorded(ids, `m:${participantId}`);
+  await retireUnrecorded(ids, memberIdentity(participantId));
 }

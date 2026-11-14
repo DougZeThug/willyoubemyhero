@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CardViewer, type ViewerCard } from "./card-viewer";
 import { rarityStyle } from "@/lib/card-rarity";
@@ -232,17 +232,22 @@ describe("CardViewer, turning the card over", () => {
   });
 
   it("does not flip on the tap a throw interrupted", async () => {
+    vi.useFakeTimers();
     const onDetails = vi.fn();
     const { props } = renderViewer({ onDetails });
     // A tap holds its flip back for TAP.gap, so a double tap can zoom instead.
     // A throw landing inside that window has to cancel it, or the card turns
     // 300ms after somebody has already swiped or dismissed it.
-    throwCard(0, 0);
-    throwCard(0, -90);
-    expect(onDetails).toHaveBeenCalledTimes(1);
-    await new Promise((r) => setTimeout(r, 400));
-    expect(screen.getByRole("button", { name: "Flip" })).toBeInTheDocument();
-    expect(props.onStep).not.toHaveBeenCalled();
+    try {
+      throwCard(0, 0);
+      throwCard(0, -90);
+      expect(onDetails).toHaveBeenCalledTimes(1);
+      await act(() => vi.advanceTimersByTimeAsync(400));
+      expect(screen.getByRole("button", { name: "Flip" })).toBeInTheDocument();
+      expect(props.onStep).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("cannot flip a card nobody has packed", () => {

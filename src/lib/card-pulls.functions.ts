@@ -1,11 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { EDITION_IDS } from "./card-edition";
+import { sqlNull } from "./rpc-null";
 import { requireAdmin, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-rows";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
 import { uuid as zuuid } from "./zod-uuid";
-import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
 
 /*
  * There is no recordCardPulls here any more.
@@ -27,17 +28,6 @@ import { sqlNull } from "./rpc-null";
  * server-only and this is the only way in.
  */
 
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function db() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
 /**
  * How many people have packed each card in an event.
  *
@@ -46,7 +36,7 @@ async function db() {
 export const getCardPullCounts = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<CardPullCounts> => {
-    const sb = await admin();
+    const sb = await adminDb();
     // Resolve the event's own cards first and constrain to them, the way
     // getEventSocial does — so this handler can never be used to enumerate
     // another event's roster.
@@ -57,11 +47,10 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
     const ids = (eps ?? []).map((r) => r.id);
     if (ids.length === 0) return {};
 
-    const secrets = await db();
     // Selecting event_participant_id and nothing else is the leak guard:
     // participant_id must never enter this response, not even in a shape nobody
     // renders.
-    const { data: rows, error } = await secrets
+    const { data: rows, error } = await sb
       .from("card_pulls")
       .select("event_participant_id")
       .in("event_participant_id", ids)
@@ -114,12 +103,12 @@ export const adoptCollection = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = await requireMember();
-    const secrets = await db();
-    const { data: n, error } = await secrets.rpc("adopt_card_copies", {
+    const sb = await adminDb();
+    const { data: n, error } = await sb.rpc("adopt_card_copies", {
       _participant_id: me,
       _event_participant_ids: data.eventParticipantIds,
-      // Kept in the call because the RPC's signature keeps it, the same way
-      // record_card_pulls keeps its own. Postgres never reads it.
+      // Kept in the call because the RPC's signature keeps it. Postgres never
+      // reads it.
       _editions: sqlNull(null),
     });
     if (error) throw new Error(error.message);
@@ -158,8 +147,8 @@ export const grantCard = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const secrets = await db();
-    const { data: res, error } = await secrets.rpc("grant_card_copy_once", {
+    const sb = await adminDb();
+    const { data: res, error } = await sb.rpc("grant_card_copy_once", {
       _grant_key: data.grantKey,
       _participant_id: data.participantId,
       _event_participant_id: data.eventParticipantId,
@@ -190,7 +179,7 @@ export const getMyCardStats = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<MyCardStats> => {
     const me = await requireMember();
-    const sb = await admin();
+    const sb = await adminDb();
 
     // Resolve the event's own cards first and constrain to them, exactly as
     // getCardPullCounts does — so a member's stats can never be used to
@@ -208,8 +197,7 @@ export const getMyCardStats = createServerFn({ method: "GET" })
     if (epsError) throw epsError;
     const ids = (eps ?? []).map((r) => r.id);
 
-    const secrets = await db();
-    const { data: opens, error: openError } = await secrets
+    const { data: opens, error: openError } = await sb
       .from("pack_opens")
       .select("opened_on")
       .eq("participant_id", me)
@@ -226,7 +214,7 @@ export const getMyCardStats = createServerFn({ method: "GET" })
     };
     if (ids.length === 0) return base;
 
-    const { data: rows, error } = await secrets
+    const { data: rows, error } = await sb
       .from("card_pulls")
       .select("event_participant_id, pull_count, edition, first_pulled_at")
       .eq("participant_id", me)

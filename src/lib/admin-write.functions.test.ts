@@ -42,6 +42,13 @@ const IN_EVENT: SupabaseResponses = {
         },
   "event_participants.update": { data: [{ id: EVENT_PARTICIPANT_ID }] },
   "event_participants.delete": { data: [{ id: EVENT_PARTICIPANT_ID }] },
+  // The station lookup asks which of a list belong to the event and the list
+  // form echoes back whatever it was asked about, like the roster one above.
+  "stations.select": (call) => ({
+    data: ((call.filters.find((f) => f.method === "in")?.args[1] as string[]) ?? []).map((id) => ({
+      id,
+    })),
+  }),
   "stations.update": { data: [{ id: STATION_ID }] },
   "stations.delete": { data: [{ id: STATION_ID }] },
   "runs.delete": { data: [{ id: RUN_ID }] },
@@ -104,7 +111,6 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
     finished_at: "2026-07-28T12:01:00.000Z",
     raw_time_ms: 60_000,
   },
-  deleteRun: { eventId: EVENT_ID, runId: RUN_ID },
   recordDraftSelection: {
     eventId: EVENT_ID,
     participantId: PARTICIPANT_ID,
@@ -480,11 +486,159 @@ describe("saveCompletedRun", () => {
       "runs.select": { count: 0 },
       "runs.upsert": { data: null, error: { message: "conflict" } },
     });
-    await expect(save(base)).rejects.toBeTruthy();
+    await expect(save(base)).rejects.toMatchObject({ message: "conflict" });
   });
 
   it("rejects a negative time", async () => {
     await expect(save({ ...base, raw_time_ms: -1 })).rejects.toThrow();
+  });
+
+  it("rejects a negative penalty, which no flow sends and which would shave the time", async () => {
+    await expect(
+      save({
+        ...base,
+        penalties: [{ stationId: null, penalty_ms: -5_000, reason: null, clientKey: "p1" }],
+      }),
+    ).rejects.toThrow();
+  });
+
+  describe("stations and keys from outside this event", () => {
+    const FOREIGN_STATION = "00000000-0000-4000-8000-0000000000dd";
+    const split = {
+      stationId: STATION_ID,
+      cumulative_time_ms: 20_000,
+      segment_time_ms: 20_000,
+      clientKey: "s1",
+      recorded_at: "2026-07-28T12:00:20.000Z",
+    };
+
+    /** Only STATION_ID is this event's; anything else asked about is foreign. */
+    const ownStationOnly: SupabaseResponses["stations.select"] = (call) => ({
+      data: ((call.filters.find((f) => f.method === "in")?.args[1] as string[]) ?? [])
+        .filter((id) => id === STATION_ID)
+        .map((id) => ({ id })),
+    });
+
+    it("refuses a split on another event's station before writing anything", async () => {
+      withDb({
+        "stations.select": ownStationOnly,
+        "runs.select": { count: 0 },
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await expect(
+        save({ ...base, splits: [{ ...split, stationId: FOREIGN_STATION }] }),
+      ).rejects.toThrow("That station is not part of this event.");
+      expect(mock.callsFor("runs", "upsert")).toEqual([]);
+      expect(mock.callsFor("splits", "upsert")).toEqual([]);
+    });
+
+    it("refuses a penalty on another event's station, but lets a station-less one through", async () => {
+      withDb({
+        "stations.select": ownStationOnly,
+        "runs.select": { count: 0 },
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await expect(
+        save({
+          ...base,
+          penalties: [{ stationId: FOREIGN_STATION, penalty_ms: 1, reason: null, clientKey: "p1" }],
+        }),
+      ).rejects.toThrow("not part of this event");
+      expect(mock.callsFor("runs", "upsert")).toEqual([]);
+
+      await save({
+        ...base,
+        penalties: [{ stationId: null, penalty_ms: 1, reason: null, clientKey: "p2" }],
+      });
+      expect(mock.callsFor("penalties", "upsert")).toHaveLength(1);
+    });
+
+    it("asks about this event's stations only, once, however many are named", async () => {
+      withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
+      await save({
+        ...base,
+        splits: [split, { ...split, clientKey: "s2" }],
+        penalties: [{ stationId: STATION_ID, penalty_ms: 1, reason: null, clientKey: "p1" }],
+      });
+      const lookups = mock.callsFor("stations", "select");
+      expect(lookups).toHaveLength(1);
+      expect(mock.eqValue(lookups[0], "event_id")).toBe(EVENT_ID);
+      expect(lookups[0].filters.find((f) => f.method === "in")?.args[1]).toEqual([STATION_ID]);
+    });
+
+    it("refuses a split client_key that already belongs to another run", async () => {
+      // client_key is unique across every run and event, so the upsert would
+      // rewrite that row onto this run rather than conflict.
+      withDb({
+        "splits.select": { data: [{ run_id: "99999999-9999-4999-8999-999999999999" }] },
+        "runs.select": { count: 0 },
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await expect(save({ ...base, splits: [split] })).rejects.toThrow("different result");
+      expect(mock.callsFor("runs", "upsert")).toEqual([]);
+      expect(mock.callsFor("splits", "upsert")).toEqual([]);
+    });
+
+    it("refuses a penalty client_key that already belongs to another run", async () => {
+      withDb({
+        "penalties.select": { data: [{ run_id: "99999999-9999-4999-8999-999999999999" }] },
+        "runs.select": { count: 0 },
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await expect(
+        save({
+          ...base,
+          penalties: [{ stationId: null, penalty_ms: 1, reason: null, clientKey: "p1" }],
+        }),
+      ).rejects.toThrow("different result");
+      expect(mock.callsFor("penalties", "upsert")).toEqual([]);
+    });
+
+    it("lets a retry rewrite its own splits and penalties", async () => {
+      withDb({
+        "splits.select": { data: [{ run_id: RUN_ID }] },
+        "penalties.select": { data: [{ run_id: RUN_ID }] },
+        "runs.select": [
+          {
+            data: {
+              id: RUN_ID,
+              attempt_number: 1,
+              event_id: EVENT_ID,
+              participant_id: PARTICIPANT_ID,
+            },
+          },
+          { count: 1 },
+        ],
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await save({
+        ...base,
+        splits: [split],
+        penalties: [{ stationId: null, penalty_ms: 1, reason: null, clientKey: "p1" }],
+      });
+      expect(mock.callsFor("splits", "upsert")).toHaveLength(1);
+      expect(mock.callsFor("penalties", "upsert")).toHaveLength(1);
+    });
+
+    it("throws rather than writing when the key or station lookup fails", async () => {
+      withDb({
+        "splits.select": { error: { message: "keys unreadable" } },
+        "runs.select": { count: 0 },
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await expect(save({ ...base, splits: [split] })).rejects.toMatchObject({
+        message: "keys unreadable",
+      });
+      withDb({
+        "stations.select": { error: { message: "stations unreadable" } },
+        "runs.select": { count: 0 },
+        "runs.upsert": { data: { id: RUN_ID } },
+      });
+      await expect(save({ ...base, splits: [split] })).rejects.toMatchObject({
+        message: "stations unreadable",
+      });
+      expect(mock.callsFor("runs", "upsert")).toEqual([]);
+    });
   });
 
   it("rejects a client key too short to be unique", async () => {
@@ -562,7 +716,7 @@ describe("draft selections", () => {
 });
 
 describe("setRunningOrder", () => {
-  it("writes one update per row", async () => {
+  it("gives every named row its new running order, scoped to the event", async () => {
     const { setRunningOrder } = await import("./admin-write.functions");
     await callServerFn(setRunningOrder, {
       data: {
@@ -574,7 +728,17 @@ describe("setRunningOrder", () => {
       },
       headers: asAdmin(),
     });
-    expect(mock.callsFor("event_participants", "update")).toHaveLength(2);
+    const written = mock.callsFor("event_participants", "update").map((call) => ({
+      id: mock.eqValue(call, "id"),
+      event: mock.eqValue(call, "event_id"),
+      order: (call.payload as { running_order: number }).running_order,
+    }));
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { id: EVENT_PARTICIPANT_ID, event: EVENT_ID, order: 2 },
+        { id: STATION_ID, event: EVENT_ID, order: 1 },
+      ]),
+    );
   });
 
   it("accepts an empty reorder", async () => {
@@ -634,6 +798,38 @@ describe("updateEvent", () => {
     expect(mock.callsFor("events", "update")[0].payload).toEqual({});
   });
 
+  it.each([
+    ["status", "setup"],
+    ["status", "live"],
+    ["status", "paused"],
+    ["status", "drafting"],
+    ["status", "complete"],
+    ["timing_mode", "standard"],
+    ["timing_mode", "split"],
+  ])("accepts %s = %s", async (field, value) => {
+    const { updateEvent } = await import("./admin-write.functions");
+    await callServerFn(updateEvent, {
+      data: { eventId: EVENT_ID, [field]: value },
+      headers: asAdmin(),
+    });
+    expect(mock.callsFor("events", "update")[0].payload).toEqual({ [field]: value });
+  });
+
+  it.each([
+    ["status", "archived"],
+    ["status", ""],
+    ["timing_mode", "stopwatch"],
+  ])("refuses %s = %j before it reaches the column", async (field, value) => {
+    const { updateEvent } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(updateEvent, {
+        data: { eventId: EVENT_ID, [field]: value },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow();
+    expect(mock.callsFor("events", "update")).toEqual([]);
+  });
+
   it("leaves unmentioned flags alone", async () => {
     const { updateEvent } = await import("./admin-write.functions");
     await callServerFn(updateEvent, {
@@ -656,13 +852,8 @@ describe("updateEvent", () => {
  */
 describe("an admin token is only good for its own event", () => {
   it("scopes every roster and station write to the authorized event", async () => {
-    const {
-      setParticipantStatus,
-      removeParticipantFromEvent,
-      upsertStation,
-      deleteStation,
-      deleteRun,
-    } = await import("./admin-write.functions");
+    const { setParticipantStatus, removeParticipantFromEvent, upsertStation, deleteStation } =
+      await import("./admin-write.functions");
 
     await callServerFn(setParticipantStatus, {
       data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "finished" },
@@ -694,13 +885,6 @@ describe("an admin token is only good for its own event", () => {
       headers: asAdmin(),
     });
     expect(mock.eqValue(mock.callsFor("stations", "delete")[0], "event_id")).toBe(EVENT_ID);
-
-    withDb();
-    await callServerFn(deleteRun, {
-      data: { eventId: EVENT_ID, runId: RUN_ID },
-      headers: asAdmin(),
-    });
-    expect(mock.eqValue(mock.callsFor("runs", "delete")[0], "event_id")).toBe(EVENT_ID);
   });
 
   it("refuses a status change for somebody outside the event", async () => {
@@ -786,14 +970,6 @@ describe("an admin token is only good for its own event", () => {
         data: { eventId: EVENT_ID, id: STATION_ID },
         headers: asAdmin(),
       }),
-    ).rejects.toThrow("not part of this event");
-  });
-
-  it("refuses to delete a run belonging to another event", async () => {
-    withDb({ "runs.delete": { data: [] } });
-    const { deleteRun } = await import("./admin-write.functions");
-    await expect(
-      callServerFn(deleteRun, { data: { eventId: EVENT_ID, runId: RUN_ID }, headers: asAdmin() }),
     ).rejects.toThrow("not part of this event");
   });
 
@@ -963,6 +1139,27 @@ describe("deleteRunResult", () => {
     expect(mock.callsFor("event_participants", "update")).toEqual([]);
   });
 
+  it.each(["penalties", "splits"] as const)(
+    "stops before deleting the run when the %s delete fails",
+    async (table) => {
+      withDb({
+        "runs.select": [RUN_ROW, { count: 1 }],
+        [`${table}.delete`]: { error: { message: `${table} locked` } },
+      });
+      await expect(remove()).rejects.toMatchObject({ message: `${table} locked` });
+      expect(mock.callsFor("runs", "delete")).toEqual([]);
+      expect(mock.callsFor("event_participants", "update")).toEqual([]);
+    },
+  );
+
+  it("reports an audit row that could not be written instead of a clean delete", async () => {
+    withDb({
+      "runs.select": [RUN_ROW, { count: 1 }, { count: 0 }],
+      "audit_logs.insert": { error: { message: "audit down" } },
+    });
+    await expect(remove()).rejects.toMatchObject({ message: "audit down" });
+  });
+
   it("destroys nothing when the run count cannot be read", async () => {
     // The count used to follow the delete and coalesce to 0, which put an athlete
     // who still had runs back to waiting. Throwing after the delete would have left
@@ -977,31 +1174,162 @@ describe("deleteRunResult", () => {
 });
 
 describe("createManualRun", () => {
-  async function create() {
+  const rpcRun = { "rpc.create_manual_run": { data: RUN_ID } };
+
+  async function create(over: Record<string, unknown> = {}) {
     const { createManualRun } = await import("./admin-write.functions");
     return callServerFn(createManualRun, {
-      data: VALID_PAYLOADS.createManualRun,
+      data: { ...VALID_PAYLOADS.createManualRun, ...over },
       headers: asAdmin(),
     });
   }
 
-  it("numbers the run after the athlete's existing ones", async () => {
-    withDb({ "runs.select": { count: 2 }, "runs.insert": { data: { id: RUN_ID } } });
-    await create();
-    const row = mock.callsFor("runs", "insert")[0].payload as Record<string, unknown>;
-    expect(row.attempt_number).toBe(3);
-  });
-  it("refuses a result for somebody not on this event's roster", async () => {
-    withDb({ "event_participants.select": { data: null } });
-    await expect(create()).rejects.toThrow("not in this event");
-    expect(mock.callsFor("runs", "insert")).toEqual([]);
+  const args = () => mock.rpcCalls("create_manual_run")[0] as Record<string, unknown>;
+
+  it("writes the whole result through one transactional RPC and returns its run id", async () => {
+    withDb(rpcRun);
+    await expect(create()).resolves.toEqual({ runId: RUN_ID });
+    expect(mock.rpcCalls("create_manual_run")).toHaveLength(1);
+    // Nothing is written from here any more; that is the point of the RPC.
+    for (const table of ["runs", "splits", "penalties", "event_participants", "audit_logs"]) {
+      expect(mock.callsFor(table, "insert"), table).toEqual([]);
+      expect(mock.callsFor(table, "update"), table).toEqual([]);
+    }
   });
 
-  it("refuses to number a run when the attempt count cannot be read", async () => {
-    // A null count numbered the run attempt 1 whatever the athlete had already run.
-    withDb({ "runs.select": { error: { message: "count failed" } } });
-    await expect(create()).rejects.toMatchObject({ message: "count failed" });
-    expect(mock.callsFor("runs", "insert")).toEqual([]);
+  it("hands the RPC the event and athlete from the request, and the penalty total", async () => {
+    withDb(rpcRun);
+    await create({
+      penalties: [
+        { penalty_ms: 5_000, reason: "cone" },
+        { stationId: STATION_ID, penalty_ms: 2_500 },
+      ],
+    });
+    expect(args()).toMatchObject({
+      _event_id: EVENT_ID,
+      _participant_id: PARTICIPANT_ID,
+      _raw_time_ms: 61_000,
+      _penalty_ms: 7_500,
+    });
+    expect(args()._penalties).toEqual([
+      { station_id: null, penalty_ms: 5_000, reason: "cone" },
+      { station_id: STATION_ID, penalty_ms: 2_500, reason: null },
+    ]);
+  });
+
+  it("orders the splits, differences the segments and anchors recorded_at to the back-dated start", async () => {
+    withDb(rpcRun);
+    const second = "00000000-0000-4000-8000-000000000044";
+    await create({
+      splits: [
+        { stationId: second, cumulative_time_ms: 45_000 },
+        { stationId: STATION_ID, cumulative_time_ms: 20_000 },
+      ],
+    });
+    const started = Date.parse(args()._started_at as string);
+    expect(Date.parse(args()._finished_at as string) - started).toBe(61_000);
+    expect(args()._splits).toEqual([
+      {
+        station_id: STATION_ID,
+        cumulative_time_ms: 20_000,
+        segment_time_ms: 20_000,
+        recorded_at: new Date(started + 20_000).toISOString(),
+      },
+      {
+        station_id: second,
+        cumulative_time_ms: 45_000,
+        segment_time_ms: 25_000,
+        recorded_at: new Date(started + 45_000).toISOString(),
+      },
+    ]);
+  });
+
+  it("surfaces the database's refusal, e.g. an athlete off this event's roster", async () => {
+    withDb({
+      "rpc.create_manual_run": { error: { message: "Player is not in this event" } },
+    });
+    await expect(create()).rejects.toThrow("not in this event");
+  });
+
+  it("surfaces the database's refusal of another event's station", async () => {
+    withDb({
+      "rpc.create_manual_run": { error: { message: "That station is not part of this event." } },
+    });
+    await expect(create()).rejects.toThrow("That station is not part of this event.");
+  });
+
+  it("keeps the bounds: nothing negative, nothing over a day, at most 50 splits", async () => {
+    withDb(rpcRun);
+    await expect(create({ raw_time_ms: -1 })).rejects.toThrow();
+    await expect(create({ raw_time_ms: 24 * 60 * 60 * 1000 + 1 })).rejects.toThrow();
+    await expect(create({ penalties: [{ penalty_ms: -1 }] })).rejects.toThrow();
+    await expect(
+      create({
+        splits: Array.from({ length: 51 }, () => ({
+          stationId: STATION_ID,
+          cumulative_time_ms: 1,
+        })),
+      }),
+    ).rejects.toThrow();
+    expect(mock.rpcCalls("create_manual_run")).toEqual([]);
+  });
+});
+
+describe("updateRunResult", () => {
+  const RUN_ROW = {
+    data: { id: RUN_ID, event_id: EVENT_ID, started_at: "2026-07-28T12:00:00.000Z" },
+  };
+  const FOREIGN_STATION = "00000000-0000-4000-8000-0000000000dd";
+
+  async function update(over: Record<string, unknown> = {}) {
+    const { updateRunResult } = await import("./admin-write.functions");
+    return callServerFn(updateRunResult, {
+      data: { ...VALID_PAYLOADS.updateRunResult, ...over },
+      headers: asAdmin(),
+    });
+  }
+
+  it("refuses a station from another event before the RPC runs", async () => {
+    withDb({
+      "runs.select": RUN_ROW,
+      "stations.select": { data: [] },
+    });
+    await expect(
+      update({ splits: [{ stationId: FOREIGN_STATION, cumulative_time_ms: 1 }] }),
+    ).rejects.toThrow("That station is not part of this event.");
+    expect(mock.rpcCalls("update_run_result")).toEqual([]);
+  });
+
+  it("refuses a penalty's foreign station too", async () => {
+    withDb({ "runs.select": RUN_ROW, "stations.select": { data: [{ id: STATION_ID }] } });
+    await expect(
+      update({ penalties: [{ stationId: FOREIGN_STATION, penalty_ms: 1 }] }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.rpcCalls("update_run_result")).toEqual([]);
+  });
+
+  it("passes the derived rows and keys to the RPC", async () => {
+    withDb({ "runs.select": RUN_ROW });
+    await expect(update()).resolves.toEqual({ ok: true, official_time_ms: 66_000 });
+    const [call] = mock.rpcCalls("update_run_result") as Record<string, unknown>[];
+    expect(call).toMatchObject({ _run_id: RUN_ID, _event_id: EVENT_ID, _penalty_ms: 5_000 });
+    expect(call._splits).toEqual([
+      {
+        station_id: STATION_ID,
+        cumulative_time_ms: 20_000,
+        segment_time_ms: 20_000,
+        recorded_at: "2026-07-28T12:00:20.000Z",
+        client_key: `edit:${RUN_ID}:${STATION_ID}`,
+      },
+    ]);
+    expect(call._penalties).toEqual([
+      {
+        station_id: STATION_ID,
+        penalty_ms: 5_000,
+        reason: "Missed cone",
+        client_key: `edit:${RUN_ID}:0`,
+      },
+    ]);
   });
 });
 

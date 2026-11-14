@@ -56,7 +56,7 @@ export type ShareResultLayout = {
 };
 
 /** Room for the split grid itself, under the "Station Splits" label. */
-export function splitGridBudget(hasPenalty: boolean): number {
+function splitGridBudget(hasPenalty: boolean): number {
   const fixed =
     RESULT_PAD * 2 +
     HEADER_H +

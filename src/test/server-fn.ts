@@ -10,10 +10,11 @@
 // Server functions themselves are made directly callable by
 // src/test/setup-server.ts, which replaces the babel-transformed
 // `createServerFn` with a builder that still runs the validator and the handler.
+import { TOKEN_HEADERS } from "@/lib/token-format";
 import { createServerEntry } from "@tanstack/react-start/server";
 
 /** Run `fn` inside a request whose headers are `headers`. */
-export async function withRequestHeaders<T>(
+async function withRequestHeaders<T>(
   headers: Record<string, string>,
   fn: () => T | Promise<T>,
 ): Promise<T> {
@@ -48,7 +49,7 @@ export async function withRequestHeaders<T>(
   return result as T;
 }
 
-export type CallOptions = {
+type CallOptions = {
   /** Payload for the function's validator. */
   data?: unknown;
   /** Request headers — `x-admin-token` / `x-member-token` drive the auth guards. */
@@ -78,15 +79,15 @@ export function callServerFn<T = unknown>(
 
 /** Header bag for a request carrying an admin token. */
 export function adminHeaders(token: string) {
-  return { "x-admin-token": token };
+  return { [TOKEN_HEADERS.admin]: token };
 }
 
 /** Header bag for a request carrying a member token. */
 export function memberHeaders(token: string) {
-  return { "x-member-token": token };
+  return { [TOKEN_HEADERS.member]: token };
 }
 
 /** Header bag for a request carrying an anonymous guest token. */
 export function guestHeaders(token: string) {
-  return { "x-guest-token": token };
+  return { [TOKEN_HEADERS.guest]: token };
 }

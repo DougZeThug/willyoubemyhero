@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 // The supported hook is the --normal-* custom properties; inline on the toaster
 // they beat the theme's stylesheet declaration without !important. Only the
 // "normal" family is set, so richColors still gives success/error their own hues.
-export const TOAST_THEME = {
+const TOAST_THEME = {
   "--normal-bg": "var(--popover)",
   "--normal-text": "var(--popover-foreground)",
   "--normal-border": "var(--border-strong)",
@@ -17,7 +17,7 @@ export const TOAST_THEME = {
 // Sonner draws an action button as the inverse of the toast (text colour as its
 // fill), which would be a pale slab here. There is no variable for it, only this
 // inline style, so Undo is filled with the primary action colour instead.
-export const TOAST_OPTIONS = {
+const TOAST_OPTIONS = {
   actionButtonStyle: {
     background: "var(--primary)",
     color: "var(--primary-foreground)",
@@ -38,7 +38,7 @@ export const TOAST_OPTIONS = {
 
 // The shadcn wrapper's own classNames; toastOptions passed to it replace its
 // default object wholesale rather than merging, so they are re-spread here.
-export const SHADCN_TOAST_CLASSNAMES = {
+const SHADCN_TOAST_CLASSNAMES = {
   toast:
     "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
   description: "group-[.toast]:text-muted-foreground",

@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { formatTime } from "@/lib/format";
-import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
-import { cardBadge, editionOddsLabel, type Edition } from "@/lib/card-edition";
+import { badgeFor } from "@/components/card-badge";
+import type { Rarity } from "@/lib/card-rarity";
+import type { Edition } from "@/lib/card-edition";
 import { cardStats, type StatsBundle } from "@/lib/card-stats";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,13 @@ import { cn } from "@/lib/utils";
  * and a ResponsiveContainer measures that node as zero-width. Charts belong on a
  * flat tab, not on a 3D-transformed face.
  */
+
+/**
+ * The two type sizes of the printed face. The station column widths below are
+ * sized for LABEL's 12px ceiling, so change them together.
+ */
+const LABEL = "text-[clamp(8px,3.75cqw,12px)]";
+const HEAD = "text-[clamp(10px,4cqw,13px)]";
 
 type BackParticipant = {
   participant_id: string;
@@ -50,10 +58,7 @@ export function CardBackPanel({
 
   const quote = ep.participant?.trash_talk_quote;
   const worst = Math.max(1, ...ladder.map((r) => r.ms ?? 0));
-  const badge = cardBadge(
-    { label: rarity.label, reason: TIER_REASON[rarity.tier] ?? "", accent: rarity.accent },
-    edition,
-  );
+  const badge = badgeFor(rarity, edition);
 
   return (
     <div className="@container flex h-full w-full flex-col gap-2 bg-[oklch(0.13_0.02_240)] p-3 text-left">
@@ -73,14 +78,12 @@ export function CardBackPanel({
         }}
       >
         <span
-          className="font-display text-[clamp(10px,4cqw,13px)] font-black uppercase tracking-[0.08em]"
+          className={`font-display ${HEAD} font-black uppercase tracking-[0.08em]`}
           style={{ color: badge.color }}
         >
           {badge.headline}
         </span>
-        <span className="text-[clamp(8px,3.75cqw,12px)] font-semibold text-muted-foreground">
-          {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
-        </span>
+        <span className={`${LABEL} font-semibold text-muted-foreground`}>{badge.subLine}</span>
       </div>
 
       {/* The demoted tier, only when the finish took the headline above. */}
@@ -90,14 +93,12 @@ export function CardBackPanel({
           style={{ borderColor: rarity.border }}
         >
           <span
-            className="font-display text-[clamp(10px,4cqw,13px)] font-black uppercase tracking-[0.08em]"
+            className={`font-display ${HEAD} font-black uppercase tracking-[0.08em]`}
             style={{ color: rarity.accent }}
           >
             {rarity.label}
           </span>
-          <span className="text-[clamp(8px,3.75cqw,12px)] font-semibold text-muted-foreground">
-            {TIER_REASON[rarity.tier] ?? ""}
-          </span>
+          <span className={`${LABEL} font-semibold text-muted-foreground`}>{badge.tierReason}</span>
         </div>
       )}
 
@@ -111,7 +112,7 @@ export function CardBackPanel({
       </div>
 
       <div className="rounded border border-white/10 bg-white/[0.03] py-1.5 text-center">
-        <div className="text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        <div className={`${LABEL} font-bold uppercase tracking-[0.08em] text-muted-foreground`}>
           Official Time
         </div>
         <div className="timer-digits tabular text-2xl text-primary">
@@ -124,18 +125,20 @@ export function CardBackPanel({
           where the old w-9 was already marginal at 8px. The bar between them
           takes the difference. */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="mb-1 text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        <div
+          className={`mb-1 ${LABEL} font-bold uppercase tracking-[0.08em] text-muted-foreground`}
+        >
           Station Splits
         </div>
         {ladder.length === 0 ? (
-          <p className="text-[clamp(8px,3.75cqw,12px)] text-muted-foreground">
-            Stations not set yet.
-          </p>
+          <p className={`${LABEL} text-muted-foreground`}>Stations not set yet.</p>
         ) : (
           <ul className="space-y-1">
             {ladder.map((row) => (
               <li key={row.id} className="flex items-center gap-1.5">
-                <span className="w-14 shrink-0 truncate text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                <span
+                  className={`w-14 shrink-0 truncate ${LABEL} font-bold uppercase tracking-[0.08em] text-muted-foreground`}
+                >
                   {row.label}
                 </span>
                 <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
@@ -146,13 +149,13 @@ export function CardBackPanel({
                     />
                   )}
                 </span>
-                <span className="w-12 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] tabular text-foreground/90">
+                <span className={`w-12 shrink-0 text-right ${LABEL} tabular text-foreground/90`}>
                   {row.ms != null ? formatTime(row.ms) : "—"}
                 </span>
                 {row.deltaMs != null && (
                   <span
                     className={cn(
-                      "w-10 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] font-bold tabular",
+                      `w-10 shrink-0 text-right ${LABEL} font-bold tabular`,
                       row.deltaMs <= 0 ? "text-primary" : "text-warn",
                     )}
                   >
@@ -167,11 +170,15 @@ export function CardBackPanel({
       </div>
 
       {quote ? (
-        <p className="line-clamp-2 border-t border-white/10 pt-1.5 text-[clamp(8px,3.75cqw,12px)] italic leading-snug text-muted-foreground">
+        <p
+          className={`line-clamp-2 border-t border-white/10 pt-1.5 ${LABEL} italic leading-snug text-muted-foreground`}
+        >
           “{quote}”
         </p>
       ) : (
-        <p className="border-t border-white/10 pt-1.5 text-center text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        <p
+          className={`border-t border-white/10 pt-1.5 text-center ${LABEL} font-bold uppercase tracking-[0.08em] text-muted-foreground`}
+        >
           Will YOU Be My Hero?
         </p>
       )}
@@ -182,7 +189,7 @@ export function CardBackPanel({
 function Vital({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-white/10 bg-white/[0.03] py-1 text-center">
-      <div className="text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+      <div className={`${LABEL} font-bold uppercase tracking-[0.08em] text-muted-foreground`}>
         {label}
       </div>
       <div className="font-display text-sm font-black text-foreground">{value}</div>

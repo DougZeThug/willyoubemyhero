@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { saveCompletedRun } from "@/lib/admin-write.functions";
 import { computeElapsedMs, saveActiveRun, type ActiveRun } from "@/lib/active-run";
+import { errorMessage } from "@/lib/errors";
 
 export type FinishSaveState = "idle" | "saving" | "failed";
 
@@ -63,15 +64,8 @@ export function buildFinishPayload(run: FinishedRun) {
  * act on. The generic "could not reach the server" used to cover an expired
  * admin session too, which sent people looking for signal they already had.
  */
-export function saveErrorMessage(e: unknown): string {
-  const raw =
-    e instanceof Error
-      ? e.message
-      : typeof e === "object" &&
-          e !== null &&
-          typeof (e as { message?: unknown }).message === "string"
-        ? (e as { message: string }).message
-        : "";
+function saveErrorMessage(e: unknown): string {
+  const raw = errorMessage(e, "");
   if (/admin pin required/i.test(raw)) {
     return "Your admin session expired — re-enter the PIN on the Admin tab, then retry.";
   }
@@ -181,7 +175,6 @@ export function useFinishSave({
     [send],
   );
 
-  /** Send a stopped run again, unchanged. */
   const retry = useCallback(
     async (run: FinishedRun) => {
       if (busy.current) return;

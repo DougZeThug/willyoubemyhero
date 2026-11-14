@@ -1,16 +1,12 @@
 // How one device arranges the vault's sections: what order they sit in and which
 // of them are rolled up.
 //
-// A preference, not data — it never leaves the phone it was set on, the way the
-// sound toggle in card-sfx.ts never does. This file is that file's shape on
-// purpose: a `wwbh:` key, every touch of storage inside a try/catch so a locked
-// private-mode browser degrades to "works for this page load" instead of a blank
-// screen, and a custom event because `storage` only fires in *other* tabs.
+// A preference, not data — it never leaves the phone it was set on. Stored like every
+// device preference here; see device-store.ts.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-
-const KEY = "wwbh:vault-layout";
-const CHANGED = "wwbh:vault-layout-changed";
+import { useCallback, useMemo } from "react";
+import { createDeviceStore } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
 /**
  * How the roster grid is ordered. `shuffle` is the odd one out and stays in the
@@ -101,10 +97,6 @@ export function secretSectionId(collection: string | null): string {
   return `secret:${collection ?? ""}`;
 }
 
-// Mirrors card-sfx.ts's module-level `muted`: the last value we set, which is the
-// only thing left to trust when the write below is refused.
-let current: VaultLayout = EMPTY;
-
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
@@ -124,11 +116,10 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback
  * — somebody's first Pets pull — arrives open. Storing open ids would hide every
  * new shelf behind a tap nobody knows to make.
  */
-function read(): VaultLayout {
-  if (typeof window === "undefined") return EMPTY;
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return EMPTY;
+const store = createDeviceStore<VaultLayout>({
+  key: STORAGE_KEYS.vaultLayout,
+  empty: EMPTY,
+  parse: (raw) => {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return EMPTY;
     const { order, collapsed, sort, filter, density } = parsed as Record<string, unknown>;
@@ -139,23 +130,11 @@ function read(): VaultLayout {
       filter: oneOf(filter, FILTERS, EMPTY.filter),
       density: density === 3 ? 3 : 2,
     };
-  } catch {
-    // Blocked storage, or something else wrote junk under our key. Either way the
-    // default layout is a working page.
-    return EMPTY;
-  }
-}
+  },
+  serialize: JSON.stringify,
+});
 
-export function setVaultLayout(next: VaultLayout) {
-  current = next;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* private mode with storage blocked still rearranges for this page load */
-  }
-  window.dispatchEvent(new Event(CHANGED));
-}
+export const setVaultLayout = store.set;
 
 /**
  * Merge the sections actually on screen with the order this device chose.
@@ -206,19 +185,19 @@ export function moveSection(order: readonly string[], id: string, delta: number)
  * already settles once when the collection reconciles; this settles with it.
  */
 export function useVaultLayout(present: readonly string[]) {
-  const layout = useStoredLayout();
+  const layout = store.useValue();
 
   const order = useMemo(() => orderSections(present, layout.order), [present, layout.order]);
   const collapsed = useMemo(() => new Set(layout.collapsed), [layout.collapsed]);
 
   const toggle = useCallback((id: string) => {
-    // BOTH halves off `current`. Deciding from the render's snapshot and
+    // BOTH halves off the stored value. Deciding from the render's snapshot and
     // writing from the module value is how a shelf another tab just collapsed
     // gets its id written twice, or a toggle turns into a no-op.
-    const next = current.collapsed.includes(id)
-      ? current.collapsed.filter((x) => x !== id)
-      : [...current.collapsed, id];
-    // `current` and not the render's `layout`, throughout these setters. The
+    const next = store.get().collapsed.includes(id)
+      ? store.get().collapsed.filter((x) => x !== id)
+      : [...store.get().collapsed, id];
+    // The stored value and not the render's `layout`, throughout these setters. The
     // record now carries the reading preferences as well as the arrangement,
     // and two hooks write it — so a setter spreading the snapshot it was
     // rendered with can silently undo a write that landed after that render.
@@ -228,14 +207,14 @@ export function useVaultLayout(present: readonly string[]) {
     // Keeps the STORED order rather than the merged one: opening a shelf is
     // not a statement about where it sits, and pinning the order here would
     // freeze a layout the owner never arranged.
-    setVaultLayout({ ...current, collapsed: next });
+    setVaultLayout({ ...store.get(), collapsed: next });
   }, []);
 
   const move = useCallback(
     (id: string, delta: number) => {
       // The merged order, so the first move pins everything currently on screen
       // instead of writing a one-item list the merge would scatter next time.
-      setVaultLayout({ ...current, order: moveSection(order, id, delta) });
+      setVaultLayout({ ...store.get(), order: moveSection(order, id, delta) });
     },
     [order],
   );
@@ -253,19 +232,19 @@ export function useVaultLayout(present: readonly string[]) {
  * record, the same module value and the same event, so they cannot disagree.
  */
 export function useVaultPrefs() {
-  const layout = useStoredLayout();
+  const layout = store.useValue();
 
   // One setter per field rather than a general `patch`, so a caller cannot write
   // a layout it did not mean to — the order and the collapsed list are the two
   // things on this record that are expensive to lose, and neither is this hook's
   // to touch.
-  const setSort = useCallback((sort: VaultSort) => setVaultLayout({ ...current, sort }), []);
+  const setSort = useCallback((sort: VaultSort) => setVaultLayout({ ...store.get(), sort }), []);
   const setFilter = useCallback(
-    (filter: VaultFilter) => setVaultLayout({ ...current, filter }),
+    (filter: VaultFilter) => setVaultLayout({ ...store.get(), filter }),
     [],
   );
   const setDensity = useCallback(
-    (density: VaultDensity) => setVaultLayout({ ...current, density }),
+    (density: VaultDensity) => setVaultLayout({ ...store.get(), density }),
     [],
   );
 
@@ -277,38 +256,4 @@ export function useVaultPrefs() {
     setFilter,
     setDensity,
   };
-}
-
-function useStoredLayout(): VaultLayout {
-  const [layout, setLayout] = useState<VaultLayout>(EMPTY);
-
-  useEffect(() => {
-    // Our own writes: trust the module value. Re-reading storage here would hand
-    // a private-mode browser back the layout it just refused to save, and the
-    // section would visibly spring back under the thumb that moved it.
-    const mine = () => setLayout(current);
-    const reread = () => {
-      current = read();
-      setLayout(current);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to spend a getItem and a JSON.parse on
-    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
-    // in-memory hold above with whatever storage happens to hold, putting a
-    // refused write back under the thumb that made it. A null key is
-    // localStorage.clear(), which does concern us.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener(CHANGED, mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(CHANGED, mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
-
-  return layout;
 }

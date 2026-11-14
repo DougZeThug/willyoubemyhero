@@ -8,6 +8,33 @@ import { migrationFiles } from "./cluster";
 
 afterAll(closeDb);
 
+/**
+ * Whether `table` has a unique index covering at least `columns` (in any order,
+ * under any name) and, when given, a partial predicate mentioning `predicate`.
+ * Read from the catalogs so a rename or a reordered column list does not fail
+ * a test whose real question is "can the database hold a duplicate".
+ */
+async function hasUniqueIndex(
+  table: string,
+  columns: string[],
+  predicate?: string,
+): Promise<boolean> {
+  const rows = await sql<{ cols: string[]; pred: string | null }>(
+    `SELECT array_agg(a.attname::text) AS cols, pg_get_expr(i.indpred, i.indrelid) AS pred
+       FROM pg_index i
+       JOIN pg_class c ON c.oid = i.indrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY (i.indkey)
+      WHERE i.indisunique AND n.nspname = 'public' AND c.relname = $1
+      GROUP BY i.indexrelid, i.indpred, i.indrelid`,
+    [table],
+  );
+  return rows.some(
+    (r) =>
+      columns.every((c) => r.cols.includes(c)) && (!predicate || !!r.pred?.includes(predicate)),
+  );
+}
+
 const EXPECTED_TABLES = [
   "account_identities",
   "admin_accounts",
@@ -167,16 +194,8 @@ describe("migrations", () => {
     // copy that is no longer the seller's and voiding, but only after somebody
     // tapped Buy on it. Partial and status-scoped, so a sold listing does not
     // stop the buyer re-listing the copy they now own.
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'market_listings'",
-    );
-    const defs = rows.map((r) => r.indexdef);
-    expect(
-      defs.some((d) => d.includes("(card_copy_id)") && d.includes("status = 'active'::text")),
-    ).toBe(true);
-    expect(
-      defs.some((d) => d.includes("(secret_pull_id)") && d.includes("status = 'active'::text")),
-    ).toBe(true);
+    expect(await hasUniqueIndex("market_listings", ["card_copy_id"], "active")).toBe(true);
+    expect(await hasUniqueIndex("market_listings", ["secret_pull_id"], "active")).toBe(true);
   });
 
   it("enforces one account per guest id", async () => {
@@ -184,33 +203,20 @@ describe("migrations", () => {
     // INTO — no ORDER BY, no LIMIT — so two rows means plpgsql silently repairs
     // an arbitrary one of them. Partial, because guest_id is NULL on every
     // account that has claimed a player.
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'account_identities'",
+    expect(await hasUniqueIndex("account_identities", ["guest_id"], "guest_id IS NOT NULL")).toBe(
+      true,
     );
-    expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("(guest_id)") &&
-          r.indexdef.includes("guest_id IS NOT NULL"),
-      ),
-    ).toBe(true);
   });
 
   it("enforces one pulled copy per person per card per league day", async () => {
     // The rule that stops a replayed pack minting copies. An index rather than a
     // timestamp comparison, the same shape secret_card_pulls has always used.
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_copies'",
-    );
     expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("participant_id") &&
-          r.indexdef.includes("event_participant_id") &&
-          r.indexdef.includes("acquired_on"),
-      ),
+      await hasUniqueIndex("card_copies", [
+        "participant_id",
+        "event_participant_id",
+        "acquired_on",
+      ]),
     ).toBe(true);
   });
 
@@ -332,36 +338,17 @@ describe("migrations", () => {
   });
 
   it("enforces one vote per member per category in the schema, not just in code", async () => {
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'award_votes'",
-    );
     expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("event_id") &&
-          r.indexdef.includes("category") &&
-          r.indexdef.includes("voter_participant_id"),
-      ),
+      await hasUniqueIndex("award_votes", ["event_id", "category", "voter_participant_id"]),
     ).toBe(true);
   });
 
   it("enforces one reaction per member per emoji per card", async () => {
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_reactions'",
-    );
-    expect(rows.some((r) => r.indexdef.includes("UNIQUE") && r.indexdef.includes("emoji"))).toBe(
-      true,
-    );
+    expect(await hasUniqueIndex("card_reactions", ["emoji"])).toBe(true);
   });
 
   it("keeps runs unique on client_key, which is what makes a retried save idempotent", async () => {
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'runs'",
-    );
-    expect(
-      rows.some((r) => r.indexdef.includes("UNIQUE") && r.indexdef.includes("client_key")),
-    ).toBe(true);
+    expect(await hasUniqueIndex("runs", ["client_key"])).toBe(true);
   });
 
   it("indexes prompt history by event and newest first", async () => {
@@ -457,50 +444,25 @@ describe("migrations", () => {
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'pack_opens'",
-    );
-    expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("participant_id") &&
-          r.indexdef.includes("opened_on"),
-      ),
-    ).toBe(true);
+    expect(await hasUniqueIndex("pack_opens", ["participant_id", "opened_on"])).toBe(true);
   });
 
   it("enforces one card_pulls row per person per card, which is what makes a row count a people count", async () => {
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_pulls'",
+    expect(await hasUniqueIndex("card_pulls", ["participant_id", "event_participant_id"])).toBe(
+      true,
     );
-    expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("participant_id") &&
-          r.indexdef.includes("event_participant_id"),
-      ),
-    ).toBe(true);
   });
 
   it("no longer limits secrets to one a day, but still to one ownership row", async () => {
     // A pack can hold three secrets now. The one-a-day unique index is gone in
     // both its member and guest forms; the owned-once rule is what still makes a
     // row count a people count.
-    const rows = await sql<{ indexdef: string }>(
-      "SELECT indexdef FROM pg_indexes WHERE tablename = 'secret_card_pulls'",
-    );
+    expect(await hasUniqueIndex("secret_card_pulls", ["pulled_on"])).toBe(false);
     expect(
-      rows.some((r) => r.indexdef.includes("UNIQUE") && r.indexdef.includes("pulled_on")),
-    ).toBe(false);
-    expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("participant_id") &&
-          r.indexdef.includes("secret_card_id") &&
-          r.indexdef.includes("NOT is_duplicate"),
+      await hasUniqueIndex(
+        "secret_card_pulls",
+        ["participant_id", "secret_card_id"],
+        "is_duplicate",
       ),
     ).toBe(true);
   });

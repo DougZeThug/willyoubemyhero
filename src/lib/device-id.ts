@@ -3,11 +3,13 @@
 // Packs are dealt per person now. A claimed member has an identity already; a
 // guest standing in the garden with a borrowed phone does not, and refusing them
 // a pack over it would be a worse answer than giving the handset one of its own.
+import { STORAGE_KEYS } from "./storage-keys";
+import { deviceIdentity, memberIdentity } from "./identity";
 import { useEffect, useState } from "react";
 import { newClientKey } from "./format";
 import { useMemberSession } from "./member-token";
 
-const KEY = "wwbh:device-id";
+const KEY = STORAGE_KEYS.deviceId;
 
 /** Per-tab fallback, so a phone that cannot write still gets a stable pack. */
 let sessionId: string | null = null;
@@ -57,5 +59,5 @@ export function usePackIdentity(): string | null {
   useEffect(() => setDevice(deviceId()), []);
 
   if (!device) return null;
-  return member ? `m:${member.participantId}` : `d:${device}`;
+  return member ? memberIdentity(member.participantId) : deviceIdentity(device);
 }

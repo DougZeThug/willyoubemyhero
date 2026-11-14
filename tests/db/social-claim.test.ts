@@ -18,11 +18,22 @@ beforeEach(seedEvent);
 const REFUSED = /belongs to a player now/;
 
 /**
- * Long enough for the other connection's statement to reach its lock and
- * block. Without the lock it has finished by then, which is what makes the
- * unfixed race fail every time rather than now and again.
+ * Resolves once another connection is parked on a lock, which is the state the
+ * race needs before the holder lets go. Without the fix nothing ever blocks, so
+ * the poll gives up after a couple of seconds and the assertions fail on the
+ * unfixed behaviour instead of hanging.
  */
-const settle = () => new Promise((r) => setTimeout(r, 300));
+async function settle(): Promise<void> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const [row] = await sql<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+       WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    if (row.waiting > 0) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
 
 /** Bob's card: the one everybody below is reacting to. */
 async function card(): Promise<string> {

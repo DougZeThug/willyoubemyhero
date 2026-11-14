@@ -4,8 +4,10 @@ import { SECRET_RARITY } from "./secret-cards";
 import {
   arrivalRarity,
   isTradeOfferStatus,
-  leagueDay,
+  offerPerspective,
   offerStatusLabel,
+  offerStatusTone,
+  tradeItemBareName,
   tradeItemName,
   tradeItemsLabel,
   tradeSummaryLabel,
@@ -96,30 +98,6 @@ describe("isTradeOfferStatus", () => {
     }
     expect(isTradeOfferStatus("expired")).toBe(false);
     expect(isTradeOfferStatus("")).toBe(false);
-  });
-});
-
-describe("leagueDay", () => {
-  it("renders the same YYYY-MM-DD text a Postgres date does", () => {
-    expect(leagueDay(new Date("2026-08-17T16:00:00Z"))).toBe("2026-08-17");
-  });
-
-  it("uses the league's zone rather than the phone's", () => {
-    // 03:00 UTC on the 18th is still the evening of the 17th in New York, which is
-    // the whole reason the zone is pinned: somebody standing in the garden at
-    // 11pm must not have their spares recomputed against tomorrow.
-    expect(leagueDay(new Date("2026-08-18T03:00:00Z"))).toBe("2026-08-17");
-  });
-
-  it("rolls over at the league's midnight", () => {
-    // 04:00 UTC is midnight EDT.
-    expect(leagueDay(new Date("2026-08-18T04:00:00Z"))).toBe("2026-08-18");
-  });
-
-  it("tracks the standard-time offset too", () => {
-    // January is EST (UTC-5), so the boundary moves an hour.
-    expect(leagueDay(new Date("2026-01-18T04:30:00Z"))).toBe("2026-01-17");
-    expect(leagueDay(new Date("2026-01-18T05:30:00Z"))).toBe("2026-01-18");
   });
 });
 
@@ -283,5 +261,44 @@ describe("arrivalRarity", () => {
     );
     expect(arrivalRarity(undefined, ME, rarities).tier).toBe("base");
     expect(arrivalRarity(offer({ proposerGives: [] }), ME, rarities).tier).toBe("base");
+  });
+});
+
+describe("offer perspective helpers", () => {
+  it("reads an offer from either side of the table", () => {
+    const a = { kind: "secret", pullId: "a", name: "A" } as unknown as TradeItemView;
+    const b = { kind: "secret", pullId: "b", name: "B" } as unknown as TradeItemView;
+    const offer = {
+      proposerId: "p1",
+      recipientId: "p2",
+      proposerGives: [a],
+      recipientGives: [b],
+    } as unknown as TradeOfferView;
+    expect(offerPerspective(offer, "p1")).toEqual({
+      iAmProposer: true,
+      theirId: "p2",
+      iGive: [a],
+      iGet: [b],
+    });
+    expect(offerPerspective(offer, "p2")).toEqual({
+      iAmProposer: false,
+      theirId: "p1",
+      iGive: [b],
+      iGet: [a],
+    });
+  });
+
+  it("sorts statuses into live, won, dead and quiet", () => {
+    expect(offerStatusTone("pending")).toBe("live");
+    expect(offerStatusTone("accepted")).toBe("won");
+    for (const s of ["declined", "cancelled", "voided"]) expect(offerStatusTone(s)).toBe("dead");
+    expect(offerStatusTone("from-the-future")).toBe("quiet");
+  });
+
+  it("names a card without its tier or finish", () => {
+    expect(tradeItemBareName({ kind: "secret", name: "Gary" }, () => "x")).toBe("Gary");
+    expect(tradeItemBareName({ kind: "roster", eventParticipantId: "ep" }, (id) => `${id}!`)).toBe(
+      "ep!",
+    );
   });
 });

@@ -10,7 +10,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PackStand, type StandSlot } from "./pack-stand";
+import { PackStand } from "./pack-stand";
+import type { StandSlot } from "@/lib/stand-view";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import type { PackRosterSlot, PackSecretSlot } from "@/lib/pack";
@@ -684,15 +685,6 @@ describe("the sell hint", () => {
     // guest, and dust switched off all arrive here as null.
     renderStand({ slots: [roster(0, { outcome: "new", copies: 1 })], revealed: [0] });
     expect(worth()).toHaveLength(0);
-  });
-});
-
-describe("the stand slot's height budget", () => {
-  it("budgets 21rem of chrome for the height cap, floored so a short viewport cannot collapse it", () => {
-    const { container } = renderStand();
-    const slot = container.querySelector('[class*="calc((100svh-"]')!;
-    expect(slot.className).toContain("max(10rem,calc((100svh-21rem)*5/7))");
-    expect(slot.className).not.toContain("19rem");
   });
 });
 

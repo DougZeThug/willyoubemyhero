@@ -1,26 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemberQuery } from "./use-member-query";
+import { streakStatusKey } from "@/lib/query-keys";
 import { useServerFn } from "@tanstack/react-start";
 import { getStreakStatus, type StreakStatus } from "@/lib/streaks.functions";
-
-/**
- * Keyed on whoever is asking, never on the event.
- *
- * Same reasoning as packStatusKey next door: a streak is a permanent record of
- * showing up, so an event id in the key would throw it away every year. It is
- * only a cache key — the server takes the identity from the verified token on the
- * request and never from anything the client passes.
- */
-export const streakStatusKey = (actorId: string | null | undefined) =>
-  ["pack-streak", actorId] as const;
-
-/**
- * The same actor-scoped shape, for the list of rungs already cashed.
- *
- * The query lives on /you — the only screen that asks — but the key lives here,
- * because a milestone claim has to invalidate it from wherever it was tapped.
- */
-export const streakHistoryKey = (actorId: string | null | undefined) =>
-  ["streak-history", actorId] as const;
 
 /**
  * How long the run is, and what it has already paid.
@@ -34,16 +15,12 @@ export const streakHistoryKey = (actorId: string | null | undefined) =>
  */
 export function useStreakStatus(actorId: string | null | undefined) {
   const fn = useServerFn(getStreakStatus);
-  return useQuery({
+  return useMemberQuery({
     queryKey: streakStatusKey(actorId),
     queryFn: () => fn() as Promise<StreakStatus>,
     // Gated on the actor, so a phone changing hands in a garden never paints the
     // previous person's streak out of the cache.
     enabled: !!actorId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
-    // A token that expired mid-party should show a blank pill and let the claim
-    // prompt do its job, not retry three times behind a spinner.
-    retry: false,
   });
 }

@@ -9,13 +9,13 @@ A product description treats the product as a large state chart the user moves t
 
 The files under `references/`:
 
-| File | What it is |
-| --- | --- |
-| `product-kinds.md` | How to map the template onto a canvas editor, a web app, a CLI, or a chat product. Read in Phase 0. |
-| `README-template.md`, `goal-template.md`, `glossary-guide.md` | Skeletons for the three files that steer the whole build. |
-| `document-template.md` | The eight-section skeleton every feature document follows. |
-| `verification-template.md`, `bug-triage-template.md` | Skeletons for the checking half. |
-| `check-links.py` | Link and anchor checker for the consistency pass. `python3 check-links.py {repo}`. |
+| File                                                          | What it is                                                                                          |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `product-kinds.md`                                            | How to map the template onto a canvas editor, a web app, a CLI, or a chat product. Read in Phase 0. |
+| `README-template.md`, `goal-template.md`, `glossary-guide.md` | Skeletons for the three files that steer the whole build.                                           |
+| `document-template.md`                                        | The eight-section skeleton every feature document follows.                                          |
+| `verification-template.md`, `bug-triage-template.md`          | Skeletons for the checking half.                                                                    |
+| `check-links.py`                                              | Link and anchor checker for the consistency pass. `python3 check-links.py {repo}`.                  |
 
 ## Outputs
 
@@ -59,7 +59,7 @@ Commit: `docs: add README, glossary, goal`.
 Do these yourself, in sequence, not in parallel. They fix the template, tone, depth, and vocabulary that everything else copies.
 
 1. **Pilot.** One small, self-contained feature with a real interaction in it (`product-kinds.md` names one per product kind). Write it on the full eight-section template (`document-template.md`). Iterate on it until it is right; every later document copies it. A small feature done properly runs around 150–200 lines, with every phase narrated, every variant and interrupt cell filled, and the cross-cutting list walked in full; if a section is thin, the feature has not been read closely enough yet.
-2. **Foundations.** The documents everything else links to: the input or invocation model (events, thresholds, what cancels, completes, and interrupts), the core object or data model, the mode, tool, or navigation model, the viewport or session model. These *own* the facts other documents link to instead of restating. As each is written, add its load-bearing facts (numbers, defaults, rules) to goal.md's "Things already established" so no later document re-derives or contradicts them.
+2. **Foundations.** The documents everything else links to: the input or invocation model (events, thresholds, what cancels, completes, and interrupts), the core object or data model, the mode, tool, or navigation model, the viewport or session model. These _own_ the facts other documents link to instead of restating. As each is written, add its load-bearing facts (numbers, defaults, rules) to goal.md's "Things already established" so no later document re-derives or contradicts them.
 3. **The hardest area.** The bulk of the experience (the selection tool, the main editor, the `build` command, the composer plus the streaming response). Read all of its state handling before writing any of its documents, because the states hand off to each other and the documents must agree on where one ends and the next begins. Decide which document owns each state and write that down in goal.md.
 
 Commit after each document or coherent group: `docs: add {path}`.

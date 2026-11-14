@@ -5,105 +5,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
-import {
-  VARIANT_WIDTHS,
-  type CardSide,
-  type CardUrls,
-  type ImageUrlSet,
-  type SizedPhotoUrls,
-} from "./media";
+import { errorMessage } from "./errors";
+import { type CardSide, type CardUrls, type ImageUrlSet, type SizedPhotoUrls } from "./media";
+import { forgetSignedPath, signPath, signSet } from "./media-sign.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
+import { readAllRows } from "./paged-read.server";
 
-// ------- Signed URL cache -------
-
-const SIGNED_TTL_S = 8 * 60 * 60;
-/** Re-sign well before expiry so a URL handed out now stays valid for hours. */
-const SIGNED_REUSE_MS = 6 * 60 * 60_000;
-/** Bounded so a long-lived server process can't accumulate every event ever. */
-const SIGNED_CACHE_MAX = 600;
-
-const signedCache = new Map<string, { url: string; mintedAt: number }>();
-const signingNow = new Map<string, Promise<string | null>>();
-
-/** Lower quality where the image is small enough that nobody can tell. */
-const QUALITY_FOR_WIDTH: Record<number, number> = {
-  [320]: 58,
-  [800]: 68,
-  [1200]: 74,
-};
-
-function cacheKey(path: string, width?: number) {
-  return width ? `${path}@${width}` : path;
-}
-
-async function mintSignedUrl(path: string, width?: number): Promise<string | null> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const key = cacheKey(path, width);
-  const { data: signed } = await supabaseAdmin.storage.from("participant-photos").createSignedUrl(
-    path,
-    SIGNED_TTL_S,
-    width
-      ? {
-          transform: {
-            width,
-            quality: QUALITY_FOR_WIDTH[width] ?? 72,
-            resize: "contain",
-          },
-        }
-      : undefined,
-  );
-  if (!signed?.signedUrl) return null;
-  if (signedCache.size >= SIGNED_CACHE_MAX) {
-    const oldest = signedCache.keys().next().value;
-    if (oldest) signedCache.delete(oldest);
-  }
-  signedCache.delete(key);
-  signedCache.set(key, { url: signed.signedUrl, mintedAt: Date.now() });
-  return signed.signedUrl;
-}
-
-export async function signPath(path: string | null, width?: number): Promise<string | null> {
-  if (!path) return null;
-  const key = cacheKey(path, width);
-  const hit = signedCache.get(key);
-  if (hit && Date.now() - hit.mintedAt < SIGNED_REUSE_MS) return hit.url;
-  const pending = signingNow.get(key);
-  if (pending) return pending;
-  const p = mintSignedUrl(path, width).finally(() => signingNow.delete(key));
-  signingNow.set(key, p);
-  return p;
-}
-
-export function forgetSignedPath(path: string | null | undefined) {
-  if (!path) return;
-  signedCache.delete(path);
-  for (const w of Object.values(VARIANT_WIDTHS)) signedCache.delete(cacheKey(path, w));
-}
-
-async function signSet(paths: {
-  thumb: string | null;
-  medium: string | null;
-  large: string | null;
-}): Promise<ImageUrlSet> {
-  // A missing variant path is the common case — nothing was ever backfilled —
-  // so fall back to a resize of the original rather than to the original itself.
-  const [thumb, medium, large] = await Promise.all([
-    paths.thumb ? signPath(paths.thumb) : signPath(paths.large, VARIANT_WIDTHS.thumb),
-    paths.medium ? signPath(paths.medium) : signPath(paths.large, VARIANT_WIDTHS.medium),
-    // With no variants the stored file is the untouched original — the
-    // multi-megabyte PNG — so it is never handed back as is. With them, it is the
-    // encoder's own output: at most 1600px, and re-encoded unless it was already
-    // under the passthrough budget (image-encode.ts), so a second transform here
-    // would only cost a generation of quality.
-    paths.medium ? signPath(paths.large) : signPath(paths.large, VARIANT_WIDTHS.large),
-  ]);
-  return { thumb, medium, large };
-}
-
-// Return signed URLs for all event participants that have a photo_path.
 export const getEventPhotoUrls = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
@@ -128,8 +38,6 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
     );
     return out;
   });
-
-// ------- Player trading cards -------
 
 const cardSide = z.enum(["front", "back"]);
 
@@ -173,7 +81,7 @@ export type SizedDataUrls = {
 
 // Client-resized images are well under this; the cap stops an admin token (or a
 // stolen one) from filling storage with arbitrarily large files.
-export const MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
+const MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
 
 export function decodeImageDataUrl(dataUrl: string) {
   if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("Image is too large");
@@ -192,17 +100,12 @@ async function uploadSized(
   dataUrls: SizedDataUrls,
 ): Promise<SizedCardPaths> {
   const sizes: (keyof SizedDataUrls)[] = ["large", "medium", "thumb"];
-  const suffixes: Record<keyof SizedDataUrls, string> = {
-    large: "large",
-    medium: "medium",
-    thumb: "thumb",
-  };
   const paths: Partial<Record<keyof SizedDataUrls, string>> = {};
 
   await Promise.all(
     sizes.map(async (size) => {
       const { contentType, ext, bytes } = decodeImageDataUrl(dataUrls[size]);
-      const path = `${basePath}-${suffixes[size]}.${ext}`;
+      const path = `${basePath}-${size}.${ext}`;
       const { error } = await supabaseAdmin.storage
         .from("participant-photos")
         .upload(path, bytes, { contentType, upsert: true });
@@ -493,7 +396,7 @@ export const uploadParticipantCardsBulk = createServerFn({ method: "POST" })
           eventParticipantId: item.eventParticipantId,
           side: item.side,
           ok: false,
-          error: e instanceof Error ? e.message : "Upload failed",
+          error: errorMessage(e, "Upload failed"),
         });
       }
     }
@@ -625,8 +528,6 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
 
     return { ok: true, urls: await signSet(paths), paths };
   });
-
-// ------- Backfill existing images -------
 
 export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
@@ -815,7 +716,6 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ------- Archive / recap -------
 function slugify(s: string) {
   return s
     .toLowerCase()
@@ -829,6 +729,11 @@ export const archiveEvent = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Splits and penalties belong to a run, and a run to this event: the join is
+    // what keeps another combine's rows out of this one's snapshot. They are
+    // also the tables that outgrow PostgREST's 1000-row cap first (a run carries
+    // a split per station), so they are read a page at a time — a plain SELECT
+    // would be cut off without a word and archived for good.
     const [event, eps, stations, runs, splits, penalties, drafts] = await Promise.all([
       supabaseAdmin.from("events").select("*").eq("id", data.eventId).maybeSingle(),
       supabaseAdmin
@@ -836,20 +741,36 @@ export const archiveEvent = createServerFn({ method: "POST" })
         .select("*, participant:participants(*)")
         .eq("event_id", data.eventId),
       supabaseAdmin.from("stations").select("*").eq("event_id", data.eventId),
-      supabaseAdmin
-        .from("runs")
-        .select(
-          "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at",
-        )
-        .eq("event_id", data.eventId),
-      supabaseAdmin
-        .from("splits")
-        .select(
-          "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at",
-        ),
-      supabaseAdmin
-        .from("penalties")
-        .select("id, run_id, station_id, penalty_ms, reason, created_at"),
+      readAllRows((from, to) =>
+        supabaseAdmin
+          .from("runs")
+          .select(
+            "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at",
+          )
+          .eq("event_id", data.eventId)
+          .order("id")
+          .range(from, to),
+      ),
+      readAllRows((from, to) =>
+        supabaseAdmin
+          .from("splits")
+          .select(
+            "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at, run:runs!inner(event_id)",
+          )
+          .eq("run.event_id", data.eventId)
+          .order("id")
+          .range(from, to),
+      ),
+      readAllRows((from, to) =>
+        supabaseAdmin
+          .from("penalties")
+          .select(
+            "id, run_id, station_id, penalty_ms, reason, created_at, run:runs!inner(event_id)",
+          )
+          .eq("run.event_id", data.eventId)
+          .order("id")
+          .range(from, to),
+      ),
       supabaseAdmin
         .from("draft_selections")
         .select("id, event_id, participant_id, selection_order, draft_position, selected_at")
@@ -857,20 +778,22 @@ export const archiveEvent = createServerFn({ method: "POST" })
     ]);
     // Every read throws on failure rather than coalescing to "none". The snapshot
     // goes into an append-only table the public reads, so one failed SELECT would
-    // otherwise be archived for good as a combine with no runs, or no roster.
+    // otherwise be archived for good as a combine with no runs, or no roster. The
+    // paged reads throw for themselves; these are the single-shot ones.
     if (event.error) throw event.error;
-    for (const read of [eps, stations, runs, splits, penalties, drafts]) {
+    for (const read of [eps, stations, drafts]) {
       if (read.error) throw read.error;
     }
     if (!event.data) throw new Error("Event not found");
-    const runIds = new Set((runs.data ?? []).map((r) => r.id));
+    // The join column is a filter, not part of the record the snapshot has always held.
+    const withoutJoin = <T extends { run: unknown }>({ run: _run, ...row }: T) => row;
     const snapshot = {
       event: event.data,
       participants: eps.data ?? [],
       stations: stations.data ?? [],
-      runs: runs.data ?? [],
-      splits: (splits.data ?? []).filter((s) => runIds.has(s.run_id)),
-      penalties: (penalties.data ?? []).filter((p) => runIds.has(p.run_id)),
+      runs,
+      splits: splits.map(withoutJoin),
+      penalties: penalties.map(withoutJoin),
       drafts: drafts.data ?? [],
       archivedAt: new Date().toISOString(),
     };

@@ -9,12 +9,13 @@
 //
 // Its own file because it needs the open to SUCCEED and an identity that can be
 // either, where players.pack.claim-reject.test.tsx needs it refused.
+import { dustSparesKey, tradeSparesKey } from "@/lib/query-keys";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import PackPage from "./players.pack";
-import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { EVENT_ID, makeBundle } from "@/test/fixtures";
+import { leagueDay } from "@/lib/league-day";
 
 const who = vi.hoisted(() => ({ member: true }));
 const openPack = vi.hoisted(() => vi.fn());
@@ -135,10 +136,8 @@ const keys = () =>
 
 /** Today's pack, already dealt to whoever the phone is; the resume asks for it. */
 async function dealtTo(identity: string) {
-  const { todayKey } =
-    await vi.importActual<typeof import("@/lib/card-collection")>("@/lib/card-collection");
   loadPackState.mockReset().mockResolvedValue({
-    dayKey: todayKey(),
+    dayKey: leagueDay(),
     identity,
     ids: ["ep-1"],
     cards: [{ kind: "roster", id: "ep-1" }],
@@ -147,7 +146,7 @@ async function dealtTo(identity: string) {
   });
   openPack.mockReset().mockResolvedValue({
     ok: true,
-    day: todayKey(),
+    day: leagueDay(),
     fresh: false,
     packsOpened: 1,
     cards: [{ kind: "roster", id: "ep-1", edition: "gold", heldBefore: 1, editionBefore: null }],

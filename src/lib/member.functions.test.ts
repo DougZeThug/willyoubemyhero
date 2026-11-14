@@ -274,6 +274,24 @@ describe("claimPlayer", () => {
     expect(payload.claim_count).toBe(3);
   });
 
+  it("throws when the code lookup errors, rather than answering bad_code", async () => {
+    withDb({ "member_codes.select": { data: null, error: { message: "db down" } } });
+    await expect(claim({ participantId: PARTICIPANT_ID, code: CODE })).rejects.toMatchObject({
+      message: "db down",
+    });
+    expect(mock.client.rpc.mock.calls.some((c) => c[0] === "clear_auth_attempts")).toBe(false);
+  });
+
+  it("throws when the name lookup errors, rather than signing in as Player", async () => {
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: null, error: { message: "db down" } },
+    });
+    await expect(claim({ participantId: PARTICIPANT_ID, code: CODE })).rejects.toMatchObject({
+      message: "db down",
+    });
+  });
+
   it("falls back to a generic name when the participant row is missing", async () => {
     withDb({
       "member_codes.select": codeRow(),

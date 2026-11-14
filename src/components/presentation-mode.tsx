@@ -46,7 +46,7 @@ export function PresentationMode({ active }: { active: boolean }) {
  * a backdrop owned by the ceremony pops off in one frame, in the middle of the
  * handoff it exists to cover.
  */
-export function PresentationStage({ active, blur = true }: { active: boolean; blur?: boolean }) {
+export function PresentationStage({ active }: { active: boolean }) {
   const reduced = usePrefersReducedMotion();
   return (
     <AnimatePresence>
@@ -59,7 +59,7 @@ export function PresentationStage({ active, blur = true }: { active: boolean; bl
           transition={{ duration: reduced ? 0 : 0.28 }}
           className="pointer-events-none fixed inset-0 z-0"
         >
-          {blur && !reduced && <div className="absolute inset-0 backdrop-blur-sm" />}
+          {!reduced && <div className="absolute inset-0 backdrop-blur-sm" />}
           {/* Two grounds, not one. The wash is what dims whatever the route was
               already showing; the vignette is what puts the card in a pool of
               light rather than on a flat dark rectangle. */}

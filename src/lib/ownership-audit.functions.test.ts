@@ -187,3 +187,30 @@ describe("devices holding cards nobody can trade", () => {
     expect(res.stranded.map((d) => d.guestId)).toEqual([GUEST_B, GUEST_A]);
   });
 });
+
+describe("the audit's reads are complete and honest about failure", () => {
+  it.each([
+    "participants",
+    "member_codes",
+    "account_identities",
+    "secret_card_pulls",
+    "card_copies",
+    "pack_opens",
+    "streak_milestone_claims",
+    "secret_cards",
+  ])("throws when the %s read fails, rather than under-reporting", async (table) => {
+    withDb({ [`${table}.select`]: { data: null, error: { message: "read failed" } } });
+    await expect(audit()).rejects.toMatchObject({ message: "read failed" });
+  });
+
+  it("reads every page of a table past PostgREST's 1000-row cap", async () => {
+    // 1,500 guest-held pulls, one device each: a plain SELECT would stop at 1,000
+    // and the last 500 devices would simply not exist on the panel.
+    const all = Array.from({ length: 1_500 }, (_, i) =>
+      pull(`00000000-0000-4000-8000-${String(i).padStart(12, "0")}`),
+    );
+    withDb({ "secret_card_pulls.select": { data: all } });
+    const res = await audit();
+    expect(res.stranded).toHaveLength(1_500);
+  });
+});

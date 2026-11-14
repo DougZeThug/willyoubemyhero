@@ -1,12 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { optionalActor, requireActor } from "./require-auth.server";
+import { actorRpcArgs, optionalActor, requireActor } from "./require-auth.server";
 import { toEdition } from "./card-edition";
 import { signSecretCard } from "./secret-cards.functions";
 import type { OpenPackResult, PackStatusResult, SecretCardRow } from "./secret-cards-rows";
 import type { OpenPackResponse, PackSlot, PackStatus } from "./pack";
 import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { activeEventId } from "./active-event.server";
+import { noStore } from "./no-store.server";
 
 /**
  * Today's pack: dealt by Postgres, three cards from one pool, secrets included.
@@ -24,54 +25,19 @@ import { sqlNull } from "./rpc-null";
  * carry no finish, because nothing is minted for them until they claim.
  */
 
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function db() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-/**
- * The same client, widened for the two RPCs the generated types have never
- * heard of. Same workaround secret-cards-rows.ts documents: types.ts is
- * `supabase gen types` output and must not be hand-edited, and `open_pack` and
- * `pack_status` are not in it yet. Shape is recovered per call from the result
- * types in secret-cards-rows.ts.
- */
-async function rpc() {
-  return (await db()) as unknown as SupabaseClient;
-}
-
-/**
- * These responses vary only by a request header, and a cache hit here is
- * somebody else's pack. Latent today — Cloudflare does not cache Worker
- * responses by default — but stated, as it is on the secret handlers.
- */
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
-
 export const openPack = createServerFn({ method: "POST" }).handler(
   async (): Promise<OpenPackResponse> => {
     const actor = requireActor();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
 
     // The roster half of the pool. A pack out of season has no roster in it and
     // is dealt from the secrets alone, so a missing event is not an error.
-    const { data: event } = await sb
-      .from("events")
-      .select("id")
-      .eq("active", true)
-      .order("year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const eventId = await activeEventId();
 
-    const { data, error } = await (
-      await rpc()
-    ).rpc("open_pack", {
-      _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
-      _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
-      _event_id: sqlNull(event?.id ?? null),
+    const { data, error } = await sb.rpc("open_pack", {
+      ...actorRpcArgs(actor),
+      _event_id: sqlNull(eventId),
     });
     if (error) throw new Error(error.message);
 
@@ -160,12 +126,8 @@ export const getPackStatus = createServerFn({ method: "GET" }).handler(
         resetsAt: null,
       };
     }
-    const { data, error } = await (
-      await rpc()
-    ).rpc("pack_status", {
-      _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
-      _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
-    });
+    const sb = await adminDb();
+    const { data, error } = await sb.rpc("pack_status", actorRpcArgs(actor));
     if (error) throw new Error(error.message);
     const status = data as PackStatusResult;
     return { claimed: true, ...status };

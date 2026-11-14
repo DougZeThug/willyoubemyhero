@@ -1,7 +1,19 @@
-import type { ResultCardData } from "@/components/result-card";
 import type { ImageUrlSet } from "@/lib/media";
 
 type PhotoValue = ImageUrlSet | string | null | undefined;
+
+export type ResultCardData = {
+  eventName: string;
+  eventYear?: number | null;
+  participantName: string;
+  fantasyTeam?: string | null;
+  photoUrl?: PhotoValue;
+  totalMs: number;
+  penaltyMs?: number;
+  rank?: number | null;
+  /** `id` is the split row's own, because a label is not unique: station names may repeat. */
+  splits: { id: string; label: string; ms: number }[];
+};
 
 /**
  * What the share card prints for one leaderboard row.

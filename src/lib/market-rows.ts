@@ -1,21 +1,5 @@
-// A supabase client that will talk to the marketplace table `types.ts` has never
-// heard of, plus the result types no generated signature can give us.
-//
-// The same escape hatch dust-db.server.ts, trades-db.server.ts and
-// streaks-db.server.ts open, and for the same reason: src/integrations/supabase/
-// types.ts is `supabase gen types` output, must not be hand-edited, and is
-// .prettierignore'd — so `market_listings`, along with `list_card_for_dust`,
-// `cancel_market_listing` and `buy_market_listing`, are compile errors against the
-// generated `Database` type, which is an alias rather than an interface and so
-// cannot be rescued by declaration merging.
-//
-// The TYPES below outlive the shim. `Returns: Json` can never give you a
-// discriminated union, so these have to be written by hand however the client is
-// eventually obtained.
-import type { SupabaseClient } from "@supabase/supabase-js";
-// A top-level client.server import is safe here and nowhere else: this is a
-// *.server.ts module, so it never reaches the client bundle.
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+// Row and result shapes for the marketplace table and RPCs. `Returns: Json` can never
+// give a discriminated union, so the results are written by hand.
 import type { CompletedCollection } from "./collection-trophies";
 import type { DustFailure } from "./dust-rows";
 import type { MarketListingStatus } from "./market";
@@ -46,7 +30,7 @@ export type MarketListingRow = {
 /**
  * Why every one of these fails softly.
  *
- * The rule dust-db.server.ts states: none of them is something a person can fix by
+ * The rule dust-rows.ts states: none of them is something a person can fix by
  * retrying differently, and all of them are something to say on the button. Five
  * new members on top of {@link DustFailure}, and two of the existing words reused
  * rather than re-coined — `resolved` and `voided` already mean exactly this in
@@ -95,7 +79,3 @@ export type BuyListingResult =
       balance: number;
     }
   | { ok: false; reason: MarketFailure; balance?: number; price?: number };
-
-export function marketDb(): SupabaseClient {
-  return supabaseAdmin as unknown as SupabaseClient;
-}

@@ -1,9 +1,6 @@
 // Trophies this device has already thrown a ceremony for.
 //
-// Stored on the phone, exactly like use-trade-badge.ts and vault-favourites.ts:
-// a `wwbh:` key, every touch of storage in a try/catch so a locked private-mode
-// browser degrades to "works for this page load", and a custom event because
-// `storage` only fires in *other* tabs.
+// Stored on the phone like every device preference here; see device-store.ts.
 //
 // Per-device rather than a column, and for a sharper reason than the trade dot
 // has: the trophy row is the permanent fact and it already lives in Postgres.
@@ -22,10 +19,8 @@
 // uses, so one device shared by two people at a party cannot swallow the other's
 // ceremony.
 
-import { useEffect, useState } from "react";
-
-const KEY = "wwbh:trophy-seen";
-const CHANGED = "wwbh:trophy-seen-changed";
+import { createDeviceStore } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
 
 /** Composite key for one person's trophy in one set. */
 export function trophyKey(participantId: string, collection: string): string {
@@ -40,17 +35,11 @@ export type TrophySeen = {
 
 const EMPTY: TrophySeen = { primed: false, ids: [] };
 
-// Mirrors vault-favourites.ts's `current`: the last value we set, which is all
-// that is left to trust when the write below is refused.
-let current: TrophySeen = EMPTY;
-
-function read(): TrophySeen {
-  if (typeof window === "undefined") return EMPTY;
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return EMPTY;
-    const parsed: unknown = JSON.parse(raw);
-    const obj = parsed as { primed?: unknown; ids?: unknown } | null;
+const store = createDeviceStore<TrophySeen>({
+  key: STORAGE_KEYS.trophySeen,
+  empty: EMPTY,
+  parse: (raw) => {
+    const obj = JSON.parse(raw) as { primed?: unknown; ids?: unknown } | null;
     const ids = Array.isArray(obj?.ids)
       ? obj.ids.filter((v): v is string => typeof v === "string")
       : [];
@@ -58,32 +47,19 @@ function read(): TrophySeen {
     // a fresh device, which seeds silently — the safe direction, because the
     // other one is a ceremony storm.
     return { primed: obj?.primed === true, ids };
-  } catch {
-    // Blocked storage, or something else wrote junk under our key. A silent first
-    // pass is a working page.
-    return EMPTY;
-  }
-}
-
-export function setTrophySeen(next: TrophySeen) {
+  },
+  serialize: JSON.stringify,
   // Skip the write and the re-render it would fan out. The watcher calls this on
   // every data settle, so without the guard a focus refetch would rewrite storage
   // and wake every listener several times a minute.
-  if (
-    next.primed === current.primed &&
-    next.ids.length === current.ids.length &&
-    next.ids.every((id) => current.ids.includes(id))
-  ) {
-    return;
-  }
-  current = { primed: next.primed, ids: [...new Set(next.ids)] };
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(current));
-  } catch {
-    /* private mode with storage blocked still stops a repeat for this page load */
-  }
-  window.dispatchEvent(new Event(CHANGED));
+  equals: (a, b) =>
+    a.primed === b.primed &&
+    a.ids.length === b.ids.length &&
+    b.ids.every((id) => a.ids.includes(id)),
+});
+
+export function setTrophySeen(next: TrophySeen) {
+  store.set({ primed: next.primed, ids: [...new Set(next.ids)] });
 }
 
 /**
@@ -100,7 +76,7 @@ export function setTrophySeen(next: TrophySeen) {
  */
 export function markTrophiesCelebrated(keys: readonly string[]) {
   if (keys.length === 0) return;
-  setTrophySeen({ primed: true, ids: [...current.ids, ...keys] });
+  setTrophySeen({ primed: true, ids: [...store.get().ids, ...keys] });
 }
 
 /**
@@ -119,7 +95,7 @@ export function markTrophiesCelebrated(keys: readonly string[]) {
  * write still has to stop the repeat for this page load.
  */
 export function alreadyCelebrated(key: string): boolean {
-  return current.ids.includes(key);
+  return store.get().ids.includes(key);
 }
 
 /**
@@ -143,18 +119,19 @@ export function alreadyCelebrated(key: string): boolean {
 export function carryTrophySeen(from: string, to: string) {
   if (!from || !to || from === to) return;
   const prefix = `${from}:`;
-  const carried = current.ids
-    .filter((id) => id.startsWith(prefix))
+  const carried = store
+    .get()
+    .ids.filter((id) => id.startsWith(prefix))
     .map((id) => `${to}:${id.slice(prefix.length)}`)
     // Already carried. A re-claim on the same handset would otherwise rebuild the
     // identical set and slip past setTrophySeen's no-op guard, which compares
     // lengths — writing storage and waking every listener for nothing.
-    .filter((id) => !current.ids.includes(id));
+    .filter((id) => !store.get().ids.includes(id));
   if (carried.length === 0) return;
   // The guest's own keys stay. Nothing reads them again, and dropping them would
   // make a second call to this — a re-claim on the same handset — a no-op that
   // silently un-marks a set if the first one's write was refused.
-  setTrophySeen({ primed: true, ids: [...current.ids, ...carried] });
+  setTrophySeen({ primed: true, ids: [...store.get().ids, ...carried] });
 }
 
 /**
@@ -179,37 +156,4 @@ export function uncelebratedTrophies<T extends { participantId: string; collecti
   );
 }
 
-/** The seen set, reactive. Same hydration dance as useVaultFavourites. */
-export function useTrophySeen(): TrophySeen {
-  const [seen, setSeen] = useState<TrophySeen>(EMPTY);
-
-  useEffect(() => {
-    // Our own writes trust the module value; re-reading storage would hand a
-    // private-mode browser back the state it just refused to save, and the same
-    // ceremony would fire again on the next refetch.
-    const mine = () => setSeen(current);
-    const reread = () => {
-      current = read();
-      setSeen(current);
-    };
-    // Another tab, and only if it touched OUR key. `storage` fires for every key
-    // the other tab writes, so this used to spend a getItem and a JSON.parse on
-    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
-    // in-memory hold above with whatever storage happens to hold, putting a
-    // refused write back under the thumb that made it. A null key is
-    // localStorage.clear(), which does concern us.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== KEY) return;
-      reread();
-    };
-    reread();
-    window.addEventListener(CHANGED, mine);
-    window.addEventListener("storage", theirs);
-    return () => {
-      window.removeEventListener(CHANGED, mine);
-      window.removeEventListener("storage", theirs);
-    };
-  }, []);
-
-  return seen;
-}
+export const useTrophySeen = store.useValue;

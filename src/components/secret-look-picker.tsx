@@ -92,7 +92,7 @@ function ChipRadio({
   );
 }
 
-export type FoilPickerProps = {
+type FoilPickerProps = {
   /** Null means "no single value" — nothing is ticked and the caption says so. */
   value: string | null;
   onChange: (id: string) => void;
@@ -164,7 +164,7 @@ export function FoilPicker({ value, onChange, cardName, unsetLabel, disabled }: 
   );
 }
 
-export type BorderFxPickerProps = {
+type BorderFxPickerProps = {
   /** Null means "no single value" — nothing is ticked and the caption says so. */
   value: string | null;
   /** Foil id the row currently wears, so the preview rings are its colours. */

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { memberClaimsKey } from "@/lib/query-keys";
+import { plural } from "@/components/plural";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -7,6 +9,7 @@ import { generateMemberCodes, listMemberClaims } from "@/lib/member.functions";
 import { closeAwardVoting, getAwardTally, reopenAwardVoting } from "@/lib/social.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AWARD_CATEGORIES } from "@/lib/awards";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -56,7 +59,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   // Codes issued for a single player stay pinned next to their row, so the
   // commissioner can re-issue for one straggler without losing the roster view.
   const [singles, setSingles] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
   // Whether these codes have been got off the screen yet. Copying or printing
   // sets it; issuing a fresh batch clears it.
   const [saved, setSaved] = useState(false);
@@ -88,7 +91,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   }, [unsaved]);
 
   const claims = useQuery({
-    queryKey: ["member-claims", eventId],
+    queryKey: memberClaimsKey(eventId),
     queryFn: () => claimsFn({ data: { eventId } }),
     staleTime: 30_000,
   });
@@ -104,8 +107,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   const unclaimedCount = Math.max(rosterSize - claimedCount, 0);
 
   async function issue(scope: "all" | "unclaimed") {
-    setBusy(true);
-    try {
+    await run("Could not generate codes", async () => {
       const res = await generateFn({ data: { eventId, scope } });
       // An empty list is the server saying there was nobody to issue for — no
       // error, no write. Stored anyway it is still truthy, and `issued` is what
@@ -123,13 +125,9 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
       }
       setIssued(res.issued);
       setSaved(false);
-      await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
-      toast.success(`Issued ${res.issued.length} codes — copy them now`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not generate codes");
-    } finally {
-      setBusy(false);
-    }
+      await qc.invalidateQueries({ queryKey: memberClaimsKey(eventId) });
+      return `Issued ${res.issued.length} codes — copy them now`;
+    });
   }
 
   async function onGenerateUnclaimed() {
@@ -139,7 +137,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     }
     if (
       !confirm(
-        `Issue a new code for the ${unclaimedCount} player${unclaimedCount === 1 ? "" : "s"} who ` +
+        `Issue a new code for the ${plural(unclaimedCount, "player")} who ` +
           "haven't claimed yet? Players who already claimed keep their current code.",
       )
     ) {
@@ -195,20 +193,15 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     ) {
       return;
     }
-    setBusy(true);
-    try {
+    await run("Could not generate code", async () => {
       const res = await generateFn({ data: { eventId, participantIds: [participantId] } });
       const code = res.issued[0]?.code;
       if (!code) throw new Error("No code returned");
       setSingles((s) => ({ ...s, [participantId]: code }));
       setSaved(false);
-      await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
-      toast.success(`New code for ${name} — copy it now`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not generate code");
-    } finally {
-      setBusy(false);
-    }
+      await qc.invalidateQueries({ queryKey: memberClaimsKey(eventId) });
+      return `New code for ${name} — copy it now`;
+    });
   }
 
   return (
@@ -353,7 +346,7 @@ export function AwardsAdminPanel({ eventId, locked }: { eventId: string; locked:
   const tallyFn = useServerFn(getAwardTally);
   const closeFn = useServerFn(closeAwardVoting);
   const reopenFn = useServerFn(reopenAwardVoting);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
 
   const tally = useQuery({
     queryKey: ["award-tally", eventId],
@@ -370,30 +363,20 @@ export function AwardsAdminPanel({ eventId, locked }: { eventId: string; locked:
 
   async function onClose() {
     if (!confirm("Close voting and publish winners? Ties are published as joint winners.")) return;
-    setBusy(true);
-    try {
+    await run("Could not close voting", async () => {
       const res = await closeFn({ data: { eventId } });
       await qc.invalidateQueries();
-      toast.success(`Published ${res.published} award${res.published === 1 ? "" : "s"}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not close voting");
-    } finally {
-      setBusy(false);
-    }
+      return `Published ${plural(res.published, "award")}`;
+    });
   }
 
   async function onReopen() {
     if (!confirm("Reopen voting? This removes the published winners.")) return;
-    setBusy(true);
-    try {
+    await run("Could not reopen", async () => {
       await reopenFn({ data: { eventId } });
       await qc.invalidateQueries();
-      toast.success("Voting reopened");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not reopen");
-    } finally {
-      setBusy(false);
-    }
+      return "Voting reopened";
+    });
   }
 
   return (

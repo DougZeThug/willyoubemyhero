@@ -8,7 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
 import { STREAK_MILESTONES } from "../../src/lib/streaks";
 import { secretTierRank } from "../../src/lib/secret-rarity";
-import { leagueDay, LEAGUE_TIME_ZONE } from "../../src/lib/trades";
+import { leagueDay, LEAGUE_TIME_ZONE } from "../../src/lib/league-day";
 
 afterAll(closeDb);
 beforeEach(seedEvent);

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { optionalAccountHandoff, optionalGuest } from "./require-auth.server";
+import { deviceIdentity } from "./require-auth.server";
 import type { CollectorIdentity } from "./collector.server";
 
 /**
@@ -15,12 +15,5 @@ export const createCollectorIdentity = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }): Promise<CollectorIdentity> => {
     const { createCollector } = await import("./collector.server");
-    const handoff = optionalAccountHandoff();
-    return createCollector(
-      context.userId,
-      data.displayName,
-      [optionalGuest(), handoff?.kind === "guest" ? handoff.id : null].filter((id): id is string =>
-        Boolean(id),
-      ),
-    );
+    return createCollector(context.userId, data.displayName, deviceIdentity().guestIds);
   });

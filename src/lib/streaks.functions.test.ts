@@ -11,7 +11,7 @@ import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/
 import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import type { StreakStatus } from "./streaks.functions";
 import { previousDay, STREAK_MILESTONES } from "./streaks";
-import { leagueDay } from "./trades";
+import { leagueDay } from "./league-day";
 
 let mock = createSupabaseMock();
 

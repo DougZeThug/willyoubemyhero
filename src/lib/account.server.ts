@@ -9,24 +9,8 @@
 // that phone back the same member or guest token it would have had all along, so
 // nothing downstream has to know accounts exist.
 import { randomUUID } from "node:crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { signGuestToken, signMemberToken } from "./session.server";
-
-/**
- * The same client, widened, for the one RPC `types.ts` has not been regenerated
- * against yet.
- *
- * The escape hatch draft-db.server.ts and trades-rows.ts open, for the same
- * reason: src/integrations/supabase/types.ts is `supabase gen types` output,
- * must not be hand-edited, and is .prettierignore'd — so `bind_account_to_player`
- * (supabase/migrations/20260911140000_bind_account_in_one_transaction.sql) is a
- * compile error against the generated `Database` type. Regenerating types.ts
- * makes this a two-call-site removal.
- */
-function untypedDb(): SupabaseClient {
-  return supabaseAdmin as unknown as SupabaseClient;
-}
 
 export type AccountIdentity = {
   kind: "member" | "guest";
@@ -108,8 +92,7 @@ async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
     // calls left gaps: the destination could open today's pack between the
     // pulls and the packs, so merge_guest_pulls kept a second day's secret, and
     // a failure after the packs stranded milestone claims on the dead id.
-    // Not in the generated types yet, hence the widened client.
-    const { error } = await untypedDb().rpc("merge_guest_into_guest", {
+    const { error } = await supabaseAdmin.rpc("merge_guest_into_guest", {
       _into_guest: identity.id,
       _from_guest: guestId,
     });
@@ -188,7 +171,7 @@ export async function syncAccount(
   // files it against whoever the row belongs to, which is exactly what the two
   // branches this replaces both did.
   if (identity.kind === "guest" && device.memberId) {
-    const { data, error } = await untypedDb().rpc("bind_account_to_player", {
+    const { data, error } = await supabaseAdmin.rpc("bind_account_to_player", {
       _user_id: userId,
       _participant_id: device.memberId,
       _guest_id: identity.id,
@@ -238,7 +221,7 @@ export class AccountAlreadyLinkedError extends Error {
  * now, where they can be decided under the row's own lock.
  */
 export async function bindParticipant(userId: string, participantId: string) {
-  const { data, error } = await untypedDb().rpc("bind_account_to_player", {
+  const { data, error } = await supabaseAdmin.rpc("bind_account_to_player", {
     _user_id: userId,
     _participant_id: participantId,
   });

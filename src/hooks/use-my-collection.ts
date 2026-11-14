@@ -1,5 +1,9 @@
+import { useMemberQuery } from "./use-member-query";
+import { usePackSignals } from "./use-pack-signals";
+import { myCardStatsKey } from "@/lib/query-keys";
+import { memberIdentity, memberIdentityOrNull } from "@/lib/identity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
@@ -7,17 +11,12 @@ import {
   forgetCards,
   loadCollection,
   loadUnrecorded,
-  PACK_STATE_CHANGED,
-  PACK_UNRECORDED_KEY,
   type CollectedCard,
   type UnrecordedPulls,
 } from "@/lib/card-collection";
 import { bestEdition, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
 import { useMemberSession } from "@/lib/member-token";
-
-export const myCardStatsKey = (eventId: string | null | undefined, participantId?: string | null) =>
-  ["my-card-stats", eventId, participantId ?? null] as const;
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
@@ -141,30 +140,27 @@ export function useMyCollection(
   // is not mounted on any of the others.
   const [unrecorded, setUnrecorded] = useState<UnrecordedPulls | null>(null);
   const [unrecordedLoaded, setUnrecordedLoaded] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const read = () =>
+  const mountedRef = useRef(false);
+  const readUnrecorded = useCallback(
+    () =>
       void loadUnrecorded().then((u) => {
-        if (cancelled) return;
+        if (!mountedRef.current) return;
         setUnrecorded((prev) => (sameRow(prev, u) ? prev : u));
         setUnrecordedLoaded(true);
-      });
-    // `PACK_STATE_CHANGED` never leaves its tab. A claim in another tab writes this
-    // row and then hands the profile a member token, and this vault would
-    // reconcile against the row it read at mount — before there was one.
-    const theirs = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== PACK_UNRECORDED_KEY) return;
-      read();
-    };
-    read();
-    window.addEventListener(PACK_STATE_CHANGED, read);
-    window.addEventListener("storage", theirs);
+      }),
+    [],
+  );
+  useEffect(() => {
+    mountedRef.current = true;
+    readUnrecorded();
     return () => {
-      cancelled = true;
-      window.removeEventListener(PACK_STATE_CHANGED, read);
-      window.removeEventListener("storage", theirs);
+      mountedRef.current = false;
     };
-  }, []);
+  }, [readUnrecorded]);
+  // A claim in another tab writes this row and then hands the profile a member
+  // token, and this vault would reconcile against the row it read at mount —
+  // before there was one.
+  usePackSignals({ changedHere: readUnrecorded, unrecordedElsewhere: readUnrecorded });
 
   const protectedIds = useMemo(() => {
     if (!unrecorded || unrecorded.ids.length === 0) return EMPTY_IDS;
@@ -179,21 +175,17 @@ export function useMyCollection(
     // before `seed`, which needs the identity — so this is the safe reading of a
     // case that should not arise, not leniency toward a legacy row. There are no
     // legacy rows: this key ships with the protection that reads it.
-    if (participantId && unrecorded.identity !== `m:${participantId}`) return EMPTY_IDS;
+    if (participantId && unrecorded.identity !== memberIdentity(participantId)) return EMPTY_IDS;
     return new Set(unrecorded.ids);
   }, [unrecorded, participantId]);
 
   const fn = useServerFn(getMyCardStats);
   const qc = useQueryClient();
-  const stats = useQuery({
+  const stats = useMemberQuery({
     queryKey: myCardStatsKey(eventId, participantId),
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<MyCardStats>,
     enabled: !!eventId && !!participantId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
-    // A member whose token has just expired should see their local collection, not
-    // a retry storm against a handler that will keep refusing them.
-    retry: false,
   });
 
   // `useMemberSession` starts null and hydrates in an effect, so "no member" and
@@ -338,7 +330,7 @@ export function useMyCollection(
         }
         const listed = new Set(answer.cards.map((c) => c.eventParticipantId));
         const held =
-          now && (!participantId || now.identity === `m:${participantId}`)
+          now && (!participantId || now.identity === memberIdentity(participantId))
             ? new Set(now.ids)
             : EMPTY_IDS;
         const doomed: string[] = [];
@@ -349,7 +341,7 @@ export function useMyCollection(
         // `heldBy` makes the row count again inside the delete's own transaction,
         // closing the gap between the read above and this write.
         if (doomed.length > 0)
-          await forgetCards(doomed, participantId ? `m:${participantId}` : undefined);
+          await forgetCards(doomed, memberIdentityOrNull(participantId) ?? undefined);
       } catch {
         for (const id of fresh) forgottenRef.current.delete(id);
       }

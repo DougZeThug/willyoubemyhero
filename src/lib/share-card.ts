@@ -1,4 +1,4 @@
-import type { ResultCardData } from "@/components/result-card";
+import type { ResultCardData } from "@/lib/result-card-data";
 
 /**
  * Wait until everything inside `node` has actually painted.

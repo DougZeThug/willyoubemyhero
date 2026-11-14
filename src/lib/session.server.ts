@@ -1,4 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  ACCOUNT_ADMIN_PREFIX,
+  GUEST_PREFIX,
+  MEMBER_PREFIX,
+  parseAdminToken,
+  parsePrefixedToken,
+} from "./token-format";
 
 export function hashPin(salt: string, pin: string): string {
   return createHash("sha256").update(`${salt}::${pin}`).digest("hex");
@@ -42,7 +49,7 @@ export function signAdminToken(eventId: string): { token: string; expiresAt: num
 // so requireAdmin can re-check admin_accounts on every write and a commissioner
 // taken off the list loses the console at once, not twelve hours later. Five
 // parts, so it can never parse as a PIN token (3) or a member/guest token (4).
-const ACCOUNT_ADMIN_PREFIX = "a";
+// The shape lives in token-format.ts, which the device reads too.
 
 export function signAccountAdminToken(
   userId: string,
@@ -61,36 +68,24 @@ export function verifyAdminToken(
   if (!token) return null;
   const secret = process.env.SESSION_SECRET;
   if (!secret) return null;
-  const parts = token.split(".");
-  if (parts.length === 5) {
-    const [prefix, userId, eventId, expStr, sig] = parts;
-    if (prefix !== ACCOUNT_ADMIN_PREFIX || !userId || !eventId) return null;
-    const expiresAt = Number(expStr);
-    if (!Number.isFinite(expiresAt)) return null;
-    const expected = hmac(`${ACCOUNT_ADMIN_PREFIX}.${userId}.${eventId}.${expiresAt}`, secret);
-    if (!timingSafeEq(sig, expected)) return null;
-    if (Date.now() > expiresAt) return null;
-    return { eventId, expiresAt, userId };
-  }
-  if (parts.length !== 3) return null;
-  const [eventId, expStr, sig] = parts;
-  const expiresAt = Number(expStr);
-  if (!eventId || !Number.isFinite(expiresAt)) return null;
-  const expected = hmac(`${eventId}.${expiresAt}`, secret);
-  if (!timingSafeEq(sig, expected)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { eventId, expiresAt };
+  const parsed = parseAdminToken(token);
+  if (!parsed) return null;
+  if (!timingSafeEq(parsed.sig, hmac(parsed.payload, secret))) return null;
+  if (Date.now() > parsed.expiresAt) return null;
+  return parsed.userId
+    ? { eventId: parsed.id, expiresAt: parsed.expiresAt, userId: parsed.userId }
+    : { eventId: parsed.id, expiresAt: parsed.expiresAt };
 }
 
-// ---------- League member sessions ----------
-//
 // Same HMAC construction as the admin token, but a distinct 4-part shape with an
 // "m" prefix that is also inside the signed payload. An admin token can never be
 // parsed as a member token (3 parts vs 4) and a signature cannot be transplanted
 // between the two, because the prefix is part of what gets signed.
 
-export const MEMBER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days — this is a party app
-const MEMBER_PREFIX = "m";
+// 90 days — this is a party app. Guest tokens use the same lifetime, and
+// memberTokenIssuedAt below only works because every one of these tokens is
+// signed with exactly this value.
+export const MEMBER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
  * When a member token was signed, recovered from its expiry.
@@ -119,23 +114,22 @@ export function signMemberToken(participantId: string): { token: string; expires
 export function verifyMemberToken(
   token: string | null | undefined,
 ): { participantId: string; expiresAt: number } | null {
+  const parsed = parsePrefixed(MEMBER_PREFIX, token);
+  return parsed && { participantId: parsed.id, expiresAt: parsed.expiresAt };
+}
+
+/** Parse, check the signature, check expiry. Null for anything that fails any of the three. */
+function parsePrefixed(prefix: string, token: string | null | undefined) {
   if (!token) return null;
   const secret = process.env.SESSION_SECRET;
   if (!secret) return null;
-  const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [prefix, participantId, expStr, sig] = parts;
-  if (prefix !== MEMBER_PREFIX) return null;
-  const expiresAt = Number(expStr);
-  if (!participantId || !Number.isFinite(expiresAt)) return null;
-  const expected = hmac(`${MEMBER_PREFIX}.${participantId}.${expiresAt}`, secret);
-  if (!timingSafeEq(sig, expected)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { participantId, expiresAt };
+  const parsed = parsePrefixedToken(prefix, token);
+  if (!parsed) return null;
+  if (!timingSafeEq(parsed.sig, hmac(parsed.payload, secret))) return null;
+  if (Date.now() > parsed.expiresAt) return null;
+  return parsed;
 }
 
-// ---------- Guest sessions ----------
-//
 // A third scheme, so somebody who has not claimed a player can still own a daily
 // secret card. Same construction again, with a "g" prefix that is likewise inside
 // the signed payload — this one matters more than the admin/member pair, because a
@@ -148,13 +142,10 @@ export function verifyMemberToken(
 // was handed would let anyone mint a token for somebody else's guest id and spend
 // their pull, which is exactly the attack the signature is here to prevent.
 
-const GUEST_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days, same as a member
-const GUEST_PREFIX = "g";
-
 export function signGuestToken(guestId: string): { token: string; expiresAt: number } {
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error("SESSION_SECRET is not set");
-  const expiresAt = Date.now() + GUEST_TOKEN_TTL_MS;
+  const expiresAt = Date.now() + MEMBER_TOKEN_TTL_MS;
   const payload = `${GUEST_PREFIX}.${guestId}.${expiresAt}`;
   return { token: `${payload}.${hmac(payload, secret)}`, expiresAt };
 }
@@ -162,17 +153,6 @@ export function signGuestToken(guestId: string): { token: string; expiresAt: num
 export function verifyGuestToken(
   token: string | null | undefined,
 ): { guestId: string; expiresAt: number } | null {
-  if (!token) return null;
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) return null;
-  const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [prefix, guestId, expStr, sig] = parts;
-  if (prefix !== GUEST_PREFIX) return null;
-  const expiresAt = Number(expStr);
-  if (!guestId || !Number.isFinite(expiresAt)) return null;
-  const expected = hmac(`${GUEST_PREFIX}.${guestId}.${expiresAt}`, secret);
-  if (!timingSafeEq(sig, expected)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { guestId, expiresAt };
+  const parsed = parsePrefixed(GUEST_PREFIX, token);
+  return parsed && { guestId: parsed.id, expiresAt: parsed.expiresAt };
 }

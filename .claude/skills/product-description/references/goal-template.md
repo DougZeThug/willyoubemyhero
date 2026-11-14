@@ -30,7 +30,7 @@ Do not describe code. Describe what the user sees and does. Technical detail goe
 - Sentence case for all headings. Direct, concrete language. No hedging, no marketing.
 - State surprising behavior plainly and say why if the reason is in the code or a comment. If it looks like a bug, say so in "Open questions" rather than smoothing it over.
 - Cross-reference other documents with relative links rather than repeating their content. {The input model} owns thresholds, click detection, modifiers, and the cancel/complete/interrupt definitions. Do not restate them; link.
-- Every document ends with "## Open questions and verification" listing what was read from code but not confirmed by hand, followed by `Verified against {source repo} commit \`{sha}\`` using the current `git rev-parse --short HEAD` of {the source repo}.
+- Every document ends with "## Open questions and verification" listing what was read from code but not confirmed by hand, followed by `Verified against {source repo} commit \`{sha}\``using the current`git rev-parse --short HEAD` of {the source repo}.
 - Mermaid `stateDiagram-v2` for each interaction's states. Keep it to the states the user passes through; omit internal bookkeeping states.
 
 ## Things already established (do not re-derive, do not contradict)

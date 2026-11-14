@@ -11,7 +11,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PackSummary } from "./pack-summary";
-import type { StandSlot } from "./pack-stand";
+import type { StandSlot } from "@/lib/stand-view";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackRosterSlot, PackSecretSlot } from "@/lib/pack";
 

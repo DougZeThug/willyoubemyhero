@@ -1,5 +1,7 @@
 // Client-side active-run persistence via IndexedDB with a localStorage fallback.
-import { openDB, type IDBPDatabase } from "idb";
+import { emitLocal } from "./device-store";
+import { STORAGE_KEYS } from "./storage-keys";
+import { bestEffort, cachedDb, isBrowser } from "./idb";
 
 export type ActivePenalty = {
   clientKey: string;
@@ -55,24 +57,12 @@ type LegacyActiveRun = Omit<ActiveRun, "v" | "startedAt" | "finishedAt"> & {
 const DB_NAME = "wwbh-combine";
 const STORE = "active-run";
 
-function isBrowser() {
-  return typeof window !== "undefined" && typeof indexedDB !== "undefined";
-}
-
-let dbPromise: Promise<IDBPDatabase> | null = null;
-function getDb() {
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, 1, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-      },
-    });
-  }
-  return dbPromise;
-}
+const getDb = cachedDb(DB_NAME, 1, (db) => {
+  if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+});
 
 const KEY = "current";
-const LS_KEY = "wwbh-active-run";
+const LS_KEY = STORAGE_KEYS.activeRun;
 
 /**
  * Bring a stored record up to the current schema, or refuse it.
@@ -153,17 +143,13 @@ export async function loadActiveRun(): Promise<ActiveRun | null> {
 
 export async function saveActiveRun(run: ActiveRun): Promise<void> {
   if (!isBrowser()) return;
-  try {
+  // Two stores so one failing (IndexedDB blocked, localStorage full) still leaves
+  // the run recoverable from the other; losing both costs only the resume.
+  await bestEffort(async () => {
     const db = await getDb();
     await db.put(STORE, run, KEY);
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(run));
-  } catch {
-    /* ignore */
-  }
+  });
+  await bestEffort(() => localStorage.setItem(LS_KEY, JSON.stringify(run)));
 }
 
 /**
@@ -175,22 +161,14 @@ export const ACTIVE_RUN_CLEARED_EVENT = "wwbh:active-run-cleared";
 
 export async function clearActiveRun(): Promise<void> {
   if (!isBrowser()) return;
-  try {
+  // Each store separately, as in saveActiveRun: a failed delete must not stop the
+  // other from clearing, or the announcement below.
+  await bestEffort(async () => {
     const db = await getDb();
     await db.delete(STORE, KEY);
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.removeItem(LS_KEY);
-  } catch {
-    /* ignore */
-  }
-  try {
-    window.dispatchEvent(new Event(ACTIVE_RUN_CLEARED_EVENT));
-  } catch {
-    /* ignore */
-  }
+  });
+  await bestEffort(() => localStorage.removeItem(LS_KEY));
+  await bestEffort(() => emitLocal(ACTIVE_RUN_CLEARED_EVENT));
 }
 
 /** `nowMs` is epoch ms — `Date.now()`, not `performance.now()`. */

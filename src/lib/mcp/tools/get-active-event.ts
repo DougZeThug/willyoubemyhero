@@ -1,6 +1,7 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { supabaseAnon } from "../supabase";
 import { fail, json } from "../shared";
+import { queryActiveEvent } from "../../active-event-query";
 
 export default defineTool({
   name: "get_active_event",
@@ -11,13 +12,7 @@ export default defineTool({
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async () => {
     const sb = supabaseAnon();
-    const { data: event, error } = await sb
-      .from("events_public")
-      .select("*")
-      .eq("active", true)
-      .order("year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: event, error } = await queryActiveEvent(sb);
     if (error) fail(error.message);
     if (!event?.id) fail("No active event right now.");
     const { data: stations } = await sb

@@ -1,7 +1,7 @@
 // What the reveal stand reads off the slot it is on — walked branch by branch,
 // since the reason it was lifted out of the component is that a test can.
 import { describe, expect, it } from "vitest";
-import type { StandSlot } from "@/components/pack-stand";
+import type { StandSlot } from "./stand-view";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackRosterSlot, PackSecretSlot } from "@/lib/pack";
 import { upgradeLabel } from "@/lib/pack-outcome";

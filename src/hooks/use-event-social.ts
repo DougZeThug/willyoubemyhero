@@ -1,3 +1,4 @@
+import { activeEventKey, eventAwardsKey, eventSocialKey } from "@/lib/query-keys";
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -52,7 +53,7 @@ export function useEventSocial(eventId: string | null | undefined) {
   const identity = me?.participantId ?? guest?.guestId ?? null;
 
   const query = useQuery({
-    queryKey: ["event-social", eventId, identity],
+    queryKey: eventSocialKey(eventId, identity),
     queryFn: () => fn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: 5_000,
@@ -70,7 +71,7 @@ export function useEventSocial(eventId: string | null | undefined) {
       // Two elements on purpose: query-key filters match on prefix, so this
       // reaches whichever identity's entry is live without the effect having to
       // re-subscribe every time the identity changes.
-      change: () => qc.invalidateQueries({ queryKey: ["event-social", eventId] }),
+      change: () => qc.invalidateQueries({ queryKey: eventSocialKey(eventId) }),
       health: () => {},
     });
   }, [eventId, qc]);
@@ -84,7 +85,7 @@ export function useEventAwards(eventId: string | null | undefined) {
   const qc = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["event-awards", eventId],
+    queryKey: eventAwardsKey(eventId),
     queryFn: () => fn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: 60_000,
@@ -101,12 +102,12 @@ export function useEventAwards(eventId: string | null | undefined) {
     // reveal said "No votes cast." over a vote that had them.
     return subscribeToEventChannel(eventId, {
       change: () => {
-        qc.invalidateQueries({ queryKey: ["event-awards", eventId] });
+        qc.invalidateQueries({ queryKey: eventAwardsKey(eventId) });
         // And the event itself, because `awards_locked` rides on it with a 60s
         // stale time and no subscription of its own. Winners arrived at once
         // while the ballot stayed open for up to a minute, and every tap on it
         // was refused — which reads as a bug to the voter, not as a closed vote.
-        qc.invalidateQueries({ queryKey: ["active-event"] });
+        qc.invalidateQueries({ queryKey: activeEventKey() });
       },
       health: () => {},
     });

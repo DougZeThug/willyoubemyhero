@@ -12,8 +12,9 @@ node .claude/factory/factory.mjs status
 ```
 
 Follow `.claude/factory/director.md`, kind `polish`, with these differences:
+
 1. **Audit before touching**: `factory-ui` (read-only first pass: instruct it to report, not edit) lists concrete defects at phone width and desktop with `file:line`, ranked by user impact. If the project has a UX specialist (see `domainAgents`), consult it.
-2. Pick the **smallest set** of fixes that address what the user said. Anything that changes established look/flow/copy direction is a *decision for the user*, listed in the report, not implemented.
+2. Pick the **smallest set** of fixes that address what the user said. Anything that changes established look/flow/copy direction is a _decision for the user_, listed in the report, not implemented.
 3. Implement via `factory-ui` on a task branch; preserve approved design tokens and assets (protected paths are hook-enforced).
 4. QA + reviewer as normal.
 5. **Before/after screenshots are mandatory on every polish run** (standing user instruction). Once gates pass, run `node .claude/factory/shots.mjs <task-id>` (add `--scenes a,b` to refresh only some). It captures the base commit and the branch at 320, 390, 430 and desktop, compares them pixel by pixel, and writes `.factory/evidence/<task-id>/shots/review/` (commit that directory; the raw sets stay local). Then **look at the images yourself** (Read them) before describing them: confirm the changed pairs show what you claim, and that the control pair is identical. A scene whose before and after are identical has proven nothing about that change.

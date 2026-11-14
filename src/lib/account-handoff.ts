@@ -1,7 +1,8 @@
+import { STORAGE_KEYS } from "./storage-keys";
 import { getGuestToken } from "./guest-token";
 import { getMemberToken } from "./member-token";
 
-const KEY = "wwbh:account-handoff-token";
+const KEY = STORAGE_KEYS.accountHandoffToken;
 
 /** Preserve the identity held before an auth redirect or session transition. */
 export function preserveAccountHandoff() {

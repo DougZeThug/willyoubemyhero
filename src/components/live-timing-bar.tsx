@@ -9,21 +9,20 @@
  * Renders nothing at all without a valid admin session for the active event.
  */
 import { useState } from "react";
-import { Flag, Pause, Pencil, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
+import { Flag, Pause, Pencil, Play, Radio, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EditResultSheet } from "@/components/edit-result-sheet";
+import { SplitStrip } from "@/components/admin/split-strip";
 import { formatTime } from "@/lib/format";
 import { awaitingRun, currentAthlete } from "@/lib/current-athlete";
 import type { RunConsole } from "@/hooks/use-run-console";
-import { cn } from "@/lib/utils";
 
 export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const {
     event,
     run,
     participants,
-    stations,
     currentEp,
     paused,
     finished,
@@ -36,8 +35,6 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     setSelected,
     startRun,
     togglePause,
-    recordSplit,
-    undoLastSplit,
     finishRun,
     cancelRun,
     resetAthlete,
@@ -162,58 +159,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                 </Button>
               </div>
 
-              <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                    Splits
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={undoLastSplit}
-                    // No `finished` here, unlike the console's copy of this
-                    // button: the whole splits strip lives in the not-finished
-                    // arm above, so the guard would read as though this branch
-                    // were reachable after a Finish. The hook refuses either way.
-                    disabled={run.splits.length === 0}
-                  >
-                    <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo
-                  </Button>
-                </div>
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                  {stations.map((st) => {
-                    const split = run.splits.find((s) => s.stationId === st.id);
-                    const disabled = Boolean(split) || run.status !== "running";
-                    return (
-                      <button
-                        key={st.id}
-                        disabled={disabled}
-                        onClick={() => recordSplit(st.id)}
-                        className={cn(
-                          "min-w-28 shrink-0 rounded-md border p-2 text-left transition",
-                          split
-                            ? "border-primary/40 bg-primary/10"
-                            : disabled
-                              ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10",
-                        )}
-                      >
-                        <div className="truncate font-display text-sm font-black uppercase leading-tight">
-                          {st.short_name ?? st.name}
-                        </div>
-                        <div className="timer-digits tabular text-sm text-primary">
-                          {split ? formatTime(split.cumulative_time_ms) : "—"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {stations.length === 0 && (
-                    <span className="px-1 py-2 text-xs text-muted-foreground">
-                      No stations set up.
-                    </span>
-                  )}
-                </div>
-              </div>
+              <SplitStrip runConsole={rc} compact />
             </>
           )}
 

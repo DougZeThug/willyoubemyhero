@@ -21,20 +21,15 @@ describe("HudTimer", () => {
     expect(screen.getByText(/^00\.00$/)).toBeInTheDocument();
   });
 
-  it("drops the seconds suffix once there is a minutes part", () => {
-    const { container, unmount } = render(
-      <HudTimer runningSinceMs={12_340} paused status="Standby" />,
-    );
-    expect(container.querySelector(".timer-digits")?.textContent).toBe("12.34s");
+  it("shows an 's' suffix under a minute and drops it once there is a minutes part", () => {
+    const { unmount } = render(<HudTimer runningSinceMs={12_340} paused status="Standby" />);
+    expect(screen.getByText("12.34")).toBeInTheDocument();
+    expect(screen.getByText("s")).toBeInTheDocument();
     unmount();
 
-    const over = render(<HudTimer runningSinceMs={63_450} paused status="Standby" />);
-    expect(over.container.querySelector(".timer-digits")?.textContent).toBe("1:03.45");
-  });
-
-  it("switches to the full M:SS.hh format past a minute", () => {
     render(<HudTimer runningSinceMs={63_450} paused status="Standby" />);
     expect(screen.getByText("1:03.45")).toBeInTheDocument();
+    expect(screen.queryByText("s")).not.toBeInTheDocument();
   });
 
   it("renders the status line", () => {
@@ -50,12 +45,13 @@ describe("HudTimer", () => {
   });
 
   it("colours the digits as a warning while paused and as primary while running", () => {
-    const { container, unmount } = render(<HudTimer runningSinceMs={0} paused status="Paused" />);
-    expect(container.querySelector(".timer-digits")).toHaveClass("text-warn");
+    const { unmount } = render(<HudTimer runningSinceMs={0} paused status="Paused" />);
+    expect(screen.getByText("00.00")).toHaveClass("text-warn");
     unmount();
 
-    const running = render(<HudTimer runningSinceMs={0} paused={false} status="Live" />);
-    expect(running.container.querySelector(".timer-digits")).toHaveClass("text-primary");
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    render(<HudTimer runningSinceMs={0} paused={false} status="Live" />);
+    expect(screen.getByText(/^00\.0\d$/)).toHaveClass("text-primary");
   });
 
   it("sizes the ring from the size prop", () => {
@@ -63,7 +59,6 @@ describe("HudTimer", () => {
       <HudTimer runningSinceMs={0} paused status="Standby" size={340} />,
     );
     expect(container.firstElementChild).toHaveStyle({ width: "340px", height: "340px" });
-    expect(container.querySelector("svg")).toHaveAttribute("viewBox", "0 0 340 340");
   });
 
   it("renders inner content when given children", () => {

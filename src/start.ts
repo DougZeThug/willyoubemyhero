@@ -2,10 +2,7 @@ import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
 import { browserSupabase } from "@/lib/browser-supabase";
-import { attachAdminToken } from "@/lib/attach-admin-token";
-import { attachMemberToken } from "@/lib/attach-member-token";
-import { attachGuestToken } from "@/lib/attach-guest-token";
-import { attachAccountHandoff } from "@/lib/attach-account-handoff";
+import { attachIdentityHeaders } from "@/lib/attach-identity-headers";
 
 const errorMiddleware = createMiddleware().server(async ({ next, request }) => {
   try {
@@ -39,12 +36,6 @@ const attachSupabaseAuth = createMiddleware({ type: "function" }).client(async (
 });
 
 export const startInstance = createStart(() => ({
-  functionMiddleware: [
-    attachSupabaseAuth,
-    attachAdminToken,
-    attachMemberToken,
-    attachGuestToken,
-    attachAccountHandoff,
-  ],
+  functionMiddleware: [attachSupabaseAuth, attachIdentityHeaders],
   requestMiddleware: [errorMiddleware],
 }));

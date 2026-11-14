@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireAdmin, requireMember } from "./require-auth.server";
 import type {
@@ -10,6 +9,8 @@ import type {
 } from "./dust-rows";
 import { uuid as zuuid } from "./zod-uuid";
 import { sqlNull } from "./rpc-null";
+import { adminDb } from "./admin-db.server";
+import { noStore } from "./no-store.server";
 
 /**
  * Dust: what a spare is worth, and what it buys.
@@ -29,16 +30,6 @@ import { sqlNull } from "./rpc-null";
  * says how big the secret set is or what anybody else has.
  */
 
-/** The service-role client, loaded inside the handler so it never reaches the bundle. */
-async function db() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
-function noStore() {
-  setResponseHeader("Cache-Control", "private, no-store");
-}
-
 /**
  * What you have.
  *
@@ -49,7 +40,7 @@ function noStore() {
 export const getDustBalance = createServerFn({ method: "GET" }).handler(async () => {
   const me = await requireMember();
   noStore();
-  const sb = await db();
+  const sb = await adminDb();
   const { data, error } = await sb.rpc("dust_balance", { _participant_id: me });
   if (error) throw new Error(error.message);
   return { balance: (data as number | null) ?? 0 };
@@ -68,7 +59,7 @@ export const millCardCopy = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("mill_card_copy", {
       _participant_id: me,
       _card_copy_id: data.cardCopyId,
@@ -104,7 +95,7 @@ export const sellSecretCard = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("sell_secret_card", {
       _participant_id: me,
       _secret_pull_id: data.secretPullId,
@@ -140,7 +131,7 @@ export const buyBonusSecretPull = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("buy_bonus_secret_pull", {
       _participant_id: me,
       _event_id: sqlNull(null),
@@ -175,7 +166,7 @@ export const rerollCopyEdition = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { data: raw, error } = await sb.rpc("reroll_copy_edition", {
       _participant_id: me,
       _card_copy_id: data.cardCopyId,
@@ -206,9 +197,7 @@ export const rerollCopyEdition = createServerFn({ method: "POST" })
  * Its own function rather than a field on `updateEvent`: a feature switch reads
  * better owned by the feature than buried among the event's lock flags, and
  * `updateEvent`'s validator already carries a caution about optional booleans
- * nothing ever calls. It goes through this file's untyped shim because the rest
- * of the feature does, not because the column is missing — types.ts has since
- * been regenerated and carries `dust_enabled`.
+ * nothing ever calls.
  *
  * `requireAdmin(eventId)` rather than `requireMember()`, unlike everything else
  * in this file — this is the one dust call a player must never make.
@@ -222,7 +211,7 @@ export const setDustEnabled = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     noStore();
-    const sb = await db();
+    const sb = await adminDb();
     const { error } = await sb
       .from("events")
       .update({ dust_enabled: data.enabled })

@@ -6,6 +6,7 @@ import { grantCard } from "@/lib/card-pulls.functions";
 import { newClientKey } from "@/lib/format";
 import { EDITION_ORDER, type Edition } from "@/lib/card-edition";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useAdminAction } from "@/hooks/use-admin-action";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 
@@ -23,7 +24,7 @@ export function CardGrantPanel({ eventId }: { eventId: string }) {
   const [to, setTo] = useState("");
   const [card, setCard] = useState("");
   const [edition, setEdition] = useState<Edition>("standard");
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAdminAction();
   /**
    * The key for the grant currently being attempted, held across a failure so a
    * retry replays it. A request that timed out after the server had committed
@@ -49,8 +50,7 @@ export function CardGrantPanel({ eventId }: { eventId: string }) {
     }
     const cardName = roster.find((p) => p.id === card)?.participant?.name ?? "that card";
     if (!confirm(`Give ${nameOf(to)} a ${edition} ${cardName} card?`)) return;
-    setBusy(true);
-    try {
+    await run("Could not grant that card", async () => {
       grantKey.current ??= newClientKey();
       const res = await grantFn({
         data: {
@@ -62,16 +62,10 @@ export function CardGrantPanel({ eventId }: { eventId: string }) {
         },
       });
       grantKey.current = null;
-      toast.success(
-        res.repeat
-          ? `Already given — ${nameOf(to)} holds ${res.copies} × ${cardName}`
-          : `${nameOf(to)} now holds ${res.copies} × ${cardName}`,
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not grant that card");
-    } finally {
-      setBusy(false);
-    }
+      return res.repeat
+        ? `Already given — ${nameOf(to)} holds ${res.copies} × ${cardName}`
+        : `${nameOf(to)} now holds ${res.copies} × ${cardName}`;
+    });
   }
 
   const selectClass =

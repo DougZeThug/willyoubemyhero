@@ -28,7 +28,7 @@ export type SharePackCard = {
   secret?: boolean;
 };
 
-export type SharePackData = {
+type SharePackData = {
   eventYear?: number | null;
   cards: SharePackCard[];
   /** How much of the roster this person has, after the pack. */

@@ -117,11 +117,10 @@ export function navTabs({
 /**
  * The commissioner's hidden set, off the active event.
  *
- * `unknown` and a cast for the same reason dustLive takes one, and it is not the
- * drift: types.ts now carries `nav_hidden`, but declaring the parameter as
- * `{ nav_hidden?: string[] }` is an all-optional type, which trips TypeScript's
- * weak-type check and rejects an event carrying none of those properties, and
- * callers hold the event as whatever their own query gave them. The cast lives
+ * `unknown` and a cast for the same reason dustLive takes one: declaring the
+ * parameter as `{ nav_hidden?: string[] }` is an all-optional type, which trips
+ * TypeScript's weak-type check and rejects an event carrying none of those
+ * properties, and callers hold the event as whatever their own query gave them. The cast lives
  * here once rather than at every call site.
  *
  * Anything that is not an array of strings reads as "nothing hidden" — an event

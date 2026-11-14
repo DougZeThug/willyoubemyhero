@@ -29,8 +29,8 @@ Each term is one paragraph:
 
 ## Rules
 
-- Define the *state words* with care: selected, hovered, editing, focused, active, locked, hidden, dirty, saved. These are where documents disagree most.
-- Define the *gesture-ending words* as a section of their own (cancel, complete, interrupt, and what dispatches each). Every cancel/interrupt table in the repo relies on them.
+- Define the _state words_ with care: selected, hovered, editing, focused, active, locked, hidden, dirty, saved. These are where documents disagree most.
+- Define the _gesture-ending words_ as a section of their own (cancel, complete, interrupt, and what dispatches each). Every cancel/interrupt table in the repo relies on them.
 - Define the units (screen vs. document coordinates, wall clock vs. frames, bytes vs. characters, local vs. server time) once, here.
 - When a document needs a new term, add it in the right section with a full paragraph before using it. Do not coin a synonym for an existing term.
 - Prefer the product's own UI wording when it has one ("Archive", "Share link") and say so; prefer a plain word over the code's identifier otherwise (say "draft", not `pendingMessageBuffer`).
@@ -38,6 +38,6 @@ Each term is one paragraph:
 
 Two entries, for the shape of a definition:
 
-> **Dirty.** A record is dirty from the first edit that differs from what was last saved until the next successful save. A dirty record shows a dot in its tab title, and leaving the page asks for confirmation. Reverting every edit by hand does not clear it; only a save or an explicit *discard* does.
+> **Dirty.** A record is dirty from the first edit that differs from what was last saved until the next successful save. A dirty record shows a dot in its tab title, and leaving the page asks for confirmation. Reverting every edit by hand does not clear it; only a save or an explicit _discard_ does.
 
 > **Safe to interrupt.** A command is safe to interrupt while it is still reading: nothing has been written and Ctrl+C leaves the working directory as it was. It stops being safe at the first write, which the command announces with a line beginning "Writing"; from then on Ctrl+C finishes the file in progress before exiting, and a second Ctrl+C exits at once and leaves that file partial.

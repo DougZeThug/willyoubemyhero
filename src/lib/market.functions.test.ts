@@ -29,7 +29,7 @@ vi.mock("@/lib/nudge.server", () => ({
 }));
 
 // signPath reaches for the storage client; the shelf only needs it to answer.
-vi.mock("@/lib/media.functions", () => ({
+vi.mock("@/lib/media-sign.server", () => ({
   signPath: async (path: string | null) => (path ? `signed:${path}` : null),
 }));
 

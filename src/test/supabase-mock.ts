@@ -66,7 +66,16 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
     function finish(terminal: RecordedCall["terminal"]) {
       call.terminal = terminal;
       calls.push(call);
-      return resolve(`${table}.${call.op}`, call);
+      const result = resolve(`${table}.${call.op}`, call);
+      // PostgREST answers `.range(from, to)` with just that slice. Honoured here
+      // so a paged read terminates against a declared fixture instead of being
+      // handed the whole fixture for every page.
+      const range = call.filters.find((f) => f.method === "range");
+      if (range && Array.isArray(result.data)) {
+        const [from, to] = range.args as [number, number];
+        return { ...result, data: result.data.slice(from, to + 1) };
+      }
+      return result;
     }
 
     const chain: Record<string, unknown> = {
@@ -118,6 +127,7 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
       "lte",
       "order",
       "limit",
+      "range",
     ]) {
       chain[method] = (...args: unknown[]) => {
         call.filters.push({ method, args });
@@ -200,5 +210,3 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
     },
   };
 }
-
-export type SupabaseMock = ReturnType<typeof createSupabaseMock>;

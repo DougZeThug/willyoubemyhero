@@ -4,6 +4,7 @@ import { hashCode, memberTokenIssuedAt, signMemberToken } from "./session.server
 import { optionalGuest, requireAdmin, requireMemberSession } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
+import { clearAuthAttempts, noteAuthAttempt } from "./auth-attempts.server";
 
 // Codes get read off paper and typed on a phone, so the alphabet drops every
 // character pair people confuse: 0/O, 1/I/L, 2/Z, 5/S, 8/B.
@@ -54,11 +55,6 @@ export const getClaimRoster = createServerFn({ method: "GET" }).handler(async ()
   }));
 });
 
-// Ten tries per player per ten minutes — same shape as the PIN limiter in
-// admin.functions.ts, keyed by the participant being claimed.
-const CLAIM_ATTEMPT_WINDOW_S = 600;
-const CLAIM_ATTEMPT_MAX = 10;
-
 /**
  * Exchange a commissioner-issued code for a 90-day member token.
  *
@@ -77,27 +73,17 @@ export const claimPlayer = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Counted before the row is even looked up, so a player with no code issued
-    // rate-limits exactly like one with a wrong code — the limiter must not
-    // become the enumeration channel the generic bad_code below closes. Fails
-    // OPEN on a counter error: see verifyEventPin for the reasoning.
-    // note_auth_attempt / clear_auth_attempts are still unknown to the generated
-    // types, so this one call needs the widened client. See auth-attempts-db.server.ts.
-    const { authAttemptsDb } = await import("./auth-attempts-db.server");
-    const { data: allowed } = await authAttemptsDb().rpc("note_auth_attempt", {
-      _kind: "claim",
-      _key: data.participantId,
-      _window_seconds: CLAIM_ATTEMPT_WINDOW_S,
-      _max: CLAIM_ATTEMPT_MAX,
-    });
-    if (allowed === false) {
+    if (!(await noteAuthAttempt("claim", data.participantId))) {
       return { ok: false as const, reason: "too_many_attempts" as const };
     }
-    const { data: row } = await supabaseAdmin
+    const { data: row, error: codeError } = await supabaseAdmin
       .from("member_codes")
       .select("participant_id, code_salt, code_hash, claimed_at, claim_count")
       .eq("participant_id", data.participantId)
       .maybeSingle();
+    // A failed read is not "no code issued": answering bad_code would tell the
+    // player their code is wrong when the server never got to check it.
+    if (codeError) throw codeError;
 
     // Same generic failure for "no code issued" and "wrong code" so the endpoint
     // can't be used to enumerate which players have codes.
@@ -107,7 +93,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
     }
     // A right code clears the counter — codes stay valid forever (see above), so
     // a family of re-claims across the day must not stack into a lockout.
-    await authAttemptsDb().rpc("clear_auth_attempts", { _kind: "claim", _key: data.participantId });
+    await clearAuthAttempts("claim", data.participantId);
 
     const now = new Date().toISOString();
     const { error: stampError } = await supabaseAdmin
@@ -133,11 +119,14 @@ export const claimPlayer = createServerFn({ method: "POST" })
       if (!stamped?.claimed_at) throw new Error(stampError.message);
     }
 
-    const { data: participant } = await supabaseAdmin
+    const { data: participant, error: nameError } = await supabaseAdmin
       .from("participants")
       .select("name")
       .eq("id", data.participantId)
       .maybeSingle();
+    // Thrown, ahead of the guest attach and the token, so a retry is clean; the
+    // "Player" fallback is for a name that is missing, not one that failed to load.
+    if (nameError) throw nameError;
 
     // Anything they pulled as a guest is theirs, and now it is on their name
     // rather than on this handset. The guest id comes from the verified guest
@@ -234,8 +223,6 @@ export const renewMemberSession = createServerFn({ method: "POST" }).handler(asy
   const { token, expiresAt } = signMemberToken(participantId);
   return { ok: true as const, token, expiresAt };
 });
-
-// ---------- Admin ----------
 
 /**
  * Issue a fresh code for every active participant (or just the ones named).

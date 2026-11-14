@@ -1,3 +1,10 @@
+import {
+  activeEventKey,
+  cardUrlsKey,
+  eventBundleKey,
+  eventCardBackKey,
+  photoUrlsKey,
+} from "@/lib/query-keys";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -20,11 +27,10 @@ export function useEventBundle() {
   const realtimeDegraded = health === "degraded";
 
   const bundle = useQuery({
-    queryKey: ["event-bundle", eventId],
+    queryKey: eventBundleKey(eventId),
     queryFn: () => bundleFn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: 3_000,
-    refetchOnWindowFocus: true,
     // No refetchInterval: the poll that backs realtime up lives in the channel
     // registry, one timer per event rather than one per mounted hook.
   });
@@ -38,13 +44,13 @@ export function useEventBundle() {
     }
     return subscribeToEventChannel(eventId, {
       change: () => {
-        qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+        qc.invalidateQueries({ queryKey: eventBundleKey(eventId) });
         // The event row rides the same channel, so a commissioner's dust switch
         // or nav rows reach other phones here rather than on their next focus.
         // Deliberately not everywhere: /claim and /auth do not mount this hook,
         // so those two screens still wait for a focus refetch — neither shows
         // the bar or the shop, so there is nothing there to go stale.
-        qc.invalidateQueries({ queryKey: ["active-event"] });
+        qc.invalidateQueries({ queryKey: activeEventKey() });
       },
       eventRow: () => {
         // The universal card back is three more columns on that same row, and
@@ -71,8 +77,8 @@ export function useEventBundle() {
         // `change`, which is the whole point of having a recovery branch. It is
         // their own 45-minute and 3-hour timers that used to be the only way
         // back from an upload missed during an outage.
-        qc.invalidateQueries({ queryKey: ["event-card-back", eventId] });
-        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+        qc.invalidateQueries({ queryKey: eventCardBackKey(eventId) });
+        qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
       },
       participantRow: () => {
         // The roster's half of the same problem. A photo or card upload, and the
@@ -80,8 +86,8 @@ export function useEventBundle() {
         // old objects — so /tv and the board, sitting on three-hour signed URLs
         // that never refetch on focus, would show broken images until their own
         // timer came round. Coalesced by the channel, and never on the poll.
-        qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
-        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+        qc.invalidateQueries({ queryKey: photoUrlsKey(eventId) });
+        qc.invalidateQueries({ queryKey: cardUrlsKey(eventId) });
       },
       health: setHealth,
     });

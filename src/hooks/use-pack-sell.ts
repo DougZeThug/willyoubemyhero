@@ -1,12 +1,7 @@
+import { dustBalanceKey, invalidateCardsMoved, packStatusKey } from "@/lib/query-keys";
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { packStatusKey } from "@/hooks/use-pack-status";
-import { dustBalanceKey } from "@/hooks/use-dust";
-import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
-import { myCardStatsKey } from "@/hooks/use-my-collection";
-import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { millCardCopy, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
 import type { DustFailure } from "@/lib/dust-rows";
@@ -77,15 +72,7 @@ export function usePackSell(
     (balance: number) => {
       if (!participantId) return;
       qc.setQueryData(dustBalanceKey(participantId), { balance });
-      // Both spares lists: the shop and the market read one key, the Trading
-      // Post another, and a sold copy offered from either is a refused offer.
-      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-      void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId ?? null, participantId) });
-      void qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId ?? null) });
-      // KEYED ON THE ACTOR, as the dust shop learned the hard way: these are
-      // registered under "m:<uuid>" and a bare participant id matches nothing.
-      void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
+      void invalidateCardsMoved(qc, { eventId, participantId, actor });
       void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
     },
     [qc, actor, participantId, eventId],

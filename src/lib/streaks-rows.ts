@@ -1,10 +1,7 @@
 // The shapes the streak RPCs hand back.
 //
-// The client shim this file used to open is gone: types.ts now covers
-// `streak_milestone_claims` and `claim_streak_milestone`, so the call sites are
-// on the typed supabaseAdmin. The types outlive it — `Returns: Json` can never
-// give you a discriminated union, so ClaimStreakMilestoneResult is hand-written
-// however the client is obtained.
+// `Returns: Json` can never give you a discriminated union, so
+// ClaimStreakMilestoneResult is hand-written.
 export type StreakClaimRow = {
   id: string;
   participant_id: string | null;

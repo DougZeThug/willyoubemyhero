@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { LevelPips } from "@/components/level-pips";
-import type { StandParticipant } from "@/components/pack-stand";
+import type { StandParticipant } from "@/lib/stand-view";
 import { cardBadge, type Edition } from "@/lib/card-edition";
 import { packedByLabel } from "@/lib/card-pulls";
 import type { Rarity } from "@/lib/card-rarity";

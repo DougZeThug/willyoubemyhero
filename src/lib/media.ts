@@ -64,3 +64,14 @@ export function srcSetFromSet(
   if (max === "large" && set.large) parts.push(`${set.large} ${VARIANT_WIDTHS.large}w`);
   return parts.length ? parts.join(", ") : undefined;
 }
+
+/**
+ * How wide a card renders, for the browser's `srcSet` pick.
+ *
+ * Shared because preload.ts has to hand the browser the identical
+ * string: the candidate it warms is only the candidate the card requests if both
+ * run the selection algorithm on the same inputs.
+ */
+export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
+/** Vault tiles sit two-up on a phone, so 90vw would over-fetch by a factor of four. */
+export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";

@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, PackageOpen } from "lucide-react";
 import { NewSinceStrip, type NewSinceItem } from "@/components/new-since-strip";
 import { StreakFlame } from "@/components/streak-flame";
-import { offlineReason } from "@/hooks/use-online";
+import { StreakClaim } from "@/components/streak-claim";
 import { nextPackLabel } from "@/lib/pack";
 import { nextMilestoneLine, streakLine, STREAK_MILESTONES } from "@/lib/streaks";
 import type { StreakStatus, StreakMilestoneStatus } from "@/lib/streaks.functions";
@@ -20,7 +20,7 @@ const AMBER = "oklch(0.82 0.19 85)";
 const EMPTY_NEW: readonly NewSinceItem[] = [];
 
 /** Today's pack, as the vault sees it. `left` only means anything while torn. */
-export type TodayCardPack = {
+type TodayCardPack = {
   state: "loading" | "sealed" | "torn" | "done";
   left: number;
 };
@@ -340,38 +340,18 @@ function StreakStrip({
       </ol>
 
       {claimable ? (
-        canClaim ? (
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onClaim}
-              disabled={claiming || offline}
-              {...offlineReason(offline)}
-              className="neon-btn-sm disabled:opacity-50"
-              data-testid="today-streak-claim"
-            >
-              {claiming ? "Opening…" : `Claim ${claimable.label}`}
-            </button>
-            {/* Never a toast, for the same reason the pack summary avoids one: it
-                announces the reward to whoever is glancing at the phone over
-                your shoulder. */}
-            {claimError && (
-              <span className="text-meta leading-snug text-muted-foreground">{claimError}</span>
-            )}
-          </span>
-        ) : (
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <Link to="/auth" search={{ mode: "signup", next: "/players" }} className="neon-btn-sm">
-              Sign in to claim
-            </Link>
-            {/* Deliberately not "claim your player": thirteen people are on the
-                roster and everyone else is here to watch. An account is
-                something anybody can have, and it is what keeps the card. */}
-            <span className="text-meta leading-snug text-muted-foreground">
-              {claimable.label} is waiting.
-            </span>
-          </span>
-        )
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <StreakClaim
+            claimable={claimable}
+            canClaim={canClaim}
+            claiming={claiming}
+            error={claimError}
+            offline={offline}
+            onClaim={onClaim}
+            testId="today-streak-claim"
+            next="/players"
+          />
+        </span>
       ) : (
         <span className="min-w-0 text-meta leading-snug text-muted-foreground">
           {atRisk ? "Keep it alive" : nextMilestoneLine(streak)}

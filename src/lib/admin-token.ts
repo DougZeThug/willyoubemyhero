@@ -1,38 +1,41 @@
 import { useEffect, useState } from "react";
+import { parseAdminToken } from "./token-format";
+import {
+  emitLocal,
+  onLocal,
+  onOtherTab,
+  readStored,
+  removeStored,
+  writeStrict,
+} from "./device-store";
+import { STORAGE_EVENTS, STORAGE_KEYS } from "./storage-keys";
 
-const KEY = "wwbh:admin-token";
+const KEY = STORAGE_KEYS.adminToken;
+const CHANGED = STORAGE_EVENTS.adminToken;
 // The account that was signed in when the token above was issued, or absent for
 // a PIN unlock nobody was signed in for. The token itself names no user —
 // requireAdmin checks the event and nothing else — and since ADM-16 it outlives
 // a sign-out, so this is the only thing on the device that says whose it is.
-const OWNER_KEY = "wwbh:admin-token-owner";
+const OWNER_KEY = STORAGE_KEYS.adminTokenOwner;
 
 type Parsed = { eventId: string; expiresAt: number; token: string };
 export type AdminSession = Parsed & { owner: string | null };
 
 function parse(token: string | null): Parsed | null {
   if (!token) return null;
-  const parts = token.split(".");
-  // 3 parts from the PIN, 5 ("a.<user>.<event>.<exp>.<sig>") from an account.
-  let eventId: string | undefined;
-  let expStr: string | undefined;
-  if (parts.length === 3) [eventId, expStr] = parts;
-  else if (parts.length === 5 && parts[0] === "a") [, , eventId, expStr] = parts;
-  else return null;
-  const expiresAt = Number(expStr);
-  if (!eventId || !Number.isFinite(expiresAt)) return null;
-  if (Date.now() > expiresAt) return null;
-  return { eventId, expiresAt, token };
+  const parsed = parseAdminToken(token);
+  if (!parsed || Date.now() > parsed.expiresAt) return null;
+  return { eventId: parsed.id, expiresAt: parsed.expiresAt, token };
 }
 
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(KEY);
+  const raw = readStored(KEY);
   const parsed = parse(raw);
   if (!parsed) {
     if (raw) {
-      window.localStorage.removeItem(KEY);
-      window.localStorage.removeItem(OWNER_KEY);
+      removeStored(KEY);
+      removeStored(OWNER_KEY);
     }
     return null;
   }
@@ -48,17 +51,17 @@ export function getAdminToken(): string | null {
  */
 export function setAdminToken(token: string, owner: string | null) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, token);
-  if (owner) window.localStorage.setItem(OWNER_KEY, owner);
-  else window.localStorage.removeItem(OWNER_KEY);
-  window.dispatchEvent(new Event("wwbh:admin-token-changed"));
+  writeStrict(KEY, token);
+  if (owner) writeStrict(OWNER_KEY, owner);
+  else removeStored(OWNER_KEY);
+  emitLocal(CHANGED);
 }
 
 export function clearAdminToken() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
-  window.localStorage.removeItem(OWNER_KEY);
-  window.dispatchEvent(new Event("wwbh:admin-token-changed"));
+  removeStored(KEY);
+  removeStored(OWNER_KEY);
+  emitLocal(CHANGED);
 }
 
 /**
@@ -77,8 +80,8 @@ export function bindAdminTokenTo(userId: string) {
   if (typeof window === "undefined") return;
   // Also evicts an expired token, and the owner with it.
   if (!getAdminToken()) return;
-  const owner = window.localStorage.getItem(OWNER_KEY);
-  if (!owner) window.localStorage.setItem(OWNER_KEY, userId);
+  const owner = readStored(OWNER_KEY);
+  if (!owner) writeStrict(OWNER_KEY, userId);
   else if (owner !== userId) clearAdminToken();
 }
 
@@ -87,24 +90,17 @@ export function useAdminSession(): AdminSession | null {
   const [session, setSession] = useState<AdminSession | null>(null);
   useEffect(() => {
     function refresh() {
-      const parsed = parse(window.localStorage.getItem(KEY));
-      setSession(parsed && { ...parsed, owner: window.localStorage.getItem(OWNER_KEY) });
-    }
-    // `storage` fires for every key the other tab writes, so the listener needs
-    // its own; the custom event beside it is this tab's write. A null key is
-    // localStorage.clear(), which does concern us -- that is a sign-out.
-    function theirs(e: StorageEvent) {
-      if (e.key !== null && e.key !== KEY && e.key !== OWNER_KEY) return;
-      refresh();
+      const parsed = parse(readStored(KEY));
+      setSession(parsed && { ...parsed, owner: readStored(OWNER_KEY) });
     }
     refresh();
-    window.addEventListener("storage", theirs);
-    window.addEventListener("wwbh:admin-token-changed", refresh);
+    const offTheirs = onOtherTab([KEY, OWNER_KEY], refresh);
+    const offHere = onLocal(CHANGED, refresh);
     // Also expire naturally.
     const iv = window.setInterval(refresh, 60_000);
     return () => {
-      window.removeEventListener("storage", theirs);
-      window.removeEventListener("wwbh:admin-token-changed", refresh);
+      offTheirs();
+      offHere();
       window.clearInterval(iv);
     };
   }, []);

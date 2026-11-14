@@ -1,4 +1,5 @@
 import { formatTime } from "@/lib/format";
+import { plural } from "@/components/plural";
 import type { LadderRow } from "@/lib/card-stats";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,8 @@ import { cn } from "@/lib/utils";
  * Bars are drawn relative to the *slowest* station rather than to the median,
  * so the shape of the row tells you where the course actually cost this player
  * time before you read a single number.
+ *
+ * The tier colour comes off `--tier`: mount it inside a `TierScope`.
  */
 export function FieldComparison({
   ladder,
@@ -47,9 +50,7 @@ export function FieldComparison({
           {bestCount > 0 && (
             <>
               {" · "}
-              <span style={{ color: "var(--tier)" }}>
-                {bestCount} station{bestCount === 1 ? "" : "s"} won
-              </span>
+              <span style={{ color: "var(--tier)" }}>{plural(bestCount, "station")} won</span>
             </>
           )}
         </div>

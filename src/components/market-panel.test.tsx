@@ -12,18 +12,21 @@
 // shared key would serve one member another's de-concealed view out of the cache.
 // And a buy mints one request id per tap and rotates it, because a lost response
 // on a purchase is the worst bug this feature could ship.
+import {
+  cardPullCountsKey,
+  collectionTrophiesKey,
+  dustBalanceKey,
+  marketListingsKey,
+  myCardStatsKey,
+  mySecretsKey,
+  myStallKey,
+  packStatusKey,
+  tradeSparesKey,
+} from "@/lib/query-keys";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
-import { dustBalanceKey } from "@/hooks/use-dust";
-import { marketListingsKey, myStallKey } from "@/hooks/use-market";
-import { mySecretsKey } from "@/hooks/use-daily-secret";
-import { packStatusKey } from "@/hooks/use-pack-status";
-import { myCardStatsKey } from "@/hooks/use-my-collection";
-import { cardPullCountsKey } from "@/hooks/use-card-pulls";
-import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { tradeSparesKey } from "@/hooks/use-trades";
 import { rarityStyle } from "@/lib/card-rarity";
 import { MarketPanel } from "./market-panel";
 
@@ -88,7 +91,6 @@ function renderPanel(balance = 500, dustOn = true) {
       <MarketPanel
         balance={balance}
         participantId={ME}
-        actor={ACTOR}
         eventId={EVENT}
         nameFor={() => "Alice Ace"}
         nameOf={(id) => (id === THEM ? "Bob Bison" : "Someone")}

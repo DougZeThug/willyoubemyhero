@@ -16,7 +16,6 @@ import { setAccountSyncState } from "@/lib/account-sync-state";
 import { WAS_MEMBER_KEY } from "@/lib/member-token";
 
 const useMemberSession = vi.fn();
-const useActiveEvent = vi.fn();
 const useStreakStatus = vi.fn();
 const useSecretActor = vi.fn();
 const useQuery = vi.fn();
@@ -49,7 +48,7 @@ vi.mock("@/hooks/use-event-bundle", () => ({ useEventBundle: () => useEventBundl
 
 /** What the hook hands back once the bundle has settled. */
 const settledBundle = (over: Record<string, unknown> = {}) => ({
-  event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+  event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true, dust_enabled: false },
   bundle: makeBundle({ participants: ROSTER }),
   error: null,
   loading: false,
@@ -59,7 +58,6 @@ const settledBundle = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-vi.mock("@/hooks/use-active-event", () => ({ useActiveEvent: () => useActiveEvent() }));
 vi.mock("@/hooks/use-daily-secret", () => ({
   useSecretActor: () => useSecretActor(),
   useMySecrets: () => ({ data: { cards: [], pulled: 2 } }),
@@ -146,7 +144,6 @@ beforeEach(() => {
   useMyCollection.mockReturnValue(COLLECTION);
   useEventBundle.mockReturnValue(settledBundle());
   useMemberSession.mockReturnValue({ participantId: "p-me", name: "Bob Blitz", expiresAt: 0, token: "t" }); // prettier-ignore
-  useActiveEvent.mockReturnValue({ data: { id: EVENT_ID, dust_enabled: false } });
   useStreakStatus.mockReturnValue({ data: streak, isPending: false });
   useSecretActor.mockReturnValue("m:me");
   useQuery.mockReturnValue({ data: [], isPending: false });
@@ -286,7 +283,11 @@ describe("/you", () => {
   });
 
   it("points the dust chip at the shop once the switch is on", () => {
-    useActiveEvent.mockReturnValue({ data: { id: EVENT_ID, dust_enabled: true } });
+    useEventBundle.mockReturnValue(
+      settledBundle({
+        event: { id: EVENT_ID, name: "Draft Combine", active: true, dust_enabled: true },
+      }),
+    );
     render(<YouPage />);
     expect(screen.getByRole("link", { name: /140 dust/i })).toHaveAttribute(
       "href",

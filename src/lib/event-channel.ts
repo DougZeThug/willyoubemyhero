@@ -5,6 +5,7 @@
 // eight invalidations per database change. Worse, `.subscribe()` was called bare:
 // when the socket died nothing noticed, and the screens froze with no signal.
 import { browserSupabase, type BrowserSupabase } from "@/lib/browser-supabase";
+import { createSharedChannels, type SharedChannelHandle } from "./shared-channel";
 
 export type ChannelHealth = "connecting" | "live" | "degraded";
 
@@ -38,10 +39,9 @@ export type EventChannelSubscriber = {
 type EventChannel = ReturnType<BrowserSupabase["channel"]>;
 
 type Entry = {
-  channel: EventChannel;
+  /** Null when this device has no client. */
+  channel: EventChannel | null;
   health: ChannelHealth;
-  subscribers: Set<EventChannelSubscriber>;
-  teardown: ReturnType<typeof setTimeout> | null;
   poll: ReturnType<typeof setInterval> | null;
   participantRow: ReturnType<typeof setTimeout> | null;
 };
@@ -65,27 +65,21 @@ export const DEGRADED_POLL_MS = 4_000;
  */
 export const PARTICIPANT_ROW_COALESCE_MS = 1_000;
 
-const entries = new Map<string, Entry>();
-
 // Never reused, so a channel opened while its predecessor is still closing
-// cannot collide with it on the topic name.
+// cannot collide with it on the topic name -- which is why, unlike a nudge topic,
+// this one never needs to wait for the removal.
 let channelSeq = 0;
 
-function openChannel(eventId: string): Entry {
-  const entry: Entry = {
-    channel: undefined as unknown as EventChannel,
-    health: "connecting",
-    subscribers: new Set(),
-    teardown: null,
-    poll: null,
-    participantRow: null,
-  };
-  entries.set(eventId, entry);
+function openChannel(
+  eventId: string,
+  { subscribers, isCurrent }: SharedChannelHandle<EventChannelSubscriber>,
+): Entry {
+  const entry: Entry = { channel: null, health: "connecting", poll: null, participantRow: null };
 
   // Copied out before iterating: a subscriber that unsubscribes from its own
   // callback would otherwise mutate the set mid-loop.
   const fanOut = () => {
-    for (const s of [...entry.subscribers]) s.change();
+    for (const s of [...subscribers]) s.change();
   };
 
   /**
@@ -94,14 +88,14 @@ function openChannel(eventId: string): Entry {
    * every fifteen seconds. See setHealth.
    */
   const fanOutEventRow = () => {
-    for (const s of [...entry.subscribers]) s.eventRow?.();
+    for (const s of [...subscribers]) s.eventRow?.();
   };
 
   /** From the roster binding below and from recovery, never from the poll. */
   const fanOutParticipantRow = () => {
     if (entry.participantRow) clearTimeout(entry.participantRow);
     entry.participantRow = null;
-    for (const s of [...entry.subscribers]) s.participantRow?.();
+    for (const s of [...subscribers]) s.participantRow?.();
   };
   const queueParticipantRow = () => {
     if (entry.participantRow) return;
@@ -125,7 +119,7 @@ function openChannel(eventId: string): Entry {
   };
 
   const setHealth = (next: ChannelHealth) => {
-    if (entries.get(eventId) !== entry || entry.health === next) return;
+    if (!isCurrent() || entry.health === next) return;
     // Changes that happened while the socket was down were never delivered, so
     // recovery needs a refetch rather than just a resumed stream.
     //
@@ -138,7 +132,7 @@ function openChannel(eventId: string): Entry {
     // focus either. A reconnect is rare, so unlike the poll it can afford this.
     const recovered = entry.health === "degraded" && next === "live";
     entry.health = next;
-    for (const s of [...entry.subscribers]) s.health(next);
+    for (const s of [...subscribers]) s.health(next);
     restartPoll();
     if (recovered) {
       fanOut();
@@ -232,34 +226,16 @@ function openChannel(eventId: string): Entry {
 }
 
 /** Join this event's channel, and return the unsubscribe. */
-export function subscribeToEventChannel(
-  eventId: string,
-  subscriber: EventChannelSubscriber,
-): () => void {
-  let entry = entries.get(eventId);
-  if (!entry) {
-    entry = openChannel(eventId);
-  } else if (entry.teardown) {
-    clearTimeout(entry.teardown);
-    entry.teardown = null;
-  }
-  const joined = entry;
-  joined.subscribers.add(subscriber);
-  subscriber.health(joined.health);
-
-  return () => {
-    joined.subscribers.delete(subscriber);
-    if (joined.subscribers.size > 0 || joined.teardown) return;
-    if (entries.get(eventId) !== joined) return;
-    joined.teardown = setTimeout(() => {
-      if (entries.get(eventId) !== joined || joined.subscribers.size > 0) return;
-      entries.delete(eventId);
-      if (joined.poll) clearInterval(joined.poll);
-      joined.poll = null;
-      if (joined.participantRow) clearTimeout(joined.participantRow);
-      joined.participantRow = null;
-      // Never built when this device had no client.
-      if (joined.channel) void browserSupabase()?.removeChannel(joined.channel);
-    }, TEARDOWN_GRACE_MS);
-  };
-}
+export const subscribeToEventChannel = createSharedChannels<EventChannelSubscriber, Entry>({
+  graceMs: TEARDOWN_GRACE_MS,
+  open: openChannel,
+  onJoin: (entry, subscriber) => subscriber.health(entry.health),
+  close: (entry) => {
+    if (entry.poll) clearInterval(entry.poll);
+    entry.poll = null;
+    if (entry.participantRow) clearTimeout(entry.participantRow);
+    entry.participantRow = null;
+    // Null when this device had no client.
+    return entry.channel ? browserSupabase()?.removeChannel(entry.channel) : undefined;
+  },
+});

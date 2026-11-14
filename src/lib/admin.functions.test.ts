@@ -112,12 +112,14 @@ describe("verifyEventPin", () => {
     expect(mock.client.rpc.mock.calls.some((c) => c[0] === "clear_auth_attempts")).toBe(false);
   });
 
-  it("rejects when the secrets lookup errors", async () => {
+  it("throws when the secrets lookup errors, rather than saying the event is unknown", async () => {
     withDb({ "event_secrets.select": { data: null, error: { message: "boom" } } });
-    expect(await verify({ eventId: EVENT_ID, pin: PIN })).toEqual({
-      ok: false,
-      reason: "event_not_found",
+    await expect(verify({ eventId: EVENT_ID, pin: PIN })).rejects.toMatchObject({
+      message: "boom",
     });
+    // The attempt was still counted before the lookup, and nothing was cleared.
+    expect(mock.client.rpc.mock.calls.some((c) => c[0] === "note_auth_attempt")).toBe(true);
+    expect(mock.client.rpc.mock.calls.some((c) => c[0] === "clear_auth_attempts")).toBe(false);
   });
 
   it("signs the token for the event the secrets row names, not the caller's input", async () => {

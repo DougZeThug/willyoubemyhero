@@ -35,7 +35,7 @@ Only the states the user passes through, named in the product's words (`viewing`
 
 ### {Starting}
 
-What begins the interaction and what is decided at that instant: what is targeted and how the target is chosen, what is loaded, focused, or prefilled, what is validated before anything runs, what is captured or snapshotted so it can be restored. What changes visibly right away. Which variant, if set *at* the start, changes the outcome.
+What begins the interaction and what is decided at that instant: what is targeted and how the target is chosen, what is loaded, focused, or prefilled, what is validated before anything runs, what is captured or snapshotted so it can be restored. What changes visibly right away. Which variant, if set _at_ the start, changes the outcome.
 
 ### {Ending at once}
 
@@ -55,29 +55,29 @@ What is committed, as how many undo steps or which durable records or files. Sid
 
 ## Modifiers
 
-| Modifier | Set at the start | Changed while extended |
-| --- | --- | --- |
-| {variant 1} | | |
-| {variant 2} | | |
-| {variant 3} | | |
-| {variant 4} | | |
+| Modifier    | Set at the start | Changed while extended |
+| ----------- | ---------------- | ---------------------- |
+| {variant 1} |                  |                        |
+| {variant 2} |                  |                        |
+| {variant 3} |                  |                        |
+| {variant 4} |                  |                        |
 
 The rows are the product's variant axis from Phase 0 (modifier keys; the user's role and the record's state; flags, environment, and whether output is a terminal; the selected mode, attachments, and conversation state) and are the same rows in every document. Every cell filled, "No effect." where that is the answer. A sentence after the table on what changing a variant mid-interaction does (pressing or releasing a key, a role change taking effect, a flag that cannot change once running).
 
 ## Cancel and interrupt
 
-| Event | {Before extended} | {While extended} |
-| --- | --- | --- |
-| {The user's explicit abort: Escape, Stop, Ctrl+C, Cancel} | | |
-| {The user doing something else mid-way: switching tools, modes, tabs, or conversations; navigating; sending another message} | | |
-| {The events the product treats as a clean "complete": a menu opening, undo or redo, a submit from elsewhere} | | |
-| {The environment failing: window loses focus, network lost, request fails or times out, session expires, process killed} | | |
-| {The page or process going away: reload, tab closed, terminal closed, app backgrounded} | | |
-| {Something else changing the target: deleted, locked, moved, edited by another user or tab, changed on disk} | | |
-| {The input channel changing: a second input device, autofill, a pipe closing, touch cancel} | | |
-| {Any product-specific mode that changes what happens after the interaction} | | |
+| Event                                                                                                                        | {Before extended} | {While extended} |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------------- | ---------------- |
+| {The user's explicit abort: Escape, Stop, Ctrl+C, Cancel}                                                                    |                   |                  |
+| {The user doing something else mid-way: switching tools, modes, tabs, or conversations; navigating; sending another message} |                   |                  |
+| {The events the product treats as a clean "complete": a menu opening, undo or redo, a submit from elsewhere}                 |                   |                  |
+| {The environment failing: window loses focus, network lost, request fails or times out, session expires, process killed}     |                   |                  |
+| {The page or process going away: reload, tab closed, terminal closed, app backgrounded}                                      |                   |                  |
+| {Something else changing the target: deleted, locked, moved, edited by another user or tab, changed on disk}                 |                   |                  |
+| {The input channel changing: a second input device, autofill, a pipe closing, touch cancel}                                  |                   |                  |
+| {Any product-specific mode that changes what happens after the interaction}                                                  |                   |                  |
 
-The rows are the product's interrupt list from Phase 0. They are the same rows in the same order in every document in the repo; rewrite them once for the product and then never vary them. The columns are the interaction's phases before and after it became extended. Every cell filled. Follow with a sentence or two on what happens *after* the interrupt (does the user stay in the feature or return to the default? is a draft kept? is partial work left on disk?) and a `> Technical note:` only if the mechanism produces a result the user would not expect.
+The rows are the product's interrupt list from Phase 0. They are the same rows in the same order in every document in the repo; rewrite them once for the product and then never vary them. The columns are the interaction's phases before and after it became extended. Every cell filled. Follow with a sentence or two on what happens _after_ the interrupt (does the user stay in the feature or return to the default? is a draft kept? is partial work left on disk?) and a `> Technical note:` only if the mechanism produces a result the user would not expect.
 
 ## Interactions with other systems
 

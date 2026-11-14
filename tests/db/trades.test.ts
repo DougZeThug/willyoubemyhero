@@ -18,7 +18,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, IDS, newClient, seedEvent, sql, withSecretRoll } from "./helpers";
 import { migrationFiles, readMigration } from "./cluster";
-import { leagueDay, LEAGUE_TIME_ZONE } from "@/lib/trades";
+import { leagueDay, LEAGUE_TIME_ZONE } from "@/lib/league-day";
 
 afterAll(closeDb);
 beforeEach(seedEvent);

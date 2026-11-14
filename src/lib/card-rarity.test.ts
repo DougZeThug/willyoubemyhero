@@ -55,11 +55,9 @@ describe("rarityStyle", () => {
     }
   });
 
-  it("returns a style for every tier, with the tier echoed back", () => {
+  it("keeps every tier's strength and sparkle on the 0..1 scale", () => {
     for (const tier of ALL_TIERS) {
       const style = rarityStyle(tier);
-      expect(style.tier).toBe(tier);
-      expect(style.label).toBeTruthy();
       expect(style.strength).toBeGreaterThanOrEqual(0);
       expect(style.strength).toBeLessThanOrEqual(1);
       expect(style.sparkle).toBeGreaterThanOrEqual(0);
@@ -72,15 +70,6 @@ describe("rarityStyle", () => {
     expect(new Set(ranks).size).toBe(ALL_TIERS.length);
     expect(rarityStyle("champion").rank).toBeLessThan(rarityStyle("podium").rank);
     expect(rarityStyle("base").rank).toBeLessThan(rarityStyle("dnf").rank);
-  });
-
-  it("gives every tier a reason blurb", () => {
-    // TIER_REASON and RARITY are two maps over the same union; drift between
-    // them shows up as a missing badge on the card back, not a type error.
-    for (const tier of ALL_TIERS) {
-      expect(TIER_REASON[tier]).toBeTruthy();
-    }
-    expect(Object.keys(TIER_REASON).sort()).toEqual([...ALL_TIERS].sort());
   });
 
   it("gives the accent colour of every tier an opaque value", () => {

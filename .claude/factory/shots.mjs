@@ -173,7 +173,6 @@ export function pixelDiff(bufferA, bufferB) {
   return { sizeDiffers: false, ratio: strong / total, faintRatio: faint / total };
 }
 
-/** Table cell for a pair's verdict. */
 function verdict(diff) {
   if (!diff) return "identical";
   if (diff.sizeDiffers) return "**changed** (page height differs)";

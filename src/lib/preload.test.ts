@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { preloadCard } from "./preload";
-import { CARD_SIZES } from "@/components/holo-card";
+import { CARD_SIZES } from "@/lib/media";
 
 const SET = {
   thumb: "https://example.test/c-320.webp",

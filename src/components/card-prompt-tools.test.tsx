@@ -7,8 +7,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CardPromptBatch } from "./card-prompt-tools";
-import type { PromptStudioBundle } from "./card-prompt-studio";
+import { CardPromptBatch, type PromptStudioBundle } from "./card-prompt-tools";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },

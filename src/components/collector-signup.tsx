@@ -14,6 +14,7 @@ import {
   snapshotLocalCollection,
 } from "@/lib/adopt-collection";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 /**
  * The one-time name prompt for a signed-in person who is not on the roster.
@@ -97,7 +98,7 @@ export function CollectorSignup({
       });
       toast.success(`You're in, ${res.name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not set that up");
+      toast.error(errorMessage(err, "Could not set that up"));
     } finally {
       setBusy(false);
     }

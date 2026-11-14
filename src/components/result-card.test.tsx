@@ -2,7 +2,8 @@
 // style is inline and the only thing worth asserting is the content.
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ResultCard, type ResultCardData } from "./result-card";
+import { ResultCard } from "./result-card";
+import type { ResultCardData } from "@/lib/result-card-data";
 import { shareResultLayout } from "@/lib/share-result-layout";
 
 function data(over: Partial<ResultCardData> = {}): ResultCardData {

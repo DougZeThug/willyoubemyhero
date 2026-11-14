@@ -5,7 +5,7 @@
 // "base", and because useEventBundle re-fetches on Supabase realtime changes, cards
 // upgrade themselves mid-event the moment someone takes the lead.
 
-import { OUT_OF_CONTENTION_STATUSES, outOfContention, standings } from "./standings";
+import { outOfContention, standings } from "./standings";
 
 export type RarityTier = "champion" | "podium" | "stationKing" | "penaltyBox" | "dnf" | "base";
 
@@ -208,23 +208,28 @@ export function rarityStyle(tier: RarityTier): Rarity {
 }
 
 /**
- * Rarest first. The index into this IS the rank, same shape as
- * SECRET_TIER_ORDER — it exists so pickers can sort by tier without each of
- * them inventing its own ordering.
+ * Rarest first. A `Record` rather than a list so a tier added to `RarityTier`
+ * cannot compile until it has a rank — a list would silently rank it last.
  */
-export const RARITY_ORDER: readonly RarityTier[] = [
-  "champion",
-  "podium",
-  "stationKing",
-  "penaltyBox",
-  "dnf",
-  "base",
-];
+const RANK: Record<RarityTier, number> = {
+  champion: 0,
+  podium: 1,
+  stationKing: 2,
+  penaltyBox: 3,
+  dnf: 4,
+  base: 5,
+};
+
+/** Whether a card's own tier is a party; the finish and the collection get their say elsewhere. */
+export function tierCelebrates(tier: RarityTier): boolean {
+  return tier === "champion" || tier === "podium";
+}
 
 /** 0 is champion. An unknown tier sorts last. */
 export function rarityRank(tier: string | null | undefined): number {
-  const i = RARITY_ORDER.indexOf(tier as RarityTier);
-  return i === -1 ? RARITY_ORDER.length : i;
+  return tier != null && Object.hasOwn(RANK, tier)
+    ? RANK[tier as RarityTier]
+    : Object.keys(RANK).length;
 }
 
 // The subset of the event bundle this module needs. Kept structural so it accepts
@@ -247,11 +252,6 @@ type RarityBundle = {
   penalties: { run_id: string; penalty_ms: number }[];
 };
 
-// The dnf-family roster statuses live in standings.ts, so the board and the
-// tiers cannot drift apart about who is in contention. Re-exported under the
-// old name because this module reads it for its own dnf tier as well.
-const DNF_STATUSES = OUT_OF_CONTENTION_STATUSES;
-
 function isTier(v: string): v is RarityTier {
   return v in RARITY;
 }
@@ -270,9 +270,6 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   // fastest clock still held place 1: their own tier said dnf, but the champion
   // slot stayed consumed and the honest winner shipped as podium. Same story
   // for a station crown or the penalty box.
-  const dqParticipants = new Set(
-    bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id),
-  );
   const excluded = outOfContention(bundle);
 
   // Best official run per athlete, placed by counting everyone strictly faster,
@@ -325,7 +322,7 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
 
     const pid = ep.participant_id;
     let tier: RarityTier = "base";
-    if (DNF_STATUSES.has(ep.participation_status) || dqParticipants.has(pid)) {
+    if (excluded.has(pid)) {
       tier = "dnf";
     } else {
       const place = placeByParticipant.get(pid);

@@ -1,23 +1,11 @@
+import { mySecretsKey } from "@/lib/query-keys";
+import { guestIdentity, memberIdentity } from "@/lib/identity";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import type { OwnedSecret } from "@/lib/secret-cards";
 import { useMemberSession } from "@/lib/member-token";
 import { useGuestSession } from "@/lib/guest-token";
-
-/**
- * Keyed on whoever is asking, never on the event.
- *
- * The secret set is a permanent league collection, so an event id in the key
- * would evict somebody's whole collection every year — deliberately different
- * from ["event-social", eventId] next door.
- *
- * The key is an *actor* rather than a participant, because a guest holds secrets
- * too. It is only a cache key: the server takes the identity from the verified
- * token on the request and never from anything the client passes.
- */
-export const mySecretsKey = (actorId: string | null | undefined) =>
-  ["my-secrets", actorId] as const;
 
 /**
  * Who this device is pulling as: `m:<participantId>`, `g:<guestId>`, or null
@@ -34,8 +22,8 @@ export const mySecretsKey = (actorId: string | null | undefined) =>
 export function useSecretActor(): string | null {
   const member = useMemberSession();
   const guest = useGuestSession();
-  if (member) return `m:${member.participantId}`;
-  return guest ? `g:${guest.guestId}` : null;
+  if (member) return memberIdentity(member.participantId);
+  return guest ? guestIdentity(guest.guestId) : null;
 }
 
 /** Everything this person has pulled. Never anything they haven't. */
