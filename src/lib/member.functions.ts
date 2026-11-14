@@ -76,11 +76,14 @@ export const claimPlayer = createServerFn({ method: "POST" })
     if (!(await noteAuthAttempt("claim", data.participantId))) {
       return { ok: false as const, reason: "too_many_attempts" as const };
     }
-    const { data: row } = await supabaseAdmin
+    const { data: row, error: codeError } = await supabaseAdmin
       .from("member_codes")
       .select("participant_id, code_salt, code_hash, claimed_at, claim_count")
       .eq("participant_id", data.participantId)
       .maybeSingle();
+    // A failed read is not "no code issued": it would answer bad_code and burn
+    // one of the player's ten attempts on nothing they did.
+    if (codeError) throw codeError;
 
     // Same generic failure for "no code issued" and "wrong code" so the endpoint
     // can't be used to enumerate which players have codes.
@@ -116,11 +119,14 @@ export const claimPlayer = createServerFn({ method: "POST" })
       if (!stamped?.claimed_at) throw new Error(stampError.message);
     }
 
-    const { data: participant } = await supabaseAdmin
+    const { data: participant, error: nameError } = await supabaseAdmin
       .from("participants")
       .select("name")
       .eq("id", data.participantId)
       .maybeSingle();
+    // Thrown, ahead of the guest attach and the token, so a retry is clean; the
+    // "Player" fallback is for a name that is missing, not one that failed to load.
+    if (nameError) throw nameError;
 
     // Anything they pulled as a guest is theirs, and now it is on their name
     // rather than on this handset. The guest id comes from the verified guest
