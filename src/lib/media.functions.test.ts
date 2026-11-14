@@ -1416,10 +1416,7 @@ describe("archiveEvent reads only this event's splits and penalties", () => {
     const rows = Array.from({ length: 1_200 }, (_, i) => ({ id: `s${i}`, run_id: "r1", run: {} }));
     withDb({
       ...HEALTHY,
-      "splits.select": (call) => {
-        const [from, to] = call.filters.find((f) => f.method === "range")!.args as [number, number];
-        return { data: rows.slice(from, to + 1) };
-      },
+      "splits.select": { data: rows },
     });
     await archive();
     expect(snapshot().splits).toHaveLength(1_200);

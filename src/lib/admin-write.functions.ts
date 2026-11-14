@@ -99,13 +99,15 @@ const MAX_RUN_MS = 24 * 60 * 60 * 1000;
 const runPartsSchema = {
   raw_time_ms: z.number().int().min(0).max(MAX_RUN_MS),
   splits: z
-    .array(z.object({ stationId: zuuid(), cumulative_time_ms: z.number().int().min(0) }))
+    .array(
+      z.object({ stationId: zuuid(), cumulative_time_ms: z.number().int().min(0).max(MAX_RUN_MS) }),
+    )
     .max(50),
   penalties: z
     .array(
       z.object({
         stationId: zuuid().nullable().optional(),
-        penalty_ms: z.number().int().min(0),
+        penalty_ms: z.number().int().min(0).max(MAX_RUN_MS),
         reason: z.string().max(120).nullable().optional(),
       }),
     )

@@ -23,7 +23,20 @@ describe("readAllRows", () => {
       [0, 999],
       [1000, 1999],
       [2000, 2999],
+      [2350, 3349],
     ]);
+  });
+
+  it("reads every row from a server that caps pages below the page size", async () => {
+    const capped = async (from: number, to: number) => {
+      const end = Math.min(to + 1, from + 500, 1_300);
+      return {
+        data: Array.from({ length: Math.max(0, end - from) }, (_, i) => ({ id: from + i })),
+        error: null,
+      };
+    };
+    const rows = await readAllRows(capped);
+    expect(rows.map((r) => r.id)).toEqual(Array.from({ length: 1_300 }, (_, i) => i));
   });
 
   it("asks once more when the table is an exact multiple of a page", async () => {

@@ -209,12 +209,7 @@ describe("the audit's reads are complete and honest about failure", () => {
     const all = Array.from({ length: 1_500 }, (_, i) =>
       pull(`00000000-0000-4000-8000-${String(i).padStart(12, "0")}`),
     );
-    withDb({
-      "secret_card_pulls.select": (call) => {
-        const range = call.filters.find((f) => f.method === "range")!.args as [number, number];
-        return { data: all.slice(range[0], range[1] + 1) };
-      },
-    });
+    withDb({ "secret_card_pulls.select": { data: all } });
     const res = await audit();
     expect(res.stranded).toHaveLength(1_500);
   });

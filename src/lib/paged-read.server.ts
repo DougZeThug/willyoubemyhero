@@ -20,11 +20,15 @@ export async function readAllRows<T>(
   page: (from: number, to: number) => PageResult<T>,
 ): Promise<T[]> {
   const rows: T[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+  // The next page starts after the rows actually received, not after PAGE_SIZE:
+  // a server whose row cap is below PAGE_SIZE answers short pages, and stepping
+  // by PAGE_SIZE would skip the rows between them. So the read ends on an empty
+  // page, never on a short one.
+  for (;;) {
+    const { data, error } = await page(rows.length, rows.length + PAGE_SIZE - 1);
     if (error) throw error;
     const batch = data ?? [];
+    if (batch.length === 0) return rows;
     rows.push(...batch);
-    if (batch.length < PAGE_SIZE) return rows;
   }
 }

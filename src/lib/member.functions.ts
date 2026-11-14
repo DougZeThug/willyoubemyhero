@@ -81,8 +81,8 @@ export const claimPlayer = createServerFn({ method: "POST" })
       .select("participant_id, code_salt, code_hash, claimed_at, claim_count")
       .eq("participant_id", data.participantId)
       .maybeSingle();
-    // A failed read is not "no code issued": it would answer bad_code and burn
-    // one of the player's ten attempts on nothing they did.
+    // A failed read is not "no code issued": answering bad_code would tell the
+    // player their code is wrong when the server never got to check it.
     if (codeError) throw codeError;
 
     // Same generic failure for "no code issued" and "wrong code" so the endpoint
